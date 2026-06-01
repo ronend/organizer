@@ -4,6 +4,8 @@ version = 0.1
 stack_name = "organizer-app"
 region = "us-east-1"
 confirm_changeset = false
+# Don't exit non-zero when a deploy has no changes (avoids false CI failures).
+fail_on_empty_changeset = false
 capabilities = "CAPABILITY_IAM"
 s3_prefix = "deployment-782208973596-us-east-1-an"
 # Let SAM create/manage a deployment bucket automatically.

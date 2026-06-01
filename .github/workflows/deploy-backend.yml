@@ -32,4 +32,5 @@ jobs:
         # default (VITE_APP_URL is the CloudFront URL).
         run: |
           sam build --use-container
-          sam deploy --no-confirm-changeset --parameter-overrides AppUrl=${{ vars.VITE_APP_URL }}
+          sam deploy --no-confirm-changeset --no-fail-on-empty-changeset \
+            --parameter-overrides AppUrl=${{ vars.VITE_APP_URL }}
