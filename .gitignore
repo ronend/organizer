@@ -12,9 +12,8 @@ dist/
 
 # AWS SAM
 .aws-sam/
-
-# SAM config (may contain deployment bucket / secrets)
-samconfig.toml
+# Note: samconfig.toml IS committed — CI (sam deploy) needs stack_name/region
+# from it. Keep secrets out of it (we use resolve_s3 + OIDC, so it has none).
 
 # Logs
 *.log

@@ -28,6 +28,8 @@ jobs:
         working-directory: iac
         # --use-container builds the Lambda package inside a Lambda-like image,
         # ensuring native wheels (e.g. PyJWT's cryptography) match the runtime.
+        # AppUrl is passed every deploy so OAuth wiring isn't reset to the empty
+        # default (VITE_APP_URL is the CloudFront URL).
         run: |
           sam build --use-container
-          sam deploy --no-confirm-changeset
+          sam deploy --no-confirm-changeset --parameter-overrides AppUrl=${{ vars.VITE_APP_URL }}

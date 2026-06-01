@@ -12,9 +12,10 @@ Description: >
       --stack-name organizer-github-oidc \
       --template-file iac/github-oidc.yaml \
       --capabilities CAPABILITY_NAMED_IAM \
-      --parameter-overrides GitHubOrg=ronend GitHubRepo=organizer Branch=main
+      --parameter-overrides GitHubOrg=ronend GitHubRepo=organizer GitHubEnvironment=prod
 
-  Then set the DeployRoleArn output as the GitHub secret AWS_DEPLOY_ROLE_ARN.
+  Then set the DeployRoleArn output as the GitHub Environment variable
+  AWS_DEPLOY_ROLE_ARN (the workflows read it via the vars context).
 
 Parameters:
   GitHubOrg:

@@ -1,0 +1,12 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "organizer-app"
+region = "us-east-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM"
+s3_prefix = "deployment-782208973596-us-east-1-an"
+# Let SAM create/manage a deployment bucket automatically.
+# Mutually exclusive with s3_bucket — set one or the other, not both.
+resolve_s3 = true
+# s3_bucket = "your-sam-deployment-bucket"   # alternative: bring your own bucket

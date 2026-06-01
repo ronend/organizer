@@ -102,19 +102,14 @@ The workflows declare `environment: prod` and read these via the `vars` context
 (not secrets — none are sensitive). Set them under **Settings → Environments →
 prod → Environment variables**:
 
-| Variable                 | Value                                   |
-|--------------------------|-----------------------------------------|
-| `AWS_DEPLOY_ROLE_ARN`    | `DeployRoleArn` from step 0             |
-| `VITE_COGNITO_DOMAIN`    | `CognitoDomain` output                  |
-| `VITE_COGNITO_CLIENT_ID` | `UserPoolClientId` output               |
-| `VITE_APP_URL`           | `CloudFrontUrl` output                  |
-| `FRONTEND_BUCKET`        | frontend bucket name                    |
-| `CF_DISTRIBUTION_ID`     | CloudFront distribution **ID** (`E…`), not the URL |
-
-> The `prod` environment changes the OIDC token `sub` to
-> `repo:<org>/<repo>:environment:prod`, which is what the deploy role's trust
-> policy matches (step 0). If you rename the environment, update
-> `GitHubEnvironment` in the bootstrap stack to match.
+| Variable                 | Value                                                  |
+|--------------------------|--------------------------------------------------------|
+| `AWS_DEPLOY_ROLE_ARN`    | `DeployRoleArn` from step 0 (e.g. `arn:aws:iam::782208973596:role/organizer-github-deploy`) |
+| `VITE_COGNITO_DOMAIN`    | `CognitoDomain` output                                 |
+| `VITE_COGNITO_CLIENT_ID` | `UserPoolClientId` output                              |
+| `VITE_APP_URL`           | `CloudFrontUrl` output (also passed to SAM as `AppUrl`) |
+| `FRONTEND_BUCKET`        | frontend bucket name                                   |
+| `CF_DISTRIBUTION_ID`     | CloudFront distribution **ID** (`E…`), not the URL     |
 
 ## Ongoing (automated)
 
