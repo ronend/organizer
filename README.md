@@ -73,7 +73,7 @@ iac/        AWS SAM template + deploy config
      --stack-name organizer-github-oidc \
      --template-file iac/github-oidc.yaml \
      --capabilities CAPABILITY_NAMED_IAM \
-     --parameter-overrides GitHubOrg=ronend GitHubRepo=organizer Branch=main
+     --parameter-overrides GitHubOrg=ronend GitHubRepo=organizer GitHubEnvironment=prod
 
    # Read the role ARN to set as the AWS_DEPLOY_ROLE_ARN GitHub secret:
    aws cloudformation describe-stacks --stack-name organizer-github-oidc \
@@ -166,18 +166,23 @@ Run the SPA locally and proxy `/api/*` to the deployed Lambda:
    > domain. To test the full login flow locally, add `http://localhost:5173/callback`
    > and `http://localhost:5173` to the User Pool client's allowed URLs.
 
-## GitHub Secrets required
+## GitHub config (Environment: `prod`)
 
-No AWS access keys — auth is via OIDC role assumption (see step 0).
+No AWS access keys — auth is via OIDC role assumption (see step 0). The
+workflows declare `environment: prod` and read these as **Environment
+*variables*** (via the `vars` context), not secrets — none of them are
+sensitive (an ARN, names, and `VITE_*` values that are baked into the public JS
+bundle anyway). Set them under **Settings → Environments → prod → Environment
+variables**.
 
-| Secret                  | Value                                            |
+| Variable                | Value                                            |
 |-------------------------|--------------------------------------------------|
 | `AWS_DEPLOY_ROLE_ARN`   | `DeployRoleArn` output from the OIDC bootstrap stack |
 | `VITE_COGNITO_DOMAIN`   | `CognitoDomain` output                           |
 | `VITE_COGNITO_CLIENT_ID`| `UserPoolClientId` output                        |
 | `VITE_APP_URL`          | `CloudFrontUrl` output                           |
 | `FRONTEND_BUCKET`       | S3 frontend bucket name (`organizer-frontend-…`)  |
-| `CF_DISTRIBUTION_ID`    | CloudFront distribution ID                       |
+| `CF_DISTRIBUTION_ID`    | CloudFront distribution **ID** (e.g. `E2ABC123XYZ`) — not the URL |
 
 ## Security notes
 

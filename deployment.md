@@ -11,7 +11,7 @@ aws cloudformation deploy \
   --stack-name organizer-github-oidc \
   --template-file iac/github-oidc.yaml \
   --capabilities CAPABILITY_NAMED_IAM \
-  --parameter-overrides GitHubOrg=ronend GitHubRepo=organizer Branch=main
+  --parameter-overrides GitHubOrg=ronend GitHubRepo=organizer GitHubEnvironment=prod
 
 # Grab the role ARN for the GitHub secret:
 aws cloudformation describe-stacks --stack-name organizer-github-oidc \
@@ -96,18 +96,25 @@ aws cognito-idp admin-create-user --user-pool-id <UserPoolId> \
 
 ## Wire up CI/CD
 
-### 6. Set GitHub Secrets
+### 6. Set GitHub Environment variables (`prod`)
 
-Settings → Secrets and variables → Actions:
+The workflows declare `environment: prod` and read these via the `vars` context
+(not secrets — none are sensitive). Set them under **Settings → Environments →
+prod → Environment variables**:
 
-| Secret                   | Value                                   |
+| Variable                 | Value                                   |
 |--------------------------|-----------------------------------------|
 | `AWS_DEPLOY_ROLE_ARN`    | `DeployRoleArn` from step 0             |
 | `VITE_COGNITO_DOMAIN`    | `CognitoDomain` output                  |
 | `VITE_COGNITO_CLIENT_ID` | `UserPoolClientId` output               |
 | `VITE_APP_URL`           | `CloudFrontUrl` output                  |
 | `FRONTEND_BUCKET`        | frontend bucket name                    |
-| `CF_DISTRIBUTION_ID`     | CloudFront distribution ID              |
+| `CF_DISTRIBUTION_ID`     | CloudFront distribution **ID** (`E…`), not the URL |
+
+> The `prod` environment changes the OIDC token `sub` to
+> `repo:<org>/<repo>:environment:prod`, which is what the deploy role's trust
+> policy matches (step 0). If you rename the environment, update
+> `GitHubEnvironment` in the bootstrap stack to match.
 
 ## Ongoing (automated)
 

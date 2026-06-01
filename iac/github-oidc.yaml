@@ -25,10 +25,14 @@ Parameters:
     Type: String
     Default: organizer
     Description: GitHub repository name.
-  Branch:
+  GitHubEnvironment:
     Type: String
-    Default: main
-    Description: Branch allowed to assume the deploy role (workflows run on push to this branch).
+    Default: prod
+    Description: >
+      GitHub Environment the workflows target (jobs declare `environment: prod`).
+      When a job uses an environment, GitHub's OIDC token `sub` becomes
+      `repo:<org>/<repo>:environment:<name>` (NOT the branch ref), so the trust
+      policy matches on this.
   CreateOIDCProvider:
     Type: String
     Default: 'true'
@@ -81,9 +85,11 @@ Resources:
                 # Audience must be the AWS STS audience.
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
               StringLike:
-                # Only this repo + branch may assume the role. Broaden to
-                # 'repo:${GitHubOrg}/${GitHubRepo}:*' to allow tags/PRs/envs.
-                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/${Branch}'
+                # Jobs declare `environment: prod`, so the token sub is
+                # 'repo:<org>/<repo>:environment:<env>' (not the branch ref).
+                # Broaden to 'repo:${GitHubOrg}/${GitHubRepo}:*' to allow any
+                # ref/PR/tag/environment.
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubOrg}/${GitHubRepo}:environment:${GitHubEnvironment}'
       Policies:
         - PolicyName: organizer-deploy
           PolicyDocument:
