@@ -1,0 +1,164 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Bootstrap stack: GitHub Actions OIDC trust + deploy IAM role for the Organizer app.
+
+  Deploy this ONCE, manually, with admin credentials, BEFORE the GitHub Actions
+  workflows can run. It is intentionally separate from template.yaml to avoid a
+  chicken-and-egg problem (the workflows assume this role in order to deploy the
+  main stack — so the role must already exist).
+
+  Deploy with:
+    aws cloudformation deploy \
+      --stack-name organizer-github-oidc \
+      --template-file iac/github-oidc.yaml \
+      --capabilities CAPABILITY_NAMED_IAM \
+      --parameter-overrides GitHubOrg=ronend GitHubRepo=organizer Branch=main
+
+  Then set the DeployRoleArn output as the GitHub secret AWS_DEPLOY_ROLE_ARN.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Default: ronend
+    Description: GitHub organisation / user that owns the repo.
+  GitHubRepo:
+    Type: String
+    Default: organizer
+    Description: GitHub repository name.
+  Branch:
+    Type: String
+    Default: main
+    Description: Branch allowed to assume the deploy role (workflows run on push to this branch).
+  CreateOIDCProvider:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Set to 'false' if this AWS account already has the GitHub OIDC provider
+      (only one provider per URL is allowed per account). When 'false', pass the
+      existing provider ARN in ExistingOIDCProviderArn.
+  ExistingOIDCProviderArn:
+    Type: String
+    Default: ''
+    Description: Existing GitHub OIDC provider ARN (used only when CreateOIDCProvider=false).
+
+Conditions:
+  ShouldCreateProvider: !Equals [!Ref CreateOIDCProvider, 'true']
+
+Resources:
+
+  # --- OIDC identity provider for GitHub Actions ---
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: ShouldCreateProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      # AWS no longer validates this thumbprint (GitHub's CA is in AWS's trust
+      # store), but the property is still required by CloudFormation.
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+
+  # --- Role that GitHub Actions assumes via OIDC (no long-lived keys) ---
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: organizer-github-deploy
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - ShouldCreateProvider
+                - !Ref GitHubOIDCProvider
+                - !Ref ExistingOIDCProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                # Audience must be the AWS STS audience.
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                # Only this repo + branch may assume the role. Broaden to
+                # 'repo:${GitHubOrg}/${GitHubRepo}:*' to allow tags/PRs/envs.
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/${Branch}'
+      Policies:
+        - PolicyName: organizer-deploy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # SAM/CloudFormation drives the whole deploy.
+              - Sid: CloudFormation
+                Effect: Allow
+                Action: cloudformation:*
+                Resource: '*'
+
+              # SAM artifacts bucket + the frontend bucket (sync) + CFN-created
+              # buckets. Tighten to your specific bucket ARNs to reduce scope.
+              - Sid: S3
+                Effect: Allow
+                Action: s3:*
+                Resource: '*'
+
+              # Application service resources managed by the main stack.
+              - Sid: AppServices
+                Effect: Allow
+                Action:
+                  - lambda:*
+                  - dynamodb:*
+                  - cognito-idp:*
+                  - cloudfront:*
+                Resource: '*'
+
+              # IAM is scoped to this app's roles only (CFN creates the Lambda
+              # execution role named organizer-*), preventing privilege escalation.
+              - Sid: IamForAppRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:UpdateRole
+                  - iam:UpdateAssumeRolePolicy
+                Resource:
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/organizer*'
+              - Sid: PassAppRoles
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/organizer*'
+
+              # CloudFront may need a service-linked role on first use.
+              - Sid: ServiceLinkedRoles
+                Effect: Allow
+                Action: iam:CreateServiceLinkedRole
+                Resource: '*'
+
+              # The main template resolves the origin secret from SSM at deploy.
+              - Sid: SsmOriginSecret
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/organizer/*'
+
+Outputs:
+  DeployRoleArn:
+    Description: Set this as the GitHub secret AWS_DEPLOY_ROLE_ARN.
+    Value: !GetAtt DeployRole.Arn
+  OIDCProviderArn:
+    Description: ARN of the GitHub OIDC provider (created or pre-existing).
+    Value: !If
+      - ShouldCreateProvider
+      - !Ref GitHubOIDCProvider
+      - !Ref ExistingOIDCProviderArn

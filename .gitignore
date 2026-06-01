@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# AWS SAM
+.aws-sam/
+
+# SAM config (may contain deployment bucket / secrets)
+samconfig.toml
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store

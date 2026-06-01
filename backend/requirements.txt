@@ -1,0 +1,7 @@
+# boto3/botocore are bundled in the python3.12 Lambda runtime, but we pin them
+# here so local dev/tests have them and builds stay reproducible (the runtime's
+# bundled version can drift). See IMPROVEMENTS.md #7.
+fastapi==0.115.6
+mangum==0.19.0
+PyJWT[crypto]==2.10.1
+requests==2.32.3

@@ -1,0 +1,245 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless Organizer
+
+Parameters:
+  AppUrl:
+    Type: String
+    Default: ''
+    Description: >
+      Public app URL (the CloudFront domain), e.g. https://d123.cloudfront.net.
+      Leave EMPTY for the first deploy. CloudFront's domain is auto-generated, so
+      it isn't known until the stack exists — wiring it into the Lambda env and
+      the Cognito callback URLs up front would create a circular dependency.
+      After the first deploy, read the CloudFrontUrl output and re-deploy with
+      --parameter-overrides AppUrl=https://<domain> to finish OAuth wiring.
+
+Conditions:
+  HasAppUrl: !Not [!Equals [!Ref AppUrl, '']]
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 15
+    MemorySize: 256
+    Environment:
+      Variables:
+        DYNAMO_TABLE: !Ref OrganizerTable
+        ORIGIN_SECRET: !Sub '{{resolve:ssm:/organizer/origin-secret}}'
+        COGNITO_USER_POOL_ID: !Ref UserPool
+        COGNITO_CLIENT_ID: !Ref UserPoolClient
+        COGNITO_DOMAIN: !Sub 'https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com'
+        # From a parameter (not a CloudFront ref) to avoid a circular dependency.
+        APP_URL: !Ref AppUrl
+
+Resources:
+
+  # --- Cognito User Pool ---
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: organizer-users
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: organizer-client
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false                 # Public client — no secret needed for SPA
+      AllowedOAuthFlows:
+        - code                              # Authorization code flow only
+      AllowedOAuthScopes:
+        - openid
+        - email
+      AllowedOAuthFlowsUserPoolClient: true
+      # Driven by the AppUrl parameter (not a CloudFront ref) to avoid a
+      # circular dependency. A placeholder is used until AppUrl is supplied on
+      # the second deploy; Cognito requires a syntactically valid HTTPS URL.
+      CallbackURLs:
+        - !If [HasAppUrl, !Sub '${AppUrl}/callback', 'https://example.com/callback']
+      LogoutURLs:
+        - !If [HasAppUrl, !Ref AppUrl, 'https://example.com']
+      SupportedIdentityProviders:
+        - COGNITO
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub 'organizer-${AWS::AccountId}'   # Must be globally unique
+      UserPoolId: !Ref UserPool
+
+  # --- Lambda ---
+  OrganizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src.handler.handler
+      CodeUri: ../backend/
+      FunctionUrlConfig:
+        AuthType: NONE          # Auth is handled in Express middleware
+        # AllowOrigins is driven by AppUrl (not a CloudFront ref) to avoid a
+        # circular dependency. This CORS config is largely moot anyway: traffic
+        # is same-origin via CloudFront, and direct browser access to the
+        # Function URL is blocked by the originVerify middleware.
+        Cors:
+          AllowOrigins:
+            - !If [HasAppUrl, !Ref AppUrl, 'https://example.com']
+          # OPTIONS is not a valid Function URL CORS method (preflight is
+          # handled automatically); only the CloudFront behavior lists it.
+          AllowMethods: ['GET','POST','PUT','DELETE']
+          AllowHeaders: ['content-type','authorization']
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrganizerTable
+
+  # --- DynamoDB ---
+  OrganizerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: organizer-items
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: organizerId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: organizerId
+          KeyType: RANGE
+
+  # --- S3 Bucket for frontend ---
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'organizer-frontend-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${FrontendBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
+
+  # --- CloudFront ---
+  CloudFrontOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: organizer-oac
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # SPA client-side routing: rewrite extensionless requests (e.g. /callback) to
+  # /index.html so React Router can handle the route. Attached ONLY to the S3
+  # (default) cache behavior, so /api/* responses are never rewritten — this is
+  # why we don't use distribution-wide CustomErrorResponses (which would turn
+  # the API's 403/404 into 200 /index.html).
+  SpaRoutingFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub 'organizer-spa-routing-${AWS::AccountId}'
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Rewrite extensionless SPA paths to /index.html
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var uri = request.uri;
+          // Static assets (anything with a file extension) pass through.
+          // Extensionless paths are SPA routes → serve the app shell.
+          if (uri.indexOf('.') === -1) {
+            request.uri = '/index.html';
+          }
+          return request;
+        }
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins:
+          # Origin 1: S3 for static frontend assets
+          - Id: S3Origin
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            OriginAccessControlId: !Ref CloudFrontOAC
+            S3OriginConfig: {}
+
+          # Origin 2: Lambda Function URL for API calls
+          - Id: LambdaOrigin
+            DomainName: !Select [2, !Split ["/", !GetAtt OrganizerFunctionUrl.FunctionUrl]]
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+            OriginCustomHeaders:
+              - HeaderName: x-origin-verify
+                HeaderValue: !Sub '{{resolve:ssm:/organizer/origin-secret}}'
+
+        # Route /api/* to Lambda; everything else to S3
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: LambdaOrigin
+            ViewerProtocolPolicy: https-only
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad        # CachingDisabled
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # AllViewerExceptHostHeader
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6            # CachingOptimized
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt SpaRoutingFunction.FunctionMetadata.FunctionARN
+
+Outputs:
+  CloudFrontUrl:
+    Description: Single URL for both frontend and API
+    Value: !Sub 'https://${CloudFrontDistribution.DomainName}'
+  LambdaFunctionUrl:
+    Description: Direct Lambda URL (keep secret — only CloudFront should call this)
+    Value: !GetAtt OrganizerFunctionUrl.FunctionUrl
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  CognitoDomain:
+    Value: !Sub 'https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com'
+  TableName:
+    Value: !Ref OrganizerTable
