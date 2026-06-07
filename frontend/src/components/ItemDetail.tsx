@@ -79,25 +79,43 @@ export default function ItemDetail({
         </button>
       </div>
 
-      <label className="field">
-        <span>Title</span>
+      {/* Type — no label, top of the form */}
+      <div className="field">
+        <div className="seg">
+          {ITEM_TYPES.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={'seg-btn ripple' + (type === t ? ' active' : '')}
+              onClick={() => setType(t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Title — no label, hint via placeholder */}
+      <div className="field">
         <input
+          className="title-input"
           type="text"
           value={title}
           autoFocus
           placeholder="What needs doing?"
           onChange={(e) => setTitle(e.target.value)}
         />
-      </label>
+      </div>
 
+      {/* Category — distinct chip design (different from the type pills) */}
       <div className="field">
         <span>Category</span>
-        <div className="seg">
+        <div className="cat-seg">
           {catOptions.map((c) => (
             <button
               key={c}
               type="button"
-              className={'seg-btn ripple' + (category === c ? ' active' : '')}
+              className={'cat-seg-btn ripple' + (category === c ? ' active' : '')}
               onClick={() => setCategory(c)}
             >
               {labelize(c)}
@@ -124,28 +142,12 @@ export default function ItemDetail({
           ) : (
             <button
               type="button"
-              className="seg-btn add"
+              className="cat-seg-btn add"
               onClick={() => setAddingCat(true)}
             >
               + New label
             </button>
           )}
-        </div>
-      </div>
-
-      <div className="field">
-        <span>Type</span>
-        <div className="seg">
-          {ITEM_TYPES.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={'seg-btn ripple' + (type === t ? ' active' : '')}
-              onClick={() => setType(t)}
-            >
-              {t}
-            </button>
-          ))}
         </div>
       </div>
 
