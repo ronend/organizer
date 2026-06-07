@@ -28,13 +28,14 @@ export default function OrganizerApp() {
 
   const [activeTab, setActiveTab] = useState<Tab>('today');
   const [selection, setSelection] = useState<Selection>({ mode: 'none' });
+  const [showDone, setShowDone] = useState(true);
 
   useEffect(() => installRipple(), []);
 
-  const visibleItems = useMemo(
-    () => itemsForTab(organizers, activeTab),
-    [organizers, activeTab],
-  );
+  const visibleItems = useMemo(() => {
+    const list = itemsForTab(organizers, activeTab);
+    return showDone ? list : list.filter((i) => !i.done);
+  }, [organizers, activeTab, showDone]);
 
   const selectedItem =
     selection.mode === 'edit'
@@ -102,7 +103,20 @@ export default function OrganizerApp() {
         <section className="card card-list">
           <div className="card-head">
             <h2 className="display">{TAB_LABELS[activeTab]}</h2>
-            <span className="card-head-count">{visibleItems.length}</span>
+            <div className="card-head-right">
+              <label className="switch" title="Show or hide completed items">
+                <input
+                  type="checkbox"
+                  checked={showDone}
+                  onChange={(e) => setShowDone(e.target.checked)}
+                />
+                <span className="switch-track">
+                  <span className="switch-thumb" />
+                </span>
+                <span className="switch-label">Show done</span>
+              </label>
+              <span className="card-head-count">{visibleItems.length}</span>
+            </div>
           </div>
           <div className="card-body">
             {loading && <p className="muted">Loading…</p>}
