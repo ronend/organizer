@@ -46,6 +46,9 @@ export default function OrganizerApp() {
       await updateOrganizer(selection.id, data);
     } else {
       const created = await addOrganizer(data);
+      // Show the new item: jump to its category tab (a new item due tomorrow
+      // wouldn't appear under "Today"), and select it.
+      setActiveTab(created.category);
       setSelection({ mode: 'edit', id: created.id });
     }
   }

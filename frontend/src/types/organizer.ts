@@ -1,7 +1,7 @@
 export const CATEGORIES = ['errand', 'project', 'health', 'finance', 'home'] as const;
 export type Category = (typeof CATEGORIES)[number];
 
-export const ITEM_TYPES = ['simple', 'complex', 'repeat'] as const;
+export const ITEM_TYPES = ['simple', 'complex', 'repeat', 'project'] as const;
 export type ItemType = (typeof ITEM_TYPES)[number];
 
 export interface Organizer {

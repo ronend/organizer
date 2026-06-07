@@ -68,31 +68,39 @@ export default function ItemDetail({ item, defaultCategory, onSave, onDelete, on
         />
       </label>
 
-      <div className="field-row">
-        <label className="field">
-          <span>Category</span>
-          <select value={category} onChange={(e) => setCategory(e.target.value as Category)}>
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="field">
-          <span>Type</span>
-          <select value={type} onChange={(e) => setType(e.target.value as ItemType)}>
-            {ITEM_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="field">
+        <span>Category</span>
+        <div className="seg">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={'seg-btn ripple' + (category === c ? ' active' : '')}
+              onClick={() => setCategory(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="field-row">
+      <div className="field">
+        <span>Type</span>
+        <div className="seg">
+          {ITEM_TYPES.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={'seg-btn ripple' + (type === t ? ' active' : '')}
+              onClick={() => setType(t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="field-row compact">
         <label className="field">
           <span>Due date</span>
           <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />

@@ -14,7 +14,7 @@ from src.middleware.auth import require_auth
 router = APIRouter(prefix="/api/organizers")
 
 CATEGORIES = {"errand", "project", "health", "finance", "home"}
-TYPES = {"simple", "complex", "repeat"}
+TYPES = {"simple", "complex", "repeat", "project"}
 
 
 class CreateItem(BaseModel):
