@@ -7,8 +7,12 @@ import {
   type ItemType,
   type NewOrganizer,
   type Organizer,
+  type Prerequisite,
+  type Recurrence,
+  type RecurrenceFreq,
 } from '../types/organizer';
 import { tomorrowStr } from '../lib/dates';
+import { describeRecurrence, WEEKDAY_NAMES } from '../lib/recurrence';
 import RichTextEditor from './RichTextEditor';
 
 interface Props {
@@ -42,6 +46,13 @@ export default function ItemDetail({
   const [addingCat, setAddingCat] = useState(false);
   const [newCat, setNewCat] = useState('');
 
+  // Routine config
+  const [freq, setFreq] = useState<RecurrenceFreq>(item?.recurrence?.freq ?? 'week');
+  const [every, setEvery] = useState<number>(item?.recurrence?.interval ?? 1);
+  const [weekdays, setWeekdays] = useState<number[]>(item?.recurrence?.weekdays ?? []);
+  const [monthDay, setMonthDay] = useState<number>(item?.recurrence?.monthDay ?? 1);
+  const [prereqs, setPrereqs] = useState<Prerequisite[]>(item?.prerequisites ?? []);
+
   // Always include the currently-selected category as an option, even if it's
   // a freshly-typed label not yet in the known list.
   const catOptions = categories.includes(category) ? categories : [...categories, category];
@@ -53,6 +64,17 @@ export default function ItemDetail({
     setAddingCat(false);
   }
 
+  function buildRecurrence(): Recurrence {
+    const r: Recurrence = { freq, interval: Math.max(1, Math.floor(every || 1)) };
+    if (freq === 'week' && weekdays.length) r.weekdays = [...weekdays].sort((a, b) => a - b);
+    if (freq === 'month') r.monthDay = Math.min(31, Math.max(1, monthDay || 1));
+    return r;
+  }
+
+  function toggleWeekday(i: number) {
+    setWeekdays((prev) => (prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i]));
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!title.trim()) {
@@ -61,8 +83,23 @@ export default function ItemDetail({
     }
     setErr(null);
     setSaving(true);
+    const isRoutine = type === 'routine';
     try {
-      await onSave({ title: title.trim(), category, type, description, dueDate, dueTime, done });
+      await onSave({
+        title: title.trim(),
+        category,
+        type,
+        description,
+        dueDate,
+        dueTime,
+        done,
+        recurrence: isRoutine ? buildRecurrence() : null,
+        prerequisites: isRoutine
+          ? prereqs
+              .filter((p) => p.title.trim())
+              .map((p) => ({ title: p.title.trim(), leadDays: Math.max(0, Math.floor(p.leadDays || 0)) }))
+          : [],
+      });
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -161,6 +198,119 @@ export default function ItemDetail({
           <input type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} />
         </label>
       </div>
+
+      {type === 'routine' && (
+        <>
+          <div className="field">
+            <span>Repeats</span>
+            <div className="rec-row">
+              <span className="muted">Every</span>
+              <input
+                className="rec-interval"
+                type="number"
+                min={1}
+                value={every}
+                onChange={(e) => setEvery(Number(e.target.value))}
+              />
+              <div className="seg">
+                {(['day', 'week', 'month'] as RecurrenceFreq[]).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    className={'seg-btn ripple' + (freq === f ? ' active' : '')}
+                    onClick={() => setFreq(f)}
+                  >
+                    {f}
+                    {every > 1 ? 's' : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {freq === 'week' && (
+              <div className="weekday-row">
+                {WEEKDAY_NAMES.map((wd, i) => (
+                  <button
+                    key={wd}
+                    type="button"
+                    className={'wd-btn ripple' + (weekdays.includes(i) ? ' active' : '')}
+                    onClick={() => toggleWeekday(i)}
+                  >
+                    {wd}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {freq === 'month' && (
+              <div className="rec-row">
+                <span className="muted">On day</span>
+                <input
+                  className="rec-interval"
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={monthDay}
+                  onChange={(e) => setMonthDay(Number(e.target.value))}
+                />
+              </div>
+            )}
+
+            <p className="rec-hint muted">{describeRecurrence(buildRecurrence())} · first on {dueDate}</p>
+          </div>
+
+          <div className="field">
+            <span>Prerequisites</span>
+            {prereqs.map((p, idx) => (
+              <div className="prereq-row" key={idx}>
+                <input
+                  className="prereq-title"
+                  placeholder="e.g. Order medication"
+                  value={p.title}
+                  onChange={(e) =>
+                    setPrereqs((prev) =>
+                      prev.map((x, i) => (i === idx ? { ...x, title: e.target.value } : x)),
+                    )
+                  }
+                />
+                <input
+                  className="prereq-lead"
+                  type="number"
+                  min={0}
+                  value={p.leadDays}
+                  onChange={(e) =>
+                    setPrereqs((prev) =>
+                      prev.map((x, i) =>
+                        i === idx ? { ...x, leadDays: Number(e.target.value) } : x,
+                      ),
+                    )
+                  }
+                />
+                <span className="muted">days before</span>
+                <button
+                  type="button"
+                  className="prereq-del"
+                  aria-label="Remove prerequisite"
+                  onClick={() => setPrereqs((prev) => prev.filter((_, i) => i !== idx))}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="seg-btn add"
+              onClick={() => setPrereqs((prev) => [...prev, { title: '', leadDays: 1 }])}
+            >
+              + Add prerequisite
+            </button>
+            <p className="rec-hint muted">
+              Each prerequisite becomes its own item, due the set number of days before each
+              occurrence.
+            </p>
+          </div>
+        </>
+      )}
 
       <label className="field">
         <span>Description</span>

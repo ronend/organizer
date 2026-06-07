@@ -4,6 +4,7 @@ organizerId. boto3 is provided by the Lambda runtime."""
 import os
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Optional, TypedDict
 
 import boto3
@@ -14,17 +15,32 @@ _TABLE_NAME = os.environ["DYNAMO_TABLE"]
 _table = boto3.resource("dynamodb").Table(_TABLE_NAME)
 
 
-class Organizer(TypedDict):
+def _plain(v: Any) -> Any:
+    """Convert DynamoDB Decimals (incl. nested) to plain JSON numbers."""
+    if isinstance(v, Decimal):
+        return int(v) if v % 1 == 0 else float(v)
+    if isinstance(v, list):
+        return [_plain(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _plain(x) for k, x in v.items()}
+    return v
+
+
+class Organizer(TypedDict, total=False):
     id: str
     userId: str
     createdAt: str
-    category: str          # errand | project | health | finance | home
-    type: str              # simple | complex | repeat
+    category: str
+    type: str              # simple | complex | repeat | project | routine
     title: str
     description: str       # rich text (HTML)
     dueDate: str           # YYYY-MM-DD
     dueTime: str           # HH:MM
     done: bool
+    recurrence: Any        # routine cadence (or None)
+    prerequisites: list    # routine prerequisite templates
+    parentId: Any          # prereq -> parent routine id (or None)
+    isPrereq: bool
 
 
 def _to_organizer(item: dict) -> Organizer:
@@ -40,6 +56,10 @@ def _to_organizer(item: dict) -> Organizer:
         "dueDate": item.get("dueDate", ""),
         "dueTime": item.get("dueTime", "09:00"),
         "done": bool(item.get("done", False)),
+        "recurrence": _plain(item.get("recurrence")) or None,
+        "prerequisites": _plain(item.get("prerequisites", [])) or [],
+        "parentId": item.get("parentId") or None,
+        "isPrereq": bool(item.get("isPrereq", False)),
     }
 
 
@@ -60,7 +80,13 @@ def create_organizer(user_id: str, data: dict[str, Any]) -> Organizer:
         "dueDate": data.get("dueDate") or "",
         "dueTime": data.get("dueTime") or "09:00",
         "done": bool(data.get("done", False)),
+        "prerequisites": data.get("prerequisites") or [],
+        "isPrereq": bool(data.get("isPrereq", False)),
     }
+    if data.get("recurrence"):
+        item["recurrence"] = data["recurrence"]
+    if data.get("parentId"):
+        item["parentId"] = data["parentId"]
     _table.put_item(Item=item)
     return _to_organizer(item)
 

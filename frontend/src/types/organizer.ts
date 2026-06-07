@@ -7,6 +7,24 @@ export type Category = string;
 export const ITEM_TYPES = ['simple', 'complex', 'repeat', 'project', 'routine'] as const;
 export type ItemType = (typeof ITEM_TYPES)[number];
 
+// --- Routine support ---
+export type RecurrenceFreq = 'day' | 'week' | 'month';
+
+export interface Recurrence {
+  freq: RecurrenceFreq;
+  interval: number; // every N freq units (>= 1)
+  weekdays?: number[]; // for 'week': 0=Sun .. 6=Sat
+  monthDay?: number; // for 'month': 1..31
+}
+
+/** A prerequisite template on a routine: a sub-item due `leadDays`/`leadHours`
+ * before each occurrence. */
+export interface Prerequisite {
+  title: string;
+  leadDays: number;
+  leadHours?: number;
+}
+
 /** Normalize a free-form category label (lowercase, trimmed, capped). */
 export function normalizeCategory(raw: string): string {
   return raw.trim().toLowerCase().slice(0, 40);
@@ -28,6 +46,12 @@ export interface Organizer {
   dueDate: string; // YYYY-MM-DD
   dueTime: string; // HH:MM
   done: boolean;
+  // Routine fields (only on type === 'routine'):
+  recurrence?: Recurrence | null;
+  prerequisites?: Prerequisite[];
+  // Prerequisite-item fields (a sub-item spawned from a routine):
+  parentId?: string | null;
+  isPrereq?: boolean;
 }
 
 /** Fields the client sends when creating an item. */

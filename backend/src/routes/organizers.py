@@ -23,6 +23,19 @@ def normalize_category(raw: Optional[str]) -> Optional[str]:
     return (raw.strip().lower() or "errand")[:40]
 
 
+class Recurrence(BaseModel):
+    freq: str  # day | week | month
+    interval: int = 1
+    weekdays: Optional[list[int]] = None
+    monthDay: Optional[int] = None
+
+
+class PrereqTemplate(BaseModel):
+    title: str
+    leadDays: int = 0
+    leadHours: int = 0
+
+
 class CreateItem(BaseModel):
     title: str
     dueDate: str
@@ -31,6 +44,10 @@ class CreateItem(BaseModel):
     description: str = ""
     dueTime: str = "09:00"
     done: bool = False
+    recurrence: Optional[Recurrence] = None
+    prerequisites: list[PrereqTemplate] = []
+    parentId: Optional[str] = None
+    isPrereq: bool = False
 
 
 class UpdateItem(BaseModel):
@@ -41,6 +58,10 @@ class UpdateItem(BaseModel):
     description: Optional[str] = None
     dueTime: Optional[str] = None
     done: Optional[bool] = None
+    recurrence: Optional[Recurrence] = None
+    prerequisites: Optional[list[PrereqTemplate]] = None
+    parentId: Optional[str] = None
+    isPrereq: Optional[bool] = None
 
 
 def _validate_type(type_: Optional[str]) -> None:

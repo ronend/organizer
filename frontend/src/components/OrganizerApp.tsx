@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useOrganizers } from '../hooks/useOrganizers';
 import { useAuth } from '../auth/useAuth';
-import type { Category, NewOrganizer } from '../types/organizer';
+import type { Category, NewOrganizer, Organizer } from '../types/organizer';
 import { DEFAULT_CATEGORY, labelize } from '../types/organizer';
 import { installRipple } from '../lib/ripple';
 import { useTheme } from '../lib/theme';
+import { toDateStr } from '../lib/dates';
+import { nextOccurrence, parseDue, prereqDueStrings, toTimeStr } from '../lib/recurrence';
 import CategoryTabs, { itemsForTab, tabLabel, type Tab } from './CategoryTabs';
 import ItemList from './ItemList';
 import ItemDetail from './ItemDetail';
@@ -53,11 +55,43 @@ export default function OrganizerApp() {
       ? organizers.find((o) => o.id === selection.id) ?? null
       : null;
 
+  // Create one list item per prerequisite of a routine occurrence.
+  async function createPrereqs(routine: Organizer) {
+    const prereqs = routine.prerequisites ?? [];
+    if (!prereqs.length) return;
+    const occ = parseDue(routine.dueDate, routine.dueTime);
+    for (const p of prereqs) {
+      const { dueDate, dueTime } = prereqDueStrings(occ, p);
+      await addOrganizer({
+        title: p.title,
+        category: routine.category,
+        type: 'simple',
+        description: '',
+        dueDate,
+        dueTime,
+        done: false,
+        recurrence: null,
+        prerequisites: [],
+        parentId: routine.id,
+        isPrereq: true,
+      });
+    }
+  }
+
   async function handleSave(data: NewOrganizer) {
     if (selection.mode === 'edit') {
-      await updateOrganizer(selection.id, data);
+      const updated = await updateOrganizer(selection.id, data);
+      if (updated.type === 'routine') {
+        // Reconcile prereqs: drop incomplete existing ones, recreate from templates.
+        const stale = organizers.filter(
+          (o) => o.parentId === updated.id && o.isPrereq && !o.done,
+        );
+        await Promise.all(stale.map((o) => removeOrganizer(o.id)));
+        await createPrereqs(updated);
+      }
     } else {
       const created = await addOrganizer(data);
+      if (created.type === 'routine') await createPrereqs(created);
       // Show the new item: jump to its category tab (a new item due tomorrow
       // wouldn't appear under "Today"), and select it.
       setActiveTab(created.category);
@@ -67,12 +101,40 @@ export default function OrganizerApp() {
 
   async function handleDelete() {
     if (selection.mode !== 'edit') return;
-    await removeOrganizer(selection.id);
+    const id = selection.id;
+    const item = organizers.find((o) => o.id === id);
+    if (item?.type === 'routine') {
+      // Cascade-delete this routine's prerequisite items.
+      const children = organizers.filter((o) => o.parentId === id);
+      await Promise.all(children.map((c) => removeOrganizer(c.id)));
+    }
+    await removeOrganizer(id);
     setSelection({ mode: 'none' });
   }
 
-  function handleToggleDone(id: string, done: boolean) {
-    void updateOrganizer(id, { done });
+  async function handleToggleDone(id: string, done: boolean) {
+    const item = organizers.find((o) => o.id === id);
+    // Completing a routine occurrence generates the next occurrence (+ prereqs)
+    // and keeps the completed one as history.
+    if (done && item && item.type === 'routine' && item.recurrence) {
+      const prevDue = parseDue(item.dueDate, item.dueTime);
+      const next = nextOccurrence(prevDue, item.recurrence, prevDue);
+      const created = await addOrganizer({
+        title: item.title,
+        category: item.category,
+        type: 'routine',
+        description: item.description,
+        dueDate: toDateStr(next),
+        dueTime: toTimeStr(next),
+        done: false,
+        recurrence: item.recurrence,
+        prerequisites: item.prerequisites ?? [],
+      });
+      await createPrereqs(created);
+      await updateOrganizer(id, { done: true });
+    } else {
+      void updateOrganizer(id, { done });
+    }
   }
 
   async function handleDeleteCategory(cat: string) {

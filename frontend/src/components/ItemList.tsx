@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Organizer } from '../types/organizer';
 import { formatDue, isOverdue } from '../lib/dates';
+import { describeRecurrence } from '../lib/recurrence';
 
 interface Props {
   items: Organizer[]; // already filtered + sorted by due date
@@ -81,6 +82,10 @@ export default function ItemList({ items, selectedId, onSelect, onToggleDone }: 
             <span className="item-title">{item.title || '(untitled)'}</span>
             <span className="item-meta">
               <span className={`badge cat-${item.category}`}>{item.category}</span>
+              {item.type === 'routine' && (
+                <span className="badge routine">🔁 {describeRecurrence(item.recurrence)}</span>
+              )}
+              {item.isPrereq && <span className="badge prereq">prereq</span>}
               <span className={isOverdue(item) ? 'item-due overdue' : 'item-due'}>
                 {formatDue(item)}
               </span>

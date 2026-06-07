@@ -572,6 +572,19 @@ body {
   color: #0c0c12;
 }
 
+.badge.routine {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  text-transform: none;
+}
+
+.badge.prereq {
+  background: transparent;
+  color: var(--accent);
+  border: 1px dashed var(--border-strong);
+}
+
 .cat-errand { background: linear-gradient(135deg, #7aa2ff, #6d8bff); }
 .cat-project { background: linear-gradient(135deg, #c79bff, #a06bff); }
 .cat-health { background: linear-gradient(135deg, #74e0a8, #3ec98a); }
@@ -764,6 +777,100 @@ body {
 
 .cat-seg-btn.add::before {
   display: none;
+}
+
+/* --- Routine editor --- */
+.rec-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.rec-interval {
+  width: 4rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.weekday-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+
+.wd-btn {
+  position: relative;
+  overflow: hidden;
+  width: 2.6rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.35rem 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.wd-btn.active {
+  color: #0c0c12;
+  background: var(--grad);
+  border-color: transparent;
+}
+
+.rec-hint {
+  font-size: 0.78rem;
+  margin: 0.5rem 0 0;
+}
+
+.prereq-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.prereq-title {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.prereq-lead {
+  width: 3.4rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.prereq-del {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.prereq-del:hover {
+  color: var(--danger);
 }
 
 .field-inline {
