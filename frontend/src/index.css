@@ -22,6 +22,7 @@
   --scroll-thumb: rgba(255, 255, 255, 0.12);
   --glow-1: rgba(109, 139, 255, 0.16);
   --glow-2: rgba(160, 107, 255, 0.14);
+  --popover: rgba(22, 24, 32, 0.92);
 
   color-scheme: dark;
   font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
@@ -51,6 +52,7 @@
   --scroll-thumb: rgba(20, 22, 40, 0.22);
   --glow-1: rgba(91, 124, 255, 0.14);
   --glow-2: rgba(154, 107, 255, 0.12);
+  --popover: rgba(255, 255, 255, 0.95);
 
   color-scheme: light;
 }
@@ -426,7 +428,7 @@ body {
   min-width: 240px;
   max-height: 340px;
   overflow-y: auto;
-  background: rgba(22, 24, 32, 0.85);
+  background: var(--popover);
   border: 1px solid var(--border-strong);
   border-radius: 16px;
   backdrop-filter: blur(22px) saturate(150%);

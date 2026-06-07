@@ -44,6 +44,16 @@ export function useOrganizers() {
     setOrganizers((prev) => prev.filter((o) => o.id !== id));
   }, []);
 
+  // Atomic routine completion happens server-side (it creates several items),
+  // so re-fetch afterwards to pick up the spawned occurrence + prerequisites.
+  const completeRoutine = useCallback(
+    async (id: string) => {
+      await api.completeRoutine(id);
+      await refresh();
+    },
+    [refresh],
+  );
+
   return {
     organizers,
     loading,
@@ -52,5 +62,6 @@ export function useOrganizers() {
     addOrganizer,
     updateOrganizer,
     removeOrganizer,
+    completeRoutine,
   };
 }

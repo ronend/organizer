@@ -67,3 +67,8 @@ export function updateOrganizer(
 export function deleteOrganizer(id: string): Promise<void> {
   return request<void>(`/organizers/${id}`, { method: 'DELETE' });
 }
+
+/** Atomically complete a routine occurrence; backend spawns the next one + prereqs. */
+export function completeRoutine(id: string): Promise<{ created: Organizer[] }> {
+  return request<{ created: Organizer[] }>(`/organizers/${id}/complete`, { method: 'POST' });
+}

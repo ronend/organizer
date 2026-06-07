@@ -100,6 +100,16 @@ def update_item(
     return updated
 
 
+@router.post("/{organizer_id}/complete")
+def complete_routine(organizer_id: str, user: dict = Depends(require_auth)):
+    """Atomically mark a routine occurrence done and spawn the next occurrence
+    (+ its prerequisite items). Returns the newly created items."""
+    created = dynamo.complete_routine(user["sub"], organizer_id)
+    if created is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return {"created": created}
+
+
 @router.delete("/{organizer_id}", status_code=204)
 def delete_item(organizer_id: str, user: dict = Depends(require_auth)):
     dynamo.delete_organizer(user["sub"], organizer_id)

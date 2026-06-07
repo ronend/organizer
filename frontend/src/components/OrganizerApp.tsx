@@ -5,8 +5,7 @@ import type { Category, NewOrganizer, Organizer } from '../types/organizer';
 import { DEFAULT_CATEGORY, labelize } from '../types/organizer';
 import { installRipple } from '../lib/ripple';
 import { useTheme } from '../lib/theme';
-import { toDateStr } from '../lib/dates';
-import { nextOccurrence, parseDue, prereqDueStrings, toTimeStr } from '../lib/recurrence';
+import { parseDue, prereqDueStrings } from '../lib/recurrence';
 import CategoryTabs, { itemsForTab, tabLabel, type Tab } from './CategoryTabs';
 import ItemList from './ItemList';
 import ItemDetail from './ItemDetail';
@@ -17,8 +16,15 @@ type Selection =
   | { mode: 'edit'; id: string };
 
 export default function OrganizerApp() {
-  const { organizers, loading, error, addOrganizer, updateOrganizer, removeOrganizer } =
-    useOrganizers();
+  const {
+    organizers,
+    loading,
+    error,
+    addOrganizer,
+    updateOrganizer,
+    removeOrganizer,
+    completeRoutine,
+  } = useOrganizers();
   const { logout } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
 
@@ -114,24 +120,10 @@ export default function OrganizerApp() {
 
   async function handleToggleDone(id: string, done: boolean) {
     const item = organizers.find((o) => o.id === id);
-    // Completing a routine occurrence generates the next occurrence (+ prereqs)
-    // and keeps the completed one as history.
+    // Completing a routine occurrence is atomic on the backend: it marks this
+    // one done and spawns the next occurrence (+ prereqs) in one transaction.
     if (done && item && item.type === 'routine' && item.recurrence) {
-      const prevDue = parseDue(item.dueDate, item.dueTime);
-      const next = nextOccurrence(prevDue, item.recurrence, prevDue);
-      const created = await addOrganizer({
-        title: item.title,
-        category: item.category,
-        type: 'routine',
-        description: item.description,
-        dueDate: toDateStr(next),
-        dueTime: toTimeStr(next),
-        done: false,
-        recurrence: item.recurrence,
-        prerequisites: item.prerequisites ?? [],
-      });
-      await createPrereqs(created);
-      await updateOrganizer(id, { done: true });
+      await completeRoutine(id);
     } else {
       void updateOrganizer(id, { done });
     }

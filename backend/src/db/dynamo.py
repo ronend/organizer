@@ -135,3 +135,93 @@ def update_organizer(
 
 def delete_organizer(user_id: str, organizer_id: str) -> None:
     _table.delete_item(Key={"userId": user_id, "organizerId": organizer_id})
+
+
+def get_organizer(user_id: str, organizer_id: str) -> Optional[Organizer]:
+    resp = _table.get_item(Key={"userId": user_id, "organizerId": organizer_id})
+    item = resp.get("Item")
+    return _to_organizer(item) if item else None
+
+
+# --- Routine rollover (atomic) ---
+from boto3.dynamodb.types import TypeSerializer  # noqa: E402
+from src import recurrence as _occurrence  # noqa: E402
+
+_serializer = TypeSerializer()
+
+
+def _marshal(item: dict) -> dict:
+    return {k: _serializer.serialize(v) for k, v in item.items()}
+
+
+def complete_routine(user_id: str, organizer_id: str) -> Optional[list[Organizer]]:
+    """Mark a routine occurrence done and, in a single DynamoDB transaction,
+    create the next occurrence plus its prerequisite items. Returns the newly
+    created items, or None if the routine doesn't exist."""
+    resp = _table.get_item(Key={"userId": user_id, "organizerId": organizer_id})
+    raw = resp.get("Item")
+    if not raw:
+        return None
+
+    client = _table.meta.client
+    transact: list[dict] = [
+        {
+            "Update": {
+                "TableName": _TABLE_NAME,
+                "Key": {"userId": {"S": user_id}, "organizerId": {"S": organizer_id}},
+                "UpdateExpression": "SET #d = :t",
+                "ExpressionAttributeNames": {"#d": "done"},
+                "ExpressionAttributeValues": {":t": {"BOOL": True}},
+                "ConditionExpression": "attribute_exists(organizerId)",
+            }
+        }
+    ]
+
+    recurrence = _plain(raw.get("recurrence"))
+    created: list[dict] = []
+
+    if recurrence:
+        prev = _occurrence.parse_due(raw.get("dueDate", ""), raw.get("dueTime", "09:00"))
+        nxt = _occurrence.next_occurrence(prev, recurrence, prev)
+        next_id = str(uuid.uuid4())
+        next_item = {
+            "userId": user_id,
+            "organizerId": next_id,
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+            "category": raw.get("category", "errand"),
+            "type": "routine",
+            "title": raw.get("title", ""),
+            "description": raw.get("description", ""),
+            "dueDate": _occurrence.to_date_str(nxt),
+            "dueTime": _occurrence.to_time_str(nxt),
+            "done": False,
+            "recurrence": recurrence,
+            "prerequisites": _plain(raw.get("prerequisites", [])) or [],
+            "isPrereq": False,
+        }
+        transact.append({"Put": {"TableName": _TABLE_NAME, "Item": _marshal(next_item)}})
+        created.append(next_item)
+
+        # none / one / many prerequisites
+        for p in next_item["prerequisites"]:
+            due = _occurrence.prereq_due(nxt, p)
+            prereq_item = {
+                "userId": user_id,
+                "organizerId": str(uuid.uuid4()),
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "category": next_item["category"],
+                "type": "simple",
+                "title": p.get("title", ""),
+                "description": "",
+                "dueDate": _occurrence.to_date_str(due),
+                "dueTime": _occurrence.to_time_str(due),
+                "done": False,
+                "prerequisites": [],
+                "parentId": next_id,
+                "isPrereq": True,
+            }
+            transact.append({"Put": {"TableName": _TABLE_NAME, "Item": _marshal(prereq_item)}})
+            created.append(prereq_item)
+
+    client.transact_write_items(TransactItems=transact)
+    return [_to_organizer(i) for i in created]
