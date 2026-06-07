@@ -170,18 +170,6 @@ export default function RecurringForm({
         />
       </div>
 
-      <div className="field">
-        <span>Tags</span>
-        <TagEditor
-          value={tags}
-          known={knownTags}
-          onChange={(t) => {
-            touch();
-            setTags(t);
-          }}
-        />
-      </div>
-
       <div className="field-row compact">
         <label className="field">
           <span>Next due</span>
@@ -361,6 +349,18 @@ export default function RecurringForm({
           }}
         />
       </label>
+
+      <div className="field">
+        <span>Tags</span>
+        <TagEditor
+          value={tags}
+          known={knownTags}
+          onChange={(t) => {
+            touch();
+            setTags(t);
+          }}
+        />
+      </div>
 
       <label className="field-inline">
         <input

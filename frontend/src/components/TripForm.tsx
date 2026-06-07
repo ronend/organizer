@@ -144,18 +144,6 @@ export default function TripForm({
         />
       </div>
 
-      <div className="field">
-        <span>Tags</span>
-        <TagEditor
-          value={tags}
-          known={knownTags}
-          onChange={(t) => {
-            touch();
-            setTags(t);
-          }}
-        />
-      </div>
-
       <div className="field-row compact">
         <label className="field">
           <span>Start date</span>
@@ -283,6 +271,18 @@ export default function TripForm({
           }}
         />
       </label>
+
+      <div className="field">
+        <span>Tags</span>
+        <TagEditor
+          value={tags}
+          known={knownTags}
+          onChange={(t) => {
+            touch();
+            setTags(t);
+          }}
+        />
+      </div>
 
       <label className="field-inline">
         <input
