@@ -27,7 +27,7 @@ const CARDS: Card[] = [
     icon: '✈️',
     title: 'Trip',
     blurb: 'Full trip itinerary with flights, hotels & activities',
-    enabled: false,
+    enabled: true,
   },
   {
     type: 'recurring',

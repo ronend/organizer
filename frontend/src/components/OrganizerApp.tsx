@@ -99,7 +99,12 @@ export default function OrganizerApp() {
       const created = await addOrganizer(data);
       if (created.type === 'recurring') await createReminders(created);
       // Show the new entry: jump to a tab where it appears, then select it.
-      setActiveTab(created.type === 'recurring' ? 'recurring' : 'tasks');
+      const tabForType: Record<string, Tab> = {
+        recurring: 'recurring',
+        trip: 'trips',
+        task: 'tasks',
+      };
+      setActiveTab(tabForType[created.type] ?? 'tasks');
       setSelection({ mode: 'edit', id: created.id });
     }
   }

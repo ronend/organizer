@@ -38,6 +38,17 @@ export interface DependsOnRef {
   daysBefore: number;
 }
 
+// --- Trip support ---
+export const SEGMENT_TYPES = ['flight', 'hotel', 'car', 'activity', 'train', 'note'] as const;
+export type SegmentType = (typeof SEGMENT_TYPES)[number];
+
+/** One leg of a trip itinerary. `fields` are free-form per segment type. */
+export interface Segment {
+  id: string;
+  type: SegmentType;
+  fields: Record<string, string>;
+}
+
 /** Normalize a free-form tag label (lowercase, trimmed, capped). */
 export function normalizeTag(raw: string): string {
   return raw.trim().toLowerCase().slice(0, 40);
@@ -63,6 +74,10 @@ export interface Organizer {
   link?: string;
   contacts?: Contact[];
   dependsOn?: DependsOnRef[];
+  // Trip fields (only on type === 'trip'):
+  startDate?: string;
+  endDate?: string;
+  segments?: Segment[];
   // Recurring fields (only on type === 'recurring'):
   recurrence?: Recurrence | null;
   reminders?: Reminder[];

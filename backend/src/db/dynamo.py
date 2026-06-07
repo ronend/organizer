@@ -40,6 +40,9 @@ class Organizer(TypedDict, total=False):
     link: str            # task: optional URL
     contacts: list       # task: [{name, role, phone, email}]
     dependsOn: list      # task: [{entryId, daysBefore}]
+    startDate: str       # trip: itinerary start (YYYY-MM-DD)
+    endDate: str         # trip: itinerary end (YYYY-MM-DD)
+    segments: list       # trip: ordered itinerary segments
     recurrence: Any      # recurring cadence (or None)
     reminders: list      # recurring: auto-spawn reminder templates
     parentId: Any        # spawned reminder -> parent recurring id (or None)
@@ -102,6 +105,9 @@ def _to_organizer(item: dict) -> Organizer:
         "link": item.get("link", ""),
         "contacts": _plain(item.get("contacts", [])) or [],
         "dependsOn": _plain(item.get("dependsOn", [])) or [],
+        "startDate": item.get("startDate", ""),
+        "endDate": item.get("endDate", ""),
+        "segments": _plain(item.get("segments", [])) or [],
         "recurrence": _plain(item.get("recurrence")) or None,
         "reminders": _migrate_reminders(item),
         "parentId": item.get("parentId") or None,
@@ -129,6 +135,9 @@ def create_organizer(user_id: str, data: dict[str, Any]) -> Organizer:
         "link": data.get("link") or "",
         "contacts": data.get("contacts") or [],
         "dependsOn": data.get("dependsOn") or [],
+        "startDate": data.get("startDate") or "",
+        "endDate": data.get("endDate") or "",
+        "segments": data.get("segments") or [],
         "reminders": data.get("reminders") or [],
         "isPrereq": bool(data.get("isPrereq", False)),
     }

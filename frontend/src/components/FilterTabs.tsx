@@ -3,12 +3,13 @@ import { labelize } from '../types/organizer';
 import { compareByDue, isOverdue, isToday } from '../lib/dates';
 
 // Built-in tabs come first; any user tag becomes an additional cross-type tab.
-export const SPECIAL_TABS = ['today', 'tasks', 'recurring'] as const;
-export type Tab = string; // 'today' | 'tasks' | 'recurring' | a tag label
+export const SPECIAL_TABS = ['today', 'tasks', 'trips', 'recurring'] as const;
+export type Tab = string; // 'today' | 'tasks' | 'trips' | 'recurring' | a tag label
 
 const SPECIAL_LABELS: Record<string, string> = {
   today: 'Today',
   tasks: 'Tasks',
+  trips: 'Trips',
   recurring: 'Recurring',
 };
 
@@ -17,6 +18,7 @@ export function itemsForTab(items: Organizer[], tab: Tab): Organizer[] {
   let filtered: Organizer[];
   if (tab === 'today') filtered = items.filter((i) => isToday(i) || isOverdue(i));
   else if (tab === 'tasks') filtered = items.filter((i) => i.type === 'task');
+  else if (tab === 'trips') filtered = items.filter((i) => i.type === 'trip');
   else if (tab === 'recurring') filtered = items.filter((i) => i.type === 'recurring');
   else filtered = items.filter((i) => i.tags?.includes(tab));
   return [...filtered].sort(compareByDue);

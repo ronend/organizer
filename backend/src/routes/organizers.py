@@ -54,6 +54,12 @@ class DependsOnRef(BaseModel):
     daysBefore: int = 0
 
 
+class Segment(BaseModel):
+    id: str = ""
+    type: str = "note"
+    fields: dict = {}
+
+
 class CreateItem(BaseModel):
     title: str
     dueDate: str
@@ -67,6 +73,9 @@ class CreateItem(BaseModel):
     dependsOn: list[DependsOnRef] = []
     recurrence: Optional[Recurrence] = None
     reminders: list[Reminder] = []
+    startDate: str = ""
+    endDate: str = ""
+    segments: list[Segment] = []
     parentId: Optional[str] = None
     isPrereq: bool = False
 
@@ -84,6 +93,9 @@ class UpdateItem(BaseModel):
     dependsOn: Optional[list[DependsOnRef]] = None
     recurrence: Optional[Recurrence] = None
     reminders: Optional[list[Reminder]] = None
+    startDate: Optional[str] = None
+    endDate: Optional[str] = None
+    segments: Optional[list[Segment]] = None
     parentId: Optional[str] = None
     isPrereq: Optional[bool] = None
 

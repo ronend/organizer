@@ -13,7 +13,23 @@ interface Props {
 
 function TypeIcon({ item }: { item: Organizer }) {
   if (item.type === 'recurring') return <span className="entry-icon">🔄</span>;
+  if (item.type === 'trip') return <span className="entry-icon">✈️</span>;
   return <span className="entry-icon">✅</span>;
+}
+
+/** Short "Jun 14 – Jun 18" range for a trip card. */
+function tripRange(item: Organizer): string {
+  const fmt = (s?: string) =>
+    s
+      ? new Date(`${s}T00:00`).toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+        })
+      : '';
+  const a = fmt(item.startDate);
+  const b = fmt(item.endDate);
+  if (a && b) return `${a} – ${b}`;
+  return a || b || 'No dates';
 }
 
 export default function EntryList({ items, selectedId, onSelect, onToggleDone }: Props) {
@@ -69,6 +85,8 @@ export default function EntryList({ items, selectedId, onSelect, onToggleDone }:
         const urgency = dueUrgency(item);
         const contactCount = item.contacts?.length ?? 0;
         const reminderCount = item.reminders?.length ?? 0;
+        const segmentCount = item.segments?.length ?? 0;
+        const isTrip = item.type === 'trip';
         return (
           <li
             key={item.id}
@@ -107,6 +125,11 @@ export default function EntryList({ items, selectedId, onSelect, onToggleDone }:
                     🔔 {reminderCount}
                   </span>
                 )}
+                {isTrip && (
+                  <span className="badge contact" title="Segments">
+                    🧳 {segmentCount}
+                  </span>
+                )}
                 {item.link && (
                   <span className="badge link" title="Has a link">
                     🔗
@@ -118,7 +141,11 @@ export default function EntryList({ items, selectedId, onSelect, onToggleDone }:
                   </span>
                 )}
                 {item.isPrereq && <span className="badge prereq">reminder</span>}
-                <span className={`item-due ${urgency}`}>{formatDue(item)}</span>
+                {isTrip ? (
+                  <span className="item-due future">{tripRange(item)}</span>
+                ) : (
+                  <span className={`item-due ${urgency}`}>{formatDue(item)}</span>
+                )}
               </span>
             </div>
           </li>
