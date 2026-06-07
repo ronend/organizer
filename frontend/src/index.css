@@ -1490,3 +1490,15 @@ body {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ---- Editable affordance ----
+   The resting --surface/--border tokens are intentionally very subtle, which
+   made form fields read as static text until focused. Give every control in
+   the detail panel a clearly visible box at rest (focus still adds the accent
+   ring). Appended last so it wins on source order over the base rules. */
+.detail input:not([type='checkbox']):not([type='radio']),
+.detail select,
+.detail textarea {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+}
