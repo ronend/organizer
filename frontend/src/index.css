@@ -236,7 +236,16 @@ body {
 }
 
 /* staggered entrance on load */
-.card-tabs { grid-area: tabs; overflow: visible; animation-delay: 0.05s; }
+/* position + z-index lift the whole tabs card (a backdrop-filter stacking
+   context) above the sibling list/detail cards, so its hover dropdown — which
+   overflows downward over them — isn't occluded. */
+.card-tabs {
+  grid-area: tabs;
+  overflow: visible;
+  position: relative;
+  z-index: 50;
+  animation-delay: 0.05s;
+}
 .card-list { grid-area: list; animation-delay: 0.13s; }
 .card-detail { grid-area: detail; animation-delay: 0.2s; }
 
