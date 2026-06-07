@@ -12,86 +12,308 @@ body {
   margin: 0;
 }
 
-.container {
-  max-width: 560px;
-  margin: 3rem auto;
-  padding: 0 1rem;
+button {
+  font-family: inherit;
 }
 
-.header {
+/* --- App shell --- */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid #e5e5e8;
+  background: #fff;
 }
 
-.logout {
-  background: transparent;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  padding: 0.4rem 0.8rem;
-  cursor: pointer;
+.app-header h1 {
+  margin: 0;
+  font-size: 1.25rem;
 }
 
-.add-form {
+.header-actions {
   display: flex;
-  gap: 0.5rem;
-  margin: 1.5rem 0;
+  gap: 0.75rem;
+  align-items: center;
 }
 
-.add-form input {
-  flex: 1;
-  padding: 0.6rem 0.8rem;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 1rem;
-}
-
-.add-form button {
-  padding: 0.6rem 1.2rem;
-  border: none;
-  border-radius: 6px;
+button.primary {
   background: #2563eb;
   color: #fff;
-  font-size: 1rem;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.9rem;
   cursor: pointer;
 }
 
-.organizer-list {
-  list-style: none;
-  padding: 0;
+button.primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+button.link {
+  background: transparent;
+  border: none;
+  color: #555;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+button.danger {
+  background: transparent;
+  border: 1px solid #e0b4b4;
+  color: #b00;
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+}
+
+/* --- Tabs --- */
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0 1rem;
+  background: #fff;
+  border-bottom: 1px solid #e5e5e8;
+}
+
+.tab-wrap {
+  position: relative;
+}
+
+.tab {
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.92rem;
+  cursor: pointer;
+  color: #444;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tab.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+  font-weight: 600;
+}
+
+.tab-count {
+  font-size: 0.72rem;
+  background: #eee;
+  color: #666;
+  border-radius: 10px;
+  padding: 0 0.4rem;
+  min-width: 1.1rem;
+  text-align: center;
+}
+
+/* Hover dropdown of item titles */
+.tab-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
   margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e0e0e4;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
-.organizer-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.6rem 0.4rem;
-  border-bottom: 1px solid #eee;
+.tab-wrap:hover .tab-dropdown {
+  display: block;
 }
 
-.organizer-label {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
+.tab-dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0.45rem 0.8rem;
   cursor: pointer;
+  font-size: 0.88rem;
 }
 
-.organizer-text.done {
+.tab-dropdown-item:hover {
+  background: #f1f5ff;
+}
+
+.dd-title.done {
   text-decoration: line-through;
   color: #999;
 }
 
-.organizer-delete {
-  background: transparent;
-  border: none;
-  color: #999;
-  cursor: pointer;
-  font-size: 1rem;
+/* --- Two panes --- */
+.panes {
+  flex: 1;
+  display: flex;
+  min-height: 0;
 }
 
-.organizer-delete:hover {
-  color: #b00;
+.left-pane {
+  width: 40%;
+  max-width: 460px;
+  min-width: 280px;
+  border-right: 1px solid #e5e5e8;
+  overflow-y: auto;
+  background: #fff;
+}
+
+.right-pane {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem 1.5rem;
+}
+
+/* --- Item list --- */
+.item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid #f0f0f2;
+  cursor: pointer;
+}
+
+.item-row:hover {
+  background: #fafbff;
+}
+
+.item-row.selected {
+  background: #eef3ff;
+}
+
+.item-row input[type='checkbox'] {
+  margin-top: 0.2rem;
+}
+
+.item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.item-title {
+  font-size: 0.95rem;
+}
+
+.item-row.done .item-title {
+  text-decoration: line-through;
+  color: #999;
+}
+
+.item-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: #777;
+}
+
+.item-due.overdue {
+  color: #c0392b;
+  font-weight: 600;
+}
+
+.badge {
+  text-transform: capitalize;
+  border-radius: 10px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.72rem;
+  color: #fff;
+  background: #888;
+}
+
+.cat-errand { background: #2563eb; }
+.cat-project { background: #7c3aed; }
+.cat-health { background: #16a34a; }
+.cat-finance { background: #d97706; }
+.cat-home { background: #db2777; }
+
+/* --- Detail / form --- */
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.detail-header h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+}
+
+.field > span {
+  font-size: 0.8rem;
+  color: #555;
+  font-weight: 600;
+}
+
+.field input,
+.field select {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.field-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.field-row .field {
+  flex: 1;
+}
+
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.placeholder {
+  color: #999;
+  margin-top: 2rem;
+  text-align: center;
 }
 
 .error {
@@ -100,8 +322,57 @@ body {
 
 .empty {
   color: #888;
+  padding: 1rem;
 }
 
+/* --- Rich text editor --- */
+.rte {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.rte-toolbar {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.35rem;
+  border-bottom: 1px solid #eee;
+  background: #fafafa;
+}
+
+.rte-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 4px;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  min-width: 1.8rem;
+}
+
+.rte-btn:hover {
+  background: #eee;
+}
+
+.rte-btn.active {
+  background: #e0e8ff;
+  border-color: #b9ccff;
+}
+
+.rte-content {
+  padding: 0.5rem 0.7rem;
+}
+
+.rte-content .ProseMirror {
+  min-height: 140px;
+  outline: none;
+}
+
+.rte-content .ProseMirror p {
+  margin: 0 0 0.5rem;
+}
+
+/* --- Auth callback spinner --- */
 .spinner {
   width: 28px;
   height: 28px;

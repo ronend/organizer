@@ -4,7 +4,7 @@ organizerId. boto3 is provided by the Lambda runtime."""
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, TypedDict
+from typing import Any, Optional, TypedDict
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -16,19 +16,30 @@ _table = boto3.resource("dynamodb").Table(_TABLE_NAME)
 
 class Organizer(TypedDict):
     id: str
-    text: str
-    done: bool
-    createdAt: str
     userId: str
+    createdAt: str
+    category: str          # errand | project | health | finance | home
+    type: str              # simple | complex | repeat
+    title: str
+    description: str       # rich text (HTML)
+    dueDate: str           # YYYY-MM-DD
+    dueTime: str           # HH:MM
+    done: bool
 
 
 def _to_organizer(item: dict) -> Organizer:
+    # Defaults keep any legacy {text, done} items readable.
     return {
         "id": item["organizerId"],
-        "text": item["text"],
-        "done": item["done"],
-        "createdAt": item["createdAt"],
         "userId": item["userId"],
+        "createdAt": item.get("createdAt", ""),
+        "category": item.get("category", "errand"),
+        "type": item.get("type", "simple"),
+        "title": item.get("title", item.get("text", "(untitled)")),
+        "description": item.get("description", ""),
+        "dueDate": item.get("dueDate", ""),
+        "dueTime": item.get("dueTime", "09:00"),
+        "done": bool(item.get("done", False)),
     }
 
 
@@ -37,13 +48,18 @@ def list_organizers(user_id: str) -> list[Organizer]:
     return [_to_organizer(item) for item in resp.get("Items", [])]
 
 
-def create_organizer(user_id: str, text: str) -> Organizer:
+def create_organizer(user_id: str, data: dict[str, Any]) -> Organizer:
     item = {
         "userId": user_id,
         "organizerId": str(uuid.uuid4()),
-        "text": text,
-        "done": False,
         "createdAt": datetime.now(timezone.utc).isoformat(),
+        "category": data.get("category") or "errand",
+        "type": data.get("type") or "simple",
+        "title": data.get("title") or "",
+        "description": data.get("description") or "",
+        "dueDate": data.get("dueDate") or "",
+        "dueTime": data.get("dueTime") or "09:00",
+        "done": bool(data.get("done", False)),
     }
     _table.put_item(Item=item)
     return _to_organizer(item)
@@ -52,25 +68,26 @@ def create_organizer(user_id: str, text: str) -> Organizer:
 def update_organizer(
     user_id: str,
     organizer_id: str,
-    done: Optional[bool] = None,
-    text: Optional[str] = None,
+    updates: dict[str, Any],
 ) -> Optional[Organizer]:
+    # Build a SET expression with aliased names (covers reserved words like
+    # `type` and `done`) for whichever fields were provided.
     sets: list[str] = []
     names: dict[str, str] = {}
-    values: dict[str, object] = {}
-
-    if done is not None:
-        sets.append("#done = :done")
-        names["#done"] = "done"
-        values[":done"] = done
-    if text is not None:
-        sets.append("#text = :text")
-        names["#text"] = "text"
-        values[":text"] = text
+    values: dict[str, Any] = {}
+    for i, (field, value) in enumerate(updates.items()):
+        if value is None:
+            continue
+        nk, vk = f"#f{i}", f":v{i}"
+        names[nk] = field
+        values[vk] = value
+        sets.append(f"{nk} = {vk}")
 
     if not sets:
         # Nothing to update — return the current item if it exists.
-        return next((t for t in list_organizers(user_id) if t["id"] == organizer_id), None)
+        return next(
+            (o for o in list_organizers(user_id) if o["id"] == organizer_id), None
+        )
 
     try:
         resp = _table.update_item(

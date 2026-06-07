@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Organizer } from '../types/organizer';
+import type { NewOrganizer, Organizer } from '../types/organizer';
 import * as api from '../api/client';
 
 export function useOrganizers() {
@@ -14,7 +14,7 @@ export function useOrganizers() {
       const data = await api.getOrganizers();
       setOrganizers(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load organizers');
+      setError(e instanceof Error ? e.message : 'Failed to load items');
     } finally {
       setLoading(false);
     }
@@ -24,20 +24,33 @@ export function useOrganizers() {
     void refresh();
   }, [refresh]);
 
-  const addOrganizer = useCallback(async (text: string) => {
-    const created = await api.createOrganizer(text);
+  const addOrganizer = useCallback(async (data: NewOrganizer): Promise<Organizer> => {
+    const created = await api.createOrganizer(data);
     setOrganizers((prev) => [...prev, created]);
+    return created;
   }, []);
 
-  const toggleOrganizer = useCallback(async (id: string, done: boolean) => {
-    const updated = await api.updateOrganizer(id, done);
-    setOrganizers((prev) => prev.map((t) => (t.id === id ? updated : t)));
-  }, []);
+  const updateOrganizer = useCallback(
+    async (id: string, updates: Partial<NewOrganizer>): Promise<Organizer> => {
+      const updated = await api.updateOrganizer(id, updates);
+      setOrganizers((prev) => prev.map((o) => (o.id === id ? updated : o)));
+      return updated;
+    },
+    [],
+  );
 
   const removeOrganizer = useCallback(async (id: string) => {
     await api.deleteOrganizer(id);
-    setOrganizers((prev) => prev.filter((t) => t.id !== id));
+    setOrganizers((prev) => prev.filter((o) => o.id !== id));
   }, []);
 
-  return { organizers, loading, error, refresh, addOrganizer, toggleOrganizer, removeOrganizer };
+  return {
+    organizers,
+    loading,
+    error,
+    refresh,
+    addOrganizer,
+    updateOrganizer,
+    removeOrganizer,
+  };
 }

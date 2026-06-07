@@ -1,4 +1,4 @@
-import type { Organizer } from '../types/organizer';
+import type { NewOrganizer, Organizer } from '../types/organizer';
 
 const BASE_URL = '/api';
 
@@ -47,17 +47,20 @@ export function getOrganizers(): Promise<Organizer[]> {
   return request<Organizer[]>('/organizers');
 }
 
-export function createOrganizer(text: string): Promise<Organizer> {
+export function createOrganizer(data: NewOrganizer): Promise<Organizer> {
   return request<Organizer>('/organizers', {
     method: 'POST',
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(data),
   });
 }
 
-export function updateOrganizer(id: string, done: boolean): Promise<Organizer> {
+export function updateOrganizer(
+  id: string,
+  updates: Partial<NewOrganizer>,
+): Promise<Organizer> {
   return request<Organizer>(`/organizers/${id}`, {
     method: 'PUT',
-    body: JSON.stringify({ done }),
+    body: JSON.stringify(updates),
   });
 }
 

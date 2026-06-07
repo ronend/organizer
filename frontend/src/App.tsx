@@ -4,7 +4,7 @@ import { AuthProvider } from './auth/AuthContext';
 import { useAuth } from './auth/useAuth';
 import { configureApiClient } from './api/client';
 import AuthCallback from './auth/AuthCallback';
-import OrganizerList from './components/OrganizerList';
+import OrganizerApp from './components/OrganizerApp';
 import './index.css';
 
 /** Wires the non-React api client to the auth context, then guards routes. */
@@ -45,7 +45,7 @@ function AppRoutes() {
         path="/"
         element={
           <Protected>
-            <OrganizerList />
+            <OrganizerApp />
           </Protected>
         }
       />
