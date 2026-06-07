@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { useAuth } from './auth/useAuth';
@@ -9,11 +8,12 @@ import './index.css';
 
 /** Wires the non-React api client to the auth context, then guards routes. */
 function Protected({ children }: { children: React.ReactNode }) {
-  const { getAccessToken, login, logout } = useAuth();
+  const { getAccessToken, login } = useAuth();
 
-  useEffect(() => {
-    configureApiClient(getAccessToken, login);
-  }, [getAccessToken, login]);
+  // Wire the api client SYNCHRONOUSLY during render — not in an effect. Child
+  // effects (useOrganizers' first fetch) run before parent effects, so an
+  // effect here would leave the token getter unset on the initial request.
+  configureApiClient(getAccessToken, login);
 
   const token = getAccessToken();
   if (!token) {
@@ -22,8 +22,6 @@ function Protected({ children }: { children: React.ReactNode }) {
     return <p style={{ padding: '2rem' }}>Redirecting to sign in…</p>;
   }
 
-  // Reference logout so the binding is considered used by linters.
-  void logout;
   return <>{children}</>;
 }
 
