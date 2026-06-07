@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Organizer } from '../types/organizer';
 import { formatDue, isOverdue } from '../lib/dates';
 
@@ -11,30 +11,44 @@ interface Props {
 
 export default function ItemList({ items, selectedId, onSelect, onToggleDone }: Props) {
   const listRef = useRef<HTMLUListElement>(null);
+  // Which item ids have been revealed. Kept in React state (NOT via
+  // classList) so re-renders — e.g. selecting a row — don't wipe the class.
+  const [revealed, setRevealed] = useState<Set<string>>(new Set());
 
-  // Scroll-triggered reveal: rows fade/slide in as they enter the scroll area.
   useEffect(() => {
     const ul = listRef.current;
     if (!ul) return;
-    const rows = Array.from(ul.querySelectorAll<HTMLElement>('.item-row'));
 
     if (!('IntersectionObserver' in window)) {
-      rows.forEach((r) => r.classList.add('in'));
+      setRevealed((prev) => {
+        const next = new Set(prev);
+        items.forEach((i) => next.add(i.id));
+        return next;
+      });
       return;
     }
 
     const observer = new IntersectionObserver(
       (entries, obs) => {
+        const adds: string[] = [];
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            entry.target.classList.add('in');
+            const id = (entry.target as HTMLElement).dataset.id;
+            if (id) adds.push(id);
             obs.unobserve(entry.target);
           }
         });
+        if (adds.length) {
+          setRevealed((prev) => {
+            const next = new Set(prev);
+            adds.forEach((a) => next.add(a));
+            return next;
+          });
+        }
       },
       { root: ul.parentElement, rootMargin: '0px 0px -8% 0px', threshold: 0.05 },
     );
-    rows.forEach((r) => observer.observe(r));
+    ul.querySelectorAll<HTMLElement>('.item-row').forEach((r) => observer.observe(r));
     return () => observer.disconnect();
   }, [items]);
 
@@ -47,8 +61,10 @@ export default function ItemList({ items, selectedId, onSelect, onToggleDone }: 
       {items.map((item, i) => (
         <li
           key={item.id}
+          data-id={item.id}
           className={
             'item-row reveal ripple' +
+            (revealed.has(item.id) ? ' in' : '') +
             (item.id === selectedId ? ' selected' : '') +
             (item.done ? ' done' : '')
           }
