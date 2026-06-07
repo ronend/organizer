@@ -1,6 +1,7 @@
-// Default categories that always appear as tabs. Categories are free-form
-// labels, so an item may use any of these or a user-defined one.
-export const DEFAULT_CATEGORIES = ['errand', 'project', 'health', 'finance', 'home'] as const;
+// 'errand' is the one permanent category: it's always a tab (even with zero
+// items) and is the fallback when another label is deleted. Every other
+// category is a free-form label that exists only while an item uses it.
+export const DEFAULT_CATEGORY = 'errand';
 export type Category = string;
 
 export const ITEM_TYPES = ['simple', 'complex', 'repeat', 'project', 'routine'] as const;

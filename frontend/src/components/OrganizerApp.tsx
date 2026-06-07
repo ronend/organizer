@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useOrganizers } from '../hooks/useOrganizers';
 import { useAuth } from '../auth/useAuth';
 import type { Category, NewOrganizer } from '../types/organizer';
-import { DEFAULT_CATEGORIES } from '../types/organizer';
+import { DEFAULT_CATEGORY, labelize } from '../types/organizer';
 import { installRipple } from '../lib/ripple';
 import CategoryTabs, { itemsForTab, tabLabel, type Tab } from './CategoryTabs';
 import ItemList from './ItemList';
@@ -36,13 +36,14 @@ export default function OrganizerApp() {
     [sourceItems, activeTab],
   );
 
-  // Tabs = default categories + any custom labels in use (deduped, defaults first).
+  // Tabs = the permanent 'errand' category + any other labels currently in use
+  // (errand first, the rest sorted). Empty non-errand labels disappear.
   const categories = useMemo(() => {
-    const set = new Set<string>(DEFAULT_CATEGORIES);
+    const others = new Set<string>();
     organizers.forEach((o) => {
-      if (o.category) set.add(o.category);
+      if (o.category && o.category !== DEFAULT_CATEGORY) others.add(o.category);
     });
-    return Array.from(set);
+    return [DEFAULT_CATEGORY, ...Array.from(others).sort()];
   }, [organizers]);
 
   const selectedItem =
@@ -70,6 +71,19 @@ export default function OrganizerApp() {
 
   function handleToggleDone(id: string, done: boolean) {
     void updateOrganizer(id, { done });
+  }
+
+  async function handleDeleteCategory(cat: string) {
+    if (cat === DEFAULT_CATEGORY || cat === 'today') return;
+    const affected = organizers.filter((o) => o.category === cat);
+    const ok = window.confirm(
+      `Delete label "${labelize(cat)}"? Its ${affected.length} item(s) will move to Errand.`,
+    );
+    if (!ok) return;
+    await Promise.all(
+      affected.map((o) => updateOrganizer(o.id, { category: DEFAULT_CATEGORY })),
+    );
+    if (activeTab === cat) setActiveTab('today');
   }
 
   const defaultCategory: Category | undefined =
@@ -101,11 +115,13 @@ export default function OrganizerApp() {
             items={sourceItems}
             categories={categories}
             activeTab={activeTab}
+            permanent={DEFAULT_CATEGORY}
             onSelectTab={(tab) => setActiveTab(tab)}
             onSelectItem={(id, tab) => {
               setActiveTab(tab);
               setSelection({ mode: 'edit', id });
             }}
+            onDeleteCategory={handleDeleteCategory}
           />
         </div>
 

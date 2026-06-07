@@ -415,6 +415,23 @@ body {
   color: var(--muted);
 }
 
+.dd-empty {
+  padding: 0.5rem 0.7rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.tab-dropdown-item.delete {
+  color: var(--danger);
+  border-top: 1px solid var(--border);
+  margin-top: 0.2rem;
+  border-radius: 0 0 10px 10px;
+}
+
+.tab-dropdown-item.delete:hover {
+  background: rgba(255, 138, 138, 0.12);
+}
+
 /* ---------- Item list ---------- */
 .item-list {
   list-style: none;
