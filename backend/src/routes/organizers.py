@@ -13,14 +13,20 @@ from src.middleware.auth import require_auth
 
 router = APIRouter(prefix="/api/organizers")
 
-# Categories are free-form labels (no fixed set). Types are a fixed enum.
-TYPES = {"simple", "complex", "repeat", "project", "routine"}
+# Tags are free-form labels (no fixed set). Entry types are a fixed enum.
+TYPES = {"task", "trip", "recurring"}
 
 
-def normalize_category(raw: Optional[str]) -> Optional[str]:
-    if raw is None:
-        return None
-    return (raw.strip().lower() or "errand")[:40]
+def normalize_tags(raw: Optional[list[str]]) -> list[str]:
+    """Lowercase, trim, cap at 40 chars, drop empties, de-dupe (order-stable)."""
+    if not raw:
+        return []
+    out: list[str] = []
+    for t in raw:
+        norm = (t or "").strip().lower()[:40]
+        if norm and norm not in out:
+            out.append(norm)
+    return out
 
 
 class Recurrence(BaseModel):
@@ -30,22 +36,37 @@ class Recurrence(BaseModel):
     monthDay: Optional[int] = None
 
 
-class PrereqTemplate(BaseModel):
-    title: str
-    leadDays: int = 0
-    leadHours: int = 0
+class Reminder(BaseModel):
+    label: str
+    daysBefore: int = 0
+    note: str = ""
+
+
+class Contact(BaseModel):
+    name: str = ""
+    role: str = ""
+    phone: str = ""
+    email: str = ""
+
+
+class DependsOnRef(BaseModel):
+    entryId: str
+    daysBefore: int = 0
 
 
 class CreateItem(BaseModel):
     title: str
     dueDate: str
-    category: str = "errand"
-    type: str = "simple"
+    tags: list[str] = []
+    type: str = "task"
     description: str = ""
     dueTime: str = "09:00"
     done: bool = False
+    link: str = ""
+    contacts: list[Contact] = []
+    dependsOn: list[DependsOnRef] = []
     recurrence: Optional[Recurrence] = None
-    prerequisites: list[PrereqTemplate] = []
+    reminders: list[Reminder] = []
     parentId: Optional[str] = None
     isPrereq: bool = False
 
@@ -53,13 +74,16 @@ class CreateItem(BaseModel):
 class UpdateItem(BaseModel):
     title: Optional[str] = None
     dueDate: Optional[str] = None
-    category: Optional[str] = None
+    tags: Optional[list[str]] = None
     type: Optional[str] = None
     description: Optional[str] = None
     dueTime: Optional[str] = None
     done: Optional[bool] = None
+    link: Optional[str] = None
+    contacts: Optional[list[Contact]] = None
+    dependsOn: Optional[list[DependsOnRef]] = None
     recurrence: Optional[Recurrence] = None
-    prerequisites: Optional[list[PrereqTemplate]] = None
+    reminders: Optional[list[Reminder]] = None
     parentId: Optional[str] = None
     isPrereq: Optional[bool] = None
 
@@ -82,7 +106,7 @@ def create_item(body: CreateItem, user: dict = Depends(require_auth)):
         raise HTTPException(status_code=400, detail="dueDate is required")
     _validate_type(body.type)
     data = body.model_dump()
-    data["category"] = normalize_category(data.get("category"))
+    data["tags"] = normalize_tags(data.get("tags"))
     return dynamo.create_organizer(user["sub"], data)
 
 
@@ -92,8 +116,8 @@ def update_item(
 ):
     _validate_type(body.type)
     updates = body.model_dump(exclude_unset=True)
-    if "category" in updates:
-        updates["category"] = normalize_category(updates["category"])
+    if "tags" in updates:
+        updates["tags"] = normalize_tags(updates["tags"])
     updated = dynamo.update_organizer(user["sub"], organizer_id, updates)
     if updated is None:
         raise HTTPException(status_code=404, detail="Item not found")

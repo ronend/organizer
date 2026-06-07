@@ -38,6 +38,16 @@ export function isToday(item: Organizer): boolean {
   return item.dueDate === todayStr();
 }
 
+/** Urgency bucket for due-date styling: red overdue, amber today, muted future. */
+export function dueUrgency(
+  item: Organizer,
+): 'overdue' | 'today' | 'future' | 'none' {
+  if (!item.dueDate) return 'none';
+  if (isOverdue(item)) return 'overdue';
+  if (isToday(item)) return 'today';
+  return 'future';
+}
+
 /** Human-friendly due label, e.g. "Jun 7, 9:00 AM". */
 export function formatDue(item: Pick<Organizer, 'dueDate' | 'dueTime'>): string {
   if (!item.dueDate) return 'No due date';

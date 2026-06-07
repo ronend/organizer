@@ -1,36 +1,49 @@
-// 'errand' is the one permanent category: it's always a tab (even with zero
-// items) and is the fallback when another label is deleted. Every other
-// category is a free-form label that exists only while an item uses it.
-export const DEFAULT_CATEGORY = 'errand';
-export type Category = string;
+// The three purpose-built entry types. 'trip' is reserved for Phase 2 (not yet
+// creatable in the UI) but the type is defined so stored/legacy data is typed.
+export const ENTRY_TYPES = ['task', 'trip', 'recurring'] as const;
+export type EntryType = (typeof ENTRY_TYPES)[number];
 
-export const ITEM_TYPES = ['simple', 'complex', 'repeat', 'project', 'routine'] as const;
-export type ItemType = (typeof ITEM_TYPES)[number];
+// Tags are free-form, user-defined labels. An entry may carry several.
+export type Tag = string;
 
-// --- Routine support ---
+// --- Recurring support (recurrence engine shape is reused unchanged) ---
 export type RecurrenceFreq = 'day' | 'week' | 'month';
 
 export interface Recurrence {
   freq: RecurrenceFreq;
   interval: number; // every N freq units (>= 1)
-  weekdays?: number[]; // for 'week': 0=Sun .. 6=Sat
+  weekdays?: number[]; // for 'week': 0=Sun .. 6=Sat (not exposed in the new UI)
   monthDay?: number; // for 'month': 1..31
 }
 
-/** A prerequisite template on a routine: a sub-item due `leadDays`/`leadHours`
- * before each occurrence. */
-export interface Prerequisite {
-  title: string;
-  leadDays: number;
-  leadHours?: number;
+/** A reminder on a recurring entry: a sub-task auto-created `daysBefore` each
+ * occurrence. (Replaces the old "prerequisite".) */
+export interface Reminder {
+  label: string;
+  daysBefore: number;
+  note?: string;
 }
 
-/** Normalize a free-form category label (lowercase, trimmed, capped). */
-export function normalizeCategory(raw: string): string {
+/** A contact attached to a task. */
+export interface Contact {
+  name: string;
+  role: string;
+  phone: string;
+  email: string;
+}
+
+/** A "depends on" link from a task to another entry. */
+export interface DependsOnRef {
+  entryId: string;
+  daysBefore: number;
+}
+
+/** Normalize a free-form tag label (lowercase, trimmed, capped). */
+export function normalizeTag(raw: string): string {
   return raw.trim().toLowerCase().slice(0, 40);
 }
 
-/** Title-case a category/tab label for display. */
+/** Title-case a tag/tab label for display. */
 export function labelize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -39,20 +52,24 @@ export interface Organizer {
   id: string;
   userId: string;
   createdAt: string;
-  category: Category;
-  type: ItemType;
+  type: EntryType;
   title: string;
   description: string; // rich text (HTML)
+  tags: Tag[];
   dueDate: string; // YYYY-MM-DD
   dueTime: string; // HH:MM
   done: boolean;
-  // Routine fields (only on type === 'routine'):
+  // Task fields:
+  link?: string;
+  contacts?: Contact[];
+  dependsOn?: DependsOnRef[];
+  // Recurring fields (only on type === 'recurring'):
   recurrence?: Recurrence | null;
-  prerequisites?: Prerequisite[];
-  // Prerequisite-item fields (a sub-item spawned from a routine):
+  reminders?: Reminder[];
+  // Spawned-reminder fields (a sub-task auto-created from a recurring entry):
   parentId?: string | null;
   isPrereq?: boolean;
 }
 
-/** Fields the client sends when creating an item. */
+/** Fields the client sends when creating an entry. */
 export type NewOrganizer = Omit<Organizer, 'id' | 'userId' | 'createdAt'>;

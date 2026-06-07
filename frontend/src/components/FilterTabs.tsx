@@ -2,49 +2,55 @@ import type { Organizer } from '../types/organizer';
 import { labelize } from '../types/organizer';
 import { compareByDue, isOverdue, isToday } from '../lib/dates';
 
-export type Tab = string; // 'today' or a category label
+// Built-in tabs come first; any user tag becomes an additional cross-type tab.
+export const SPECIAL_TABS = ['today', 'tasks', 'recurring'] as const;
+export type Tab = string; // 'today' | 'tasks' | 'recurring' | a tag label
 
-/** Items belonging to a tab. */
+const SPECIAL_LABELS: Record<string, string> = {
+  today: 'Today',
+  tasks: 'Tasks',
+  recurring: 'Recurring',
+};
+
+/** Entries belonging to a tab. */
 export function itemsForTab(items: Organizer[], tab: Tab): Organizer[] {
-  const filtered =
-    tab === 'today'
-      ? items.filter((i) => isToday(i) || isOverdue(i))
-      : items.filter((i) => i.category === tab);
+  let filtered: Organizer[];
+  if (tab === 'today') filtered = items.filter((i) => isToday(i) || isOverdue(i));
+  else if (tab === 'tasks') filtered = items.filter((i) => i.type === 'task');
+  else if (tab === 'recurring') filtered = items.filter((i) => i.type === 'recurring');
+  else filtered = items.filter((i) => i.tags?.includes(tab));
   return [...filtered].sort(compareByDue);
 }
 
 export function tabLabel(tab: Tab): string {
-  return tab === 'today' ? 'Today' : labelize(tab);
+  return SPECIAL_LABELS[tab] ?? labelize(tab);
 }
 
 interface Props {
   items: Organizer[];
-  categories: string[]; // ordered category labels (without 'today')
+  tags: string[]; // user tags currently in use (sorted)
   activeTab: Tab;
-  permanent: string; // category that can't be deleted (always present)
   onSelectTab: (tab: Tab) => void;
   onSelectItem: (id: string, tab: Tab) => void;
-  onDeleteCategory: (tab: Tab) => void;
+  onDeleteTag: (tag: string) => void;
 }
 
-export default function CategoryTabs({
+export default function FilterTabs({
   items,
-  categories,
+  tags,
   activeTab,
-  permanent,
   onSelectTab,
   onSelectItem,
-  onDeleteCategory,
+  onDeleteTag,
 }: Props) {
-  const tabs: Tab[] = ['today', ...categories];
+  const tabs: Tab[] = [...SPECIAL_TABS, ...tags];
   return (
     <nav className="tabs">
       {tabs.map((tab) => {
         const tabItems = itemsForTab(items, tab);
-        const deletable = tab !== 'today' && tab !== permanent;
-        // category tabs always get a dropdown (so Delete is reachable even when
-        // the visible item count is 0); 'today' only when it has items.
-        const showDropdown = tabItems.length > 0 || deletable;
+        const isTag = !SPECIAL_TABS.includes(tab as (typeof SPECIAL_TABS)[number]);
+        // Tag tabs always get a dropdown (so Delete is reachable even at 0).
+        const showDropdown = tabItems.length > 0 || isTag;
         return (
           <div key={tab} className="tab-wrap">
             <button
@@ -68,16 +74,14 @@ export default function CategoryTabs({
                     </button>
                   </li>
                 ))}
-                {tabItems.length === 0 && (
-                  <li className="dd-empty">No items</li>
-                )}
-                {deletable && (
+                {tabItems.length === 0 && <li className="dd-empty">No entries</li>}
+                {isTag && (
                   <li>
                     <button
                       className="tab-dropdown-item delete"
-                      onClick={() => onDeleteCategory(tab)}
+                      onClick={() => onDeleteTag(tab)}
                     >
-                      🗑 Delete label
+                      🗑 Delete tag
                     </button>
                   </li>
                 )}

@@ -71,9 +71,9 @@ def next_occurrence(prev: datetime, rec: dict[str, Any], anchor: datetime) -> da
     return _add_months(prev, interval)
 
 
-def prereq_due(occurrence: datetime, prereq: dict[str, Any]) -> datetime:
-    d = occurrence - timedelta(days=int(prereq.get("leadDays", 0) or 0))
-    lead_hours = int(prereq.get("leadHours", 0) or 0)
-    if lead_hours:
-        d = d - timedelta(hours=lead_hours)
-    return d
+def prereq_due(occurrence: datetime, reminder: dict[str, Any]) -> datetime:
+    # `daysBefore` is the new field; `leadDays` is the legacy fallback.
+    days_before = reminder.get("daysBefore")
+    if days_before is None:
+        days_before = reminder.get("leadDays", 0)
+    return occurrence - timedelta(days=int(days_before or 0))

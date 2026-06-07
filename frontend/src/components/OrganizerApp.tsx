@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useOrganizers } from '../hooks/useOrganizers';
 import { useAuth } from '../auth/useAuth';
-import type { Category, NewOrganizer, Organizer } from '../types/organizer';
-import { DEFAULT_CATEGORY, labelize } from '../types/organizer';
+import type { EntryType, NewOrganizer, Organizer } from '../types/organizer';
+import { labelize } from '../types/organizer';
 import { installRipple } from '../lib/ripple';
 import { useTheme } from '../lib/theme';
-import { parseDue, prereqDueStrings } from '../lib/recurrence';
-import CategoryTabs, { itemsForTab, tabLabel, type Tab } from './CategoryTabs';
-import ItemList from './ItemList';
-import ItemDetail from './ItemDetail';
+import { parseDue, reminderDueStrings } from '../lib/recurrence';
+import FilterTabs, { itemsForTab, tabLabel, SPECIAL_TABS, type Tab } from './FilterTabs';
+import EntryList from './EntryList';
+import EntryDetail from './EntryDetail';
+import EntryTypePicker from './EntryTypePicker';
 
 type Selection =
   | { mode: 'none' }
-  | { mode: 'add' }
+  | { mode: 'pick' }
+  | { mode: 'add'; type: EntryType }
   | { mode: 'edit'; id: string };
 
 export default function OrganizerApp() {
@@ -34,8 +36,8 @@ export default function OrganizerApp() {
 
   useEffect(() => installRipple(), []);
 
-  // Apply the show/hide-done switch once, up front, so tab counts, the hover
-  // dropdowns, and the list all reflect it consistently.
+  // Apply the show/hide-completed switch once, up front, so tab counts, the
+  // hover dropdowns, and the list all reflect it consistently.
   const sourceItems = useMemo(
     () => (showDone ? organizers : organizers.filter((i) => !i.done)),
     [organizers, showDone],
@@ -46,14 +48,11 @@ export default function OrganizerApp() {
     [sourceItems, activeTab],
   );
 
-  // Tabs = the permanent 'errand' category + any other labels currently in use
-  // (errand first, the rest sorted). Empty non-errand labels disappear.
-  const categories = useMemo(() => {
-    const others = new Set<string>();
-    organizers.forEach((o) => {
-      if (o.category && o.category !== DEFAULT_CATEGORY) others.add(o.category);
-    });
-    return [DEFAULT_CATEGORY, ...Array.from(others).sort()];
+  // User tags = every distinct tag currently in use (sorted), shown as tabs.
+  const tags = useMemo(() => {
+    const set = new Set<string>();
+    organizers.forEach((o) => o.tags?.forEach((t) => set.add(t)));
+    return Array.from(set).sort();
   }, [organizers]);
 
   const selectedItem =
@@ -61,24 +60,25 @@ export default function OrganizerApp() {
       ? organizers.find((o) => o.id === selection.id) ?? null
       : null;
 
-  // Create one list item per prerequisite of a routine occurrence.
-  async function createPrereqs(routine: Organizer) {
-    const prereqs = routine.prerequisites ?? [];
-    if (!prereqs.length) return;
-    const occ = parseDue(routine.dueDate, routine.dueTime);
-    for (const p of prereqs) {
-      const { dueDate, dueTime } = prereqDueStrings(occ, p);
+  // Create one reminder sub-task per reminder of a recurring entry's current
+  // occurrence (subsequent occurrences are spawned server-side on completion).
+  async function createReminders(entry: Organizer) {
+    const reminders = entry.reminders ?? [];
+    if (!reminders.length) return;
+    const occ = parseDue(entry.dueDate, entry.dueTime);
+    for (const r of reminders) {
+      const { dueDate, dueTime } = reminderDueStrings(occ, r);
       await addOrganizer({
-        title: p.title,
-        category: routine.category,
-        type: 'simple',
-        description: '',
+        type: 'task',
+        title: r.label,
+        description: r.note ?? '',
+        tags: entry.tags,
         dueDate,
         dueTime,
         done: false,
         recurrence: null,
-        prerequisites: [],
-        parentId: routine.id,
+        reminders: [],
+        parentId: entry.id,
         isPrereq: true,
       });
     }
@@ -87,20 +87,19 @@ export default function OrganizerApp() {
   async function handleSave(data: NewOrganizer) {
     if (selection.mode === 'edit') {
       const updated = await updateOrganizer(selection.id, data);
-      if (updated.type === 'routine') {
-        // Reconcile prereqs: drop incomplete existing ones, recreate from templates.
+      if (updated.type === 'recurring') {
+        // Reconcile reminders: drop incomplete existing ones, recreate from templates.
         const stale = organizers.filter(
           (o) => o.parentId === updated.id && o.isPrereq && !o.done,
         );
         await Promise.all(stale.map((o) => removeOrganizer(o.id)));
-        await createPrereqs(updated);
+        await createReminders(updated);
       }
     } else {
       const created = await addOrganizer(data);
-      if (created.type === 'routine') await createPrereqs(created);
-      // Show the new item: jump to its category tab (a new item due tomorrow
-      // wouldn't appear under "Today"), and select it.
-      setActiveTab(created.category);
+      if (created.type === 'recurring') await createReminders(created);
+      // Show the new entry: jump to a tab where it appears, then select it.
+      setActiveTab(created.type === 'recurring' ? 'recurring' : 'tasks');
       setSelection({ mode: 'edit', id: created.id });
     }
   }
@@ -109,8 +108,8 @@ export default function OrganizerApp() {
     if (selection.mode !== 'edit') return;
     const id = selection.id;
     const item = organizers.find((o) => o.id === id);
-    if (item?.type === 'routine') {
-      // Cascade-delete this routine's prerequisite items.
+    if (item?.type === 'recurring') {
+      // Cascade-delete this recurring entry's reminder sub-tasks.
       const children = organizers.filter((o) => o.parentId === id);
       await Promise.all(children.map((c) => removeOrganizer(c.id)));
     }
@@ -120,33 +119,41 @@ export default function OrganizerApp() {
 
   async function handleToggleDone(id: string, done: boolean) {
     const item = organizers.find((o) => o.id === id);
-    // Completing a routine occurrence is atomic on the backend: it marks this
-    // one done and spawns the next occurrence (+ prereqs) in one transaction.
-    if (done && item && item.type === 'routine' && item.recurrence) {
+    // Completing a recurring occurrence is atomic on the backend: it marks this
+    // one done and spawns the next occurrence (+ reminders) in one transaction.
+    if (done && item && item.type === 'recurring' && item.recurrence) {
       await completeRoutine(id);
     } else {
       void updateOrganizer(id, { done });
     }
   }
 
-  async function handleDeleteCategory(cat: string) {
-    if (cat === DEFAULT_CATEGORY || cat === 'today') return;
-    const affected = organizers.filter((o) => o.category === cat);
+  async function handleDeleteTag(tag: string) {
+    const affected = organizers.filter((o) => o.tags?.includes(tag));
     const ok = window.confirm(
-      `Delete label "${labelize(cat)}"? Its ${affected.length} item(s) will move to Errand.`,
+      `Delete tag "${labelize(tag)}"? It will be removed from ${affected.length} entr${
+        affected.length === 1 ? 'y' : 'ies'
+      }.`,
     );
     if (!ok) return;
     await Promise.all(
-      affected.map((o) => updateOrganizer(o.id, { category: DEFAULT_CATEGORY })),
+      affected.map((o) =>
+        updateOrganizer(o.id, { tags: (o.tags ?? []).filter((t) => t !== tag) }),
+      ),
     );
-    if (activeTab === cat) setActiveTab('today');
+    if (activeTab === tag) setActiveTab('today');
   }
 
-  const defaultCategory: Category | undefined =
-    activeTab === 'today' ? undefined : activeTab;
+  // When adding from a tag tab, pre-seed that tag on the new entry.
+  const defaultTags =
+    !SPECIAL_TABS.includes(activeTab as (typeof SPECIAL_TABS)[number]) ? [activeTab] : [];
 
   const detailKey =
-    selection.mode === 'edit' ? `edit-${selection.id}` : selection.mode;
+    selection.mode === 'edit'
+      ? `edit-${selection.id}`
+      : selection.mode === 'add'
+        ? `add-${selection.type}`
+        : selection.mode;
 
   return (
     <div className="app">
@@ -156,8 +163,11 @@ export default function OrganizerApp() {
           <h1 className="display">Organizer</h1>
         </div>
         <div className="header-actions">
-          <button className="btn btn-primary ripple" onClick={() => setSelection({ mode: 'add' })}>
-            + Add item
+          <button
+            className="btn btn-primary ripple"
+            onClick={() => setSelection({ mode: 'pick' })}
+          >
+            + New Entry
           </button>
           <button
             className="btn btn-ghost ripple icon-btn"
@@ -175,17 +185,16 @@ export default function OrganizerApp() {
 
       <div className="bento">
         <div className="card card-tabs">
-          <CategoryTabs
+          <FilterTabs
             items={sourceItems}
-            categories={categories}
+            tags={tags}
             activeTab={activeTab}
-            permanent={DEFAULT_CATEGORY}
             onSelectTab={(tab) => setActiveTab(tab)}
             onSelectItem={(id, tab) => {
               setActiveTab(tab);
               setSelection({ mode: 'edit', id });
             }}
-            onDeleteCategory={handleDeleteCategory}
+            onDeleteTag={handleDeleteTag}
           />
         </div>
 
@@ -193,7 +202,7 @@ export default function OrganizerApp() {
           <div className="card-head">
             <h2 className="display">{tabLabel(activeTab)}</h2>
             <div className="card-head-right">
-              <label className="switch" title="Show or hide completed items">
+              <label className="switch" title="Show or hide completed entries">
                 <input
                   type="checkbox"
                   checked={showDone}
@@ -202,7 +211,7 @@ export default function OrganizerApp() {
                 <span className="switch-track">
                   <span className="switch-thumb" />
                 </span>
-                <span className="switch-label">Show done</span>
+                <span className="switch-label">Show completed</span>
               </label>
               <span className="card-head-count">{visibleItems.length}</span>
             </div>
@@ -211,7 +220,7 @@ export default function OrganizerApp() {
             {loading && <p className="muted">Loading…</p>}
             {error && <p className="error">{error}</p>}
             {!loading && !error && (
-              <ItemList
+              <EntryList
                 items={visibleItems}
                 selectedId={selection.mode === 'edit' ? selection.id : null}
                 onSelect={(id) => setSelection({ mode: 'edit', id })}
@@ -226,14 +235,21 @@ export default function OrganizerApp() {
             {selection.mode === 'none' ? (
               <div className="placeholder">
                 <p className="display">Nothing selected</p>
-                <p className="muted">Pick an item on the left, or add a new one.</p>
+                <p className="muted">Pick an entry on the left, or add a new one.</p>
               </div>
+            ) : selection.mode === 'pick' ? (
+              <EntryTypePicker
+                onPick={(type) => setSelection({ mode: 'add', type })}
+                onClose={() => setSelection({ mode: 'none' })}
+              />
             ) : (
-              <ItemDetail
+              <EntryDetail
                 key={detailKey}
                 item={selectedItem}
-                categories={categories}
-                defaultCategory={defaultCategory}
+                addType={selection.mode === 'add' ? selection.type : 'task'}
+                knownTags={tags}
+                allEntries={organizers}
+                defaultTags={defaultTags}
                 onSave={handleSave}
                 onDelete={selection.mode === 'edit' ? handleDelete : undefined}
                 onClose={() => setSelection({ mode: 'none' })}

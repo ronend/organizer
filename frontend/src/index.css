@@ -565,6 +565,11 @@ body {
   font-weight: 600;
 }
 
+.item-due.today {
+  color: #f5a623;
+  font-weight: 600;
+}
+
 .badge {
   text-transform: capitalize;
   border-radius: 999px;
@@ -587,11 +592,24 @@ body {
   border: 1px dashed var(--border-strong);
 }
 
-.cat-errand { background: linear-gradient(135deg, #7aa2ff, #6d8bff); }
-.cat-project { background: linear-gradient(135deg, #c79bff, #a06bff); }
-.cat-health { background: linear-gradient(135deg, #74e0a8, #3ec98a); }
-.cat-finance { background: linear-gradient(135deg, #ffcf7a, #f5a623); }
-.cat-home { background: linear-gradient(135deg, #ff9ec4, #f364a2); }
+/* Tag pill on a list card. */
+.badge.tag {
+  background: linear-gradient(135deg, #7aa2ff, #6d8bff);
+}
+
+/* Neutral chip badges (link / contacts / reminder count). */
+.badge.link,
+.badge.contact,
+.badge.reminder {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  text-transform: none;
+}
+
+.entry-icon {
+  margin-right: 0.35rem;
+}
 
 /* ---------- Detail / form ---------- */
 .detail-header {
@@ -1032,4 +1050,280 @@ body {
     opacity: 1 !important;
     transform: none !important;
   }
+}
+
+/* ====================== Redesign: entries ====================== */
+
+/* Type emoji in the detail header + section titles */
+.type-emoji {
+  margin-right: 0.25rem;
+}
+
+.section-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 1.4rem 0 0.7rem;
+}
+
+/* ---- Entry type picker (3 cards) ---- */
+.type-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.type-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  text-align: left;
+  padding: 1.1rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.18s ease, box-shadow 0.2s ease, transform 0.12s ease;
+}
+
+.type-card:hover:not(.disabled) {
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--accent), 0 8px 22px rgba(120, 110, 255, 0.25);
+  transform: translateY(-2px);
+}
+
+.type-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.type-card-icon {
+  font-size: 1.8rem;
+}
+
+.type-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.type-card-blurb {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.type-card-soon {
+  margin-top: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+
+/* ---- Tag editor (pills + inline create) ---- */
+.tag-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.tag-pill {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-transform: capitalize;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.83rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.tag-pill:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.tag-pill.active {
+  color: #0c0c12;
+  background: var(--grad);
+  border-color: transparent;
+}
+
+.tag-pill .tag-x {
+  opacity: 0.7;
+}
+
+.tag-pill.add {
+  border-style: dashed;
+  background: transparent;
+}
+
+.tag-input {
+  border: 1px solid rgba(140, 123, 255, 0.6);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.83rem;
+  font-family: inherit;
+  min-width: 7rem;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(120, 110, 255, 0.18);
+}
+
+/* ---- Invalid required field ---- */
+.title-input.invalid,
+.field input.invalid {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(255, 90, 90, 0.18);
+}
+
+/* ---- Link row ---- */
+.link-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.link-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.link-row a {
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+/* ---- Collapsible section toggles (contacts / depends on) ---- */
+.section-toggle {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  padding: 0.2rem 0;
+}
+
+.section-toggle:hover {
+  color: var(--accent);
+}
+
+/* ---- Contacts ---- */
+.contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+.contact-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1.2fr auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.contact-row input {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.88rem;
+  min-width: 0;
+}
+
+.depends {
+  margin-top: 0.6rem;
+}
+
+/* ---- Reminders ---- */
+.reminder-block {
+  margin-bottom: 0.9rem;
+}
+
+.reminder-note {
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.88rem;
+}
+
+/* ---- Upcoming timeline ---- */
+.upcoming {
+  margin-top: 0.4rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.upcoming-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.upcoming-date {
+  font-weight: 600;
+}
+
+.upcoming-reminders {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding-left: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.82rem;
+}
+
+/* ---- Sticky save bar + unsaved dot ---- */
+.detail-actions.sticky {
+  position: sticky;
+  bottom: 0;
+  margin-top: 1rem;
+  padding: 0.8rem 0 0.2rem;
+  background: linear-gradient(to top, var(--surface) 70%, transparent);
+}
+
+.unsaved-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
 }

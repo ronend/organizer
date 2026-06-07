@@ -30,34 +30,80 @@ class Organizer(TypedDict, total=False):
     id: str
     userId: str
     createdAt: str
-    category: str
-    type: str              # simple | complex | repeat | project | routine
+    tags: list           # free-form labels (replaces old single `category`)
+    type: str            # task | trip | recurring
     title: str
-    description: str       # rich text (HTML)
-    dueDate: str           # YYYY-MM-DD
-    dueTime: str           # HH:MM
+    description: str     # rich text (HTML)
+    dueDate: str         # YYYY-MM-DD
+    dueTime: str         # HH:MM
     done: bool
-    recurrence: Any        # routine cadence (or None)
-    prerequisites: list    # routine prerequisite templates
-    parentId: Any          # prereq -> parent routine id (or None)
-    isPrereq: bool
+    link: str            # task: optional URL
+    contacts: list       # task: [{name, role, phone, email}]
+    dependsOn: list      # task: [{entryId, daysBefore}]
+    recurrence: Any      # recurring cadence (or None)
+    reminders: list      # recurring: auto-spawn reminder templates
+    parentId: Any        # spawned reminder -> parent recurring id (or None)
+    isPrereq: bool       # spawned reminder sub-task flag
+
+
+# Legacy entry types -> new types (lazy migration on read, no DB write).
+_TYPE_MIGRATION = {
+    "simple": "task",
+    "complex": "task",
+    "project": "task",
+    "repeat": "recurring",
+    "routine": "recurring",
+}
+
+
+def _migrate_tags(item: dict) -> list:
+    """Prefer stored `tags`; else derive from the legacy single `category`
+    (the old default 'errand' becomes no tag)."""
+    stored = _plain(item.get("tags"))
+    if stored:
+        return stored
+    cat = item.get("category")
+    if cat and cat != "errand":
+        return [cat]
+    return []
+
+
+def _migrate_reminders(item: dict) -> list:
+    """Prefer stored `reminders`; else map legacy `prerequisites`
+    (title -> label, leadDays -> daysBefore)."""
+    stored = _plain(item.get("reminders"))
+    if stored:
+        return stored
+    legacy = _plain(item.get("prerequisites")) or []
+    return [
+        {
+            "label": p.get("title", ""),
+            "daysBefore": int(p.get("leadDays", 0) or 0),
+            "note": p.get("note", ""),
+        }
+        for p in legacy
+    ]
 
 
 def _to_organizer(item: dict) -> Organizer:
     # Defaults keep any legacy {text, done} items readable.
+    raw_type = item.get("type", "task")
     return {
         "id": item["organizerId"],
         "userId": item["userId"],
         "createdAt": item.get("createdAt", ""),
-        "category": item.get("category", "errand"),
-        "type": item.get("type", "simple"),
+        "tags": _migrate_tags(item),
+        "type": _TYPE_MIGRATION.get(raw_type, raw_type),
         "title": item.get("title", item.get("text", "(untitled)")),
         "description": item.get("description", ""),
         "dueDate": item.get("dueDate", ""),
         "dueTime": item.get("dueTime", "09:00"),
         "done": bool(item.get("done", False)),
+        "link": item.get("link", ""),
+        "contacts": _plain(item.get("contacts", [])) or [],
+        "dependsOn": _plain(item.get("dependsOn", [])) or [],
         "recurrence": _plain(item.get("recurrence")) or None,
-        "prerequisites": _plain(item.get("prerequisites", [])) or [],
+        "reminders": _migrate_reminders(item),
         "parentId": item.get("parentId") or None,
         "isPrereq": bool(item.get("isPrereq", False)),
     }
@@ -73,14 +119,17 @@ def create_organizer(user_id: str, data: dict[str, Any]) -> Organizer:
         "userId": user_id,
         "organizerId": str(uuid.uuid4()),
         "createdAt": datetime.now(timezone.utc).isoformat(),
-        "category": data.get("category") or "errand",
-        "type": data.get("type") or "simple",
+        "tags": data.get("tags") or [],
+        "type": data.get("type") or "task",
         "title": data.get("title") or "",
         "description": data.get("description") or "",
         "dueDate": data.get("dueDate") or "",
         "dueTime": data.get("dueTime") or "09:00",
         "done": bool(data.get("done", False)),
-        "prerequisites": data.get("prerequisites") or [],
+        "link": data.get("link") or "",
+        "contacts": data.get("contacts") or [],
+        "dependsOn": data.get("dependsOn") or [],
+        "reminders": data.get("reminders") or [],
         "isPrereq": bool(data.get("isPrereq", False)),
     }
     if data.get("recurrence"):
@@ -183,45 +232,47 @@ def complete_routine(user_id: str, organizer_id: str) -> Optional[list[Organizer
     if recurrence:
         prev = _occurrence.parse_due(raw.get("dueDate", ""), raw.get("dueTime", "09:00"))
         nxt = _occurrence.next_occurrence(prev, recurrence, prev)
+        tags = _migrate_tags(raw)
+        reminders = _migrate_reminders(raw)
         next_id = str(uuid.uuid4())
         next_item = {
             "userId": user_id,
             "organizerId": next_id,
             "createdAt": datetime.now(timezone.utc).isoformat(),
-            "category": raw.get("category", "errand"),
-            "type": "routine",
+            "tags": tags,
+            "type": "recurring",
             "title": raw.get("title", ""),
             "description": raw.get("description", ""),
             "dueDate": _occurrence.to_date_str(nxt),
             "dueTime": _occurrence.to_time_str(nxt),
             "done": False,
             "recurrence": recurrence,
-            "prerequisites": _plain(raw.get("prerequisites", [])) or [],
+            "reminders": reminders,
             "isPrereq": False,
         }
         transact.append({"Put": {"TableName": _TABLE_NAME, "Item": _marshal(next_item)}})
         created.append(next_item)
 
-        # none / one / many prerequisites
-        for p in next_item["prerequisites"]:
-            due = _occurrence.prereq_due(nxt, p)
-            prereq_item = {
+        # none / one / many reminders -> auto-created sub-tasks
+        for r in reminders:
+            due = _occurrence.prereq_due(nxt, r)
+            reminder_item = {
                 "userId": user_id,
                 "organizerId": str(uuid.uuid4()),
                 "createdAt": datetime.now(timezone.utc).isoformat(),
-                "category": next_item["category"],
-                "type": "simple",
-                "title": p.get("title", ""),
-                "description": "",
+                "tags": tags,
+                "type": "task",
+                "title": r.get("label", ""),
+                "description": r.get("note", ""),
                 "dueDate": _occurrence.to_date_str(due),
                 "dueTime": _occurrence.to_time_str(due),
                 "done": False,
-                "prerequisites": [],
+                "reminders": [],
                 "parentId": next_id,
                 "isPrereq": True,
             }
-            transact.append({"Put": {"TableName": _TABLE_NAME, "Item": _marshal(prereq_item)}})
-            created.append(prereq_item)
+            transact.append({"Put": {"TableName": _TABLE_NAME, "Item": _marshal(reminder_item)}})
+            created.append(reminder_item)
 
     client.transact_write_items(TransactItems=transact)
     return [_to_organizer(i) for i in created]

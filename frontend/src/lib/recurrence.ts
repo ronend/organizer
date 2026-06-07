@@ -1,4 +1,4 @@
-import type { Prerequisite, Recurrence } from '../types/organizer';
+import type { Reminder, Recurrence } from '../types/organizer';
 import { toDateStr } from './dates';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -68,19 +68,18 @@ export function nextOccurrence(prev: Date, r: Recurrence, anchor: Date): Date {
   return d;
 }
 
-/** Due date/time of a prerequisite for an occurrence at `occurrence`. */
-export function prereqDue(occurrence: Date, p: Prerequisite): Date {
+/** Due date/time of a reminder for an occurrence at `occurrence`. */
+export function reminderDue(occurrence: Date, r: Reminder): Date {
   const d = new Date(occurrence);
-  d.setDate(d.getDate() - (p.leadDays || 0));
-  if (p.leadHours) d.setHours(d.getHours() - p.leadHours);
+  d.setDate(d.getDate() - (r.daysBefore || 0));
   return d;
 }
 
-export function prereqDueStrings(occurrence: Date, p: Prerequisite): {
+export function reminderDueStrings(occurrence: Date, r: Reminder): {
   dueDate: string;
   dueTime: string;
 } {
-  const d = prereqDue(occurrence, p);
+  const d = reminderDue(occurrence, r);
   return { dueDate: toDateStr(d), dueTime: toTimeStr(d) };
 }
 
