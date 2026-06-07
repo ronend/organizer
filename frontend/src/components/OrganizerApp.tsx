@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useOrganizers } from '../hooks/useOrganizers';
 import { useAuth } from '../auth/useAuth';
 import type { Category, NewOrganizer } from '../types/organizer';
+import { installRipple } from '../lib/ripple';
 import CategoryTabs, { itemsForTab, type Tab } from './CategoryTabs';
 import ItemList from './ItemList';
 import ItemDetail from './ItemDetail';
@@ -11,6 +12,15 @@ type Selection =
   | { mode: 'add' }
   | { mode: 'edit'; id: string };
 
+const TAB_LABELS: Record<Tab, string> = {
+  today: 'Today',
+  errand: 'Errand',
+  project: 'Project',
+  health: 'Health',
+  finance: 'Finance',
+  home: 'Home',
+};
+
 export default function OrganizerApp() {
   const { organizers, loading, error, addOrganizer, updateOrganizer, removeOrganizer } =
     useOrganizers();
@@ -18,6 +28,8 @@ export default function OrganizerApp() {
 
   const [activeTab, setActiveTab] = useState<Tab>('today');
   const [selection, setSelection] = useState<Selection>({ mode: 'none' });
+
+  useEffect(() => installRipple(), []);
 
   const visibleItems = useMemo(
     () => itemsForTab(organizers, activeTab),
@@ -48,69 +60,81 @@ export default function OrganizerApp() {
     void updateOrganizer(id, { done });
   }
 
-  // Default category for a new item depends on which tab is active.
   const defaultCategory: Category | undefined =
     activeTab === 'today' ? undefined : activeTab;
 
-  // Remount the detail pane whenever the target changes so its form re-seeds.
   const detailKey =
     selection.mode === 'edit' ? `edit-${selection.id}` : selection.mode;
 
   return (
     <div className="app">
-      <header className="app-header">
-        <h1>Organizer</h1>
+      <header className="topbar">
+        <div className="brand">
+          <span className="brand-dot" />
+          <h1 className="display">Organizer</h1>
+        </div>
         <div className="header-actions">
-          <button className="primary" onClick={() => setSelection({ mode: 'add' })}>
+          <button className="btn btn-primary ripple" onClick={() => setSelection({ mode: 'add' })}>
             + Add item
           </button>
-          <button className="link" onClick={logout}>
+          <button className="btn btn-ghost ripple" onClick={logout}>
             Log out
           </button>
         </div>
       </header>
 
-      <CategoryTabs
-        items={organizers}
-        activeTab={activeTab}
-        onSelectTab={(tab) => setActiveTab(tab)}
-        onSelectItem={(id, tab) => {
-          setActiveTab(tab);
-          setSelection({ mode: 'edit', id });
-        }}
-      />
+      <div className="bento">
+        <div className="card card-tabs">
+          <CategoryTabs
+            items={organizers}
+            activeTab={activeTab}
+            onSelectTab={(tab) => setActiveTab(tab)}
+            onSelectItem={(id, tab) => {
+              setActiveTab(tab);
+              setSelection({ mode: 'edit', id });
+            }}
+          />
+        </div>
 
-      <main className="panes">
-        <section className="left-pane">
-          {loading && <p>Loading…</p>}
-          {error && <p className="error">{error}</p>}
-          {!loading && !error && (
-            <ItemList
-              items={visibleItems}
-              selectedId={selection.mode === 'edit' ? selection.id : null}
-              onSelect={(id) => setSelection({ mode: 'edit', id })}
-              onToggleDone={handleToggleDone}
-            />
-          )}
+        <section className="card card-list">
+          <div className="card-head">
+            <h2 className="display">{TAB_LABELS[activeTab]}</h2>
+            <span className="card-head-count">{visibleItems.length}</span>
+          </div>
+          <div className="card-body">
+            {loading && <p className="muted">Loading…</p>}
+            {error && <p className="error">{error}</p>}
+            {!loading && !error && (
+              <ItemList
+                items={visibleItems}
+                selectedId={selection.mode === 'edit' ? selection.id : null}
+                onSelect={(id) => setSelection({ mode: 'edit', id })}
+                onToggleDone={handleToggleDone}
+              />
+            )}
+          </div>
         </section>
 
-        <section className="right-pane">
-          {selection.mode === 'none' ? (
-            <p className="empty placeholder">
-              Select an item to view or edit, or add a new one.
-            </p>
-          ) : (
-            <ItemDetail
-              key={detailKey}
-              item={selectedItem}
-              defaultCategory={defaultCategory}
-              onSave={handleSave}
-              onDelete={selection.mode === 'edit' ? handleDelete : undefined}
-              onClose={() => setSelection({ mode: 'none' })}
-            />
-          )}
+        <section className="card card-detail">
+          <div className="card-body">
+            {selection.mode === 'none' ? (
+              <div className="placeholder">
+                <p className="display">Nothing selected</p>
+                <p className="muted">Pick an item on the left, or add a new one.</p>
+              </div>
+            ) : (
+              <ItemDetail
+                key={detailKey}
+                item={selectedItem}
+                defaultCategory={defaultCategory}
+                onSave={handleSave}
+                onDelete={selection.mode === 'edit' ? handleDelete : undefined}
+                onClose={() => setSelection({ mode: 'none' })}
+              />
+            )}
+          </div>
         </section>
-      </main>
+      </div>
     </div>
   );
 }

@@ -39,7 +39,7 @@ export default function CategoryTabs({ items, activeTab, onSelectTab, onSelectIt
         return (
           <div key={tab} className="tab-wrap">
             <button
-              className={tab === activeTab ? 'tab active' : 'tab'}
+              className={tab === activeTab ? 'tab ripple active' : 'tab ripple'}
               onClick={() => onSelectTab(tab)}
             >
               {LABELS[tab]}

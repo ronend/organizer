@@ -51,8 +51,8 @@ export default function ItemDetail({ item, defaultCategory, onSave, onDelete, on
   return (
     <form className="detail" onSubmit={handleSubmit}>
       <div className="detail-header">
-        <h2>{item ? 'Edit item' : 'New item'}</h2>
-        <button type="button" className="link" onClick={onClose}>
+        <h2 className="display">{item ? 'Edit item' : 'New item'}</h2>
+        <button type="button" className="btn btn-ghost ripple" onClick={onClose}>
           ✕ Close
         </button>
       </div>
@@ -116,11 +116,11 @@ export default function ItemDetail({ item, defaultCategory, onSave, onDelete, on
       {err && <p className="error">{err}</p>}
 
       <div className="detail-actions">
-        <button type="submit" className="primary" disabled={saving}>
+        <button type="submit" className="btn btn-primary ripple" disabled={saving}>
           {saving ? 'Saving…' : item ? 'Save changes' : 'Add item'}
         </button>
         {item && onDelete && (
-          <button type="button" className="danger" onClick={onDelete}>
+          <button type="button" className="btn btn-danger ripple" onClick={onDelete}>
             Delete
           </button>
         )}
