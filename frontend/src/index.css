@@ -18,9 +18,41 @@
   --e2: 0 4px 10px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.3);
   --e3: 0 14px 40px rgba(0, 0, 0, 0.5), 0 6px 14px rgba(0, 0, 0, 0.35);
 
+  --ripple: rgba(255, 255, 255, 0.35);
+  --scroll-thumb: rgba(255, 255, 255, 0.12);
+  --glow-1: rgba(109, 139, 255, 0.16);
+  --glow-2: rgba(160, 107, 255, 0.14);
+
   color-scheme: dark;
   font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
   color: var(--text);
+}
+
+/* Material You — light */
+:root[data-theme='light'] {
+  --bg: #eef0f6;
+  --bg-2: #ffffff;
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-2: rgba(20, 22, 40, 0.05);
+  --border: rgba(20, 22, 40, 0.1);
+  --border-strong: rgba(20, 22, 40, 0.2);
+  --text: #1a1c22;
+  --muted: #5b6270;
+  --accent: #3b5bdb;
+  --accent-2: #7048e8;
+  --grad: linear-gradient(135deg, #5b7cff 0%, #9a6bff 100%);
+  --danger: #d6336c;
+
+  --e1: 0 1px 2px rgba(20, 22, 40, 0.08), 0 1px 3px rgba(20, 22, 40, 0.06);
+  --e2: 0 6px 16px rgba(20, 22, 40, 0.1), 0 2px 6px rgba(20, 22, 40, 0.06);
+  --e3: 0 18px 44px rgba(20, 22, 40, 0.16), 0 8px 16px rgba(20, 22, 40, 0.08);
+
+  --ripple: rgba(20, 22, 40, 0.14);
+  --scroll-thumb: rgba(20, 22, 40, 0.22);
+  --glow-1: rgba(91, 124, 255, 0.14);
+  --glow-2: rgba(154, 107, 255, 0.12);
+
+  color-scheme: light;
 }
 
 * {
@@ -30,8 +62,8 @@
 body {
   margin: 0;
   background:
-    radial-gradient(1100px 700px at 12% -8%, rgba(109, 139, 255, 0.16), transparent 60%),
-    radial-gradient(1000px 650px at 105% 0%, rgba(160, 107, 255, 0.14), transparent 55%),
+    radial-gradient(1100px 700px at 12% -8%, var(--glow-1), transparent 60%),
+    radial-gradient(1000px 650px at 105% 0%, var(--glow-2), transparent 55%),
     var(--bg);
   background-attachment: fixed;
   min-height: 100vh;
@@ -141,6 +173,12 @@ body {
   color: var(--muted);
 }
 
+.icon-btn {
+  padding: 0.5rem 0.7rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
 .btn-ghost:hover {
   color: var(--text);
   background: var(--surface);
@@ -162,7 +200,7 @@ body {
   position: absolute;
   border-radius: 50%;
   transform: scale(0);
-  background: rgba(255, 255, 255, 0.35);
+  background: var(--ripple);
   pointer-events: none;
   animation: ripple 0.6s ease-out;
 }
@@ -708,7 +746,7 @@ body {
   gap: 0.3rem;
   padding: 0.4rem;
   border-bottom: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-2);
 }
 
 .rte-btn {
@@ -777,7 +815,7 @@ body {
 
 .card-body::-webkit-scrollbar-thumb,
 .tab-dropdown::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--scroll-thumb);
   border-radius: 999px;
   border: 3px solid transparent;
   background-clip: content-box;

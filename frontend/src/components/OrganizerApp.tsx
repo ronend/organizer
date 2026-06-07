@@ -4,6 +4,7 @@ import { useAuth } from '../auth/useAuth';
 import type { Category, NewOrganizer } from '../types/organizer';
 import { DEFAULT_CATEGORY, labelize } from '../types/organizer';
 import { installRipple } from '../lib/ripple';
+import { useTheme } from '../lib/theme';
 import CategoryTabs, { itemsForTab, tabLabel, type Tab } from './CategoryTabs';
 import ItemList from './ItemList';
 import ItemDetail from './ItemDetail';
@@ -17,6 +18,7 @@ export default function OrganizerApp() {
   const { organizers, loading, error, addOrganizer, updateOrganizer, removeOrganizer } =
     useOrganizers();
   const { logout } = useAuth();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const [activeTab, setActiveTab] = useState<Tab>('today');
   const [selection, setSelection] = useState<Selection>({ mode: 'none' });
@@ -102,6 +104,14 @@ export default function OrganizerApp() {
         <div className="header-actions">
           <button className="btn btn-primary ripple" onClick={() => setSelection({ mode: 'add' })}>
             + Add item
+          </button>
+          <button
+            className="btn btn-ghost ripple icon-btn"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
           </button>
           <button className="btn btn-ghost ripple" onClick={logout}>
             Log out
