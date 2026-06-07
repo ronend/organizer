@@ -616,6 +616,24 @@ body {
   box-shadow: 0 4px 14px rgba(120, 110, 255, 0.32);
 }
 
+.seg-btn.add {
+  border-style: dashed;
+  background: transparent;
+}
+
+.seg-input {
+  border: 1px solid rgba(140, 123, 255, 0.6);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  min-width: 8rem;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(120, 110, 255, 0.18);
+}
+
 .field-inline {
   display: flex;
   align-items: center;

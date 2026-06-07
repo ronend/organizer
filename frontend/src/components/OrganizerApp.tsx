@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useOrganizers } from '../hooks/useOrganizers';
 import { useAuth } from '../auth/useAuth';
 import type { Category, NewOrganizer } from '../types/organizer';
+import { DEFAULT_CATEGORIES } from '../types/organizer';
 import { installRipple } from '../lib/ripple';
-import CategoryTabs, { itemsForTab, type Tab } from './CategoryTabs';
+import CategoryTabs, { itemsForTab, tabLabel, type Tab } from './CategoryTabs';
 import ItemList from './ItemList';
 import ItemDetail from './ItemDetail';
 
@@ -11,15 +12,6 @@ type Selection =
   | { mode: 'none' }
   | { mode: 'add' }
   | { mode: 'edit'; id: string };
-
-const TAB_LABELS: Record<Tab, string> = {
-  today: 'Today',
-  errand: 'Errand',
-  project: 'Project',
-  health: 'Health',
-  finance: 'Finance',
-  home: 'Home',
-};
 
 export default function OrganizerApp() {
   const { organizers, loading, error, addOrganizer, updateOrganizer, removeOrganizer } =
@@ -43,6 +35,15 @@ export default function OrganizerApp() {
     () => itemsForTab(sourceItems, activeTab),
     [sourceItems, activeTab],
   );
+
+  // Tabs = default categories + any custom labels in use (deduped, defaults first).
+  const categories = useMemo(() => {
+    const set = new Set<string>(DEFAULT_CATEGORIES);
+    organizers.forEach((o) => {
+      if (o.category) set.add(o.category);
+    });
+    return Array.from(set);
+  }, [organizers]);
 
   const selectedItem =
     selection.mode === 'edit'
@@ -98,6 +99,7 @@ export default function OrganizerApp() {
         <div className="card card-tabs">
           <CategoryTabs
             items={sourceItems}
+            categories={categories}
             activeTab={activeTab}
             onSelectTab={(tab) => setActiveTab(tab)}
             onSelectItem={(id, tab) => {
@@ -109,7 +111,7 @@ export default function OrganizerApp() {
 
         <section className="card card-list">
           <div className="card-head">
-            <h2 className="display">{TAB_LABELS[activeTab]}</h2>
+            <h2 className="display">{tabLabel(activeTab)}</h2>
             <div className="card-head-right">
               <label className="switch" title="Show or hide completed items">
                 <input
@@ -150,6 +152,7 @@ export default function OrganizerApp() {
               <ItemDetail
                 key={detailKey}
                 item={selectedItem}
+                categories={categories}
                 defaultCategory={defaultCategory}
                 onSave={handleSave}
                 onDelete={selection.mode === 'edit' ? handleDelete : undefined}

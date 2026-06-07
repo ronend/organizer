@@ -1,8 +1,20 @@
-export const CATEGORIES = ['errand', 'project', 'health', 'finance', 'home'] as const;
-export type Category = (typeof CATEGORIES)[number];
+// Default categories that always appear as tabs. Categories are free-form
+// labels, so an item may use any of these or a user-defined one.
+export const DEFAULT_CATEGORIES = ['errand', 'project', 'health', 'finance', 'home'] as const;
+export type Category = string;
 
-export const ITEM_TYPES = ['simple', 'complex', 'repeat', 'project'] as const;
+export const ITEM_TYPES = ['simple', 'complex', 'repeat', 'project', 'routine'] as const;
 export type ItemType = (typeof ITEM_TYPES)[number];
+
+/** Normalize a free-form category label (lowercase, trimmed, capped). */
+export function normalizeCategory(raw: string): string {
+  return raw.trim().toLowerCase().slice(0, 40);
+}
+
+/** Title-case a category/tab label for display. */
+export function labelize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 export interface Organizer {
   id: string;

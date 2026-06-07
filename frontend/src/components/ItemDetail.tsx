@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import {
-  CATEGORIES,
   ITEM_TYPES,
+  labelize,
+  normalizeCategory,
   type Category,
   type ItemType,
   type NewOrganizer,
@@ -12,6 +13,7 @@ import RichTextEditor from './RichTextEditor';
 
 interface Props {
   item: Organizer | null; // null = add mode
+  categories: string[]; // known category labels (defaults + in use)
   defaultCategory?: Category;
   onSave: (data: NewOrganizer) => Promise<void>;
   onDelete?: () => void;
@@ -20,7 +22,14 @@ interface Props {
 
 // NOTE: the parent passes a `key` so this remounts (and re-seeds state) whenever
 // the selected item or add/edit mode changes.
-export default function ItemDetail({ item, defaultCategory, onSave, onDelete, onClose }: Props) {
+export default function ItemDetail({
+  item,
+  categories,
+  defaultCategory,
+  onSave,
+  onDelete,
+  onClose,
+}: Props) {
   const [title, setTitle] = useState(item?.title ?? '');
   const [category, setCategory] = useState<Category>(item?.category ?? defaultCategory ?? 'errand');
   const [type, setType] = useState<ItemType>(item?.type ?? 'simple');
@@ -30,6 +39,19 @@ export default function ItemDetail({ item, defaultCategory, onSave, onDelete, on
   const [done, setDone] = useState(item?.done ?? false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [addingCat, setAddingCat] = useState(false);
+  const [newCat, setNewCat] = useState('');
+
+  // Always include the currently-selected category as an option, even if it's
+  // a freshly-typed label not yet in the known list.
+  const catOptions = categories.includes(category) ? categories : [...categories, category];
+
+  function commitNewCat() {
+    const v = normalizeCategory(newCat);
+    if (v) setCategory(v);
+    setNewCat('');
+    setAddingCat(false);
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -71,16 +93,43 @@ export default function ItemDetail({ item, defaultCategory, onSave, onDelete, on
       <div className="field">
         <span>Category</span>
         <div className="seg">
-          {CATEGORIES.map((c) => (
+          {catOptions.map((c) => (
             <button
               key={c}
               type="button"
               className={'seg-btn ripple' + (category === c ? ' active' : '')}
               onClick={() => setCategory(c)}
             >
-              {c}
+              {labelize(c)}
             </button>
           ))}
+          {addingCat ? (
+            <input
+              className="seg-input"
+              autoFocus
+              value={newCat}
+              placeholder="new label"
+              onChange={(e) => setNewCat(e.target.value)}
+              onBlur={commitNewCat}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitNewCat();
+                } else if (e.key === 'Escape') {
+                  setNewCat('');
+                  setAddingCat(false);
+                }
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="seg-btn add"
+              onClick={() => setAddingCat(true)}
+            >
+              + New label
+            </button>
+          )}
         </div>
       </div>
 

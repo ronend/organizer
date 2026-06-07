@@ -1,19 +1,8 @@
 import type { Organizer } from '../types/organizer';
-import { CATEGORIES } from '../types/organizer';
+import { labelize } from '../types/organizer';
 import { compareByDue, isOverdue, isToday } from '../lib/dates';
 
-export type Tab = 'today' | (typeof CATEGORIES)[number];
-
-const TABS: Tab[] = ['today', ...CATEGORIES];
-
-const LABELS: Record<Tab, string> = {
-  today: 'Today',
-  errand: 'Errand',
-  project: 'Project',
-  health: 'Health',
-  finance: 'Finance',
-  home: 'Home',
-};
+export type Tab = string; // 'today' or a category label
 
 /** Items belonging to a tab. */
 export function itemsForTab(items: Organizer[], tab: Tab): Organizer[] {
@@ -24,17 +13,29 @@ export function itemsForTab(items: Organizer[], tab: Tab): Organizer[] {
   return [...filtered].sort(compareByDue);
 }
 
+export function tabLabel(tab: Tab): string {
+  return tab === 'today' ? 'Today' : labelize(tab);
+}
+
 interface Props {
   items: Organizer[];
+  categories: string[]; // ordered category labels (without 'today')
   activeTab: Tab;
   onSelectTab: (tab: Tab) => void;
   onSelectItem: (id: string, tab: Tab) => void;
 }
 
-export default function CategoryTabs({ items, activeTab, onSelectTab, onSelectItem }: Props) {
+export default function CategoryTabs({
+  items,
+  categories,
+  activeTab,
+  onSelectTab,
+  onSelectItem,
+}: Props) {
+  const tabs: Tab[] = ['today', ...categories];
   return (
     <nav className="tabs">
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const tabItems = itemsForTab(items, tab);
         return (
           <div key={tab} className="tab-wrap">
@@ -42,7 +43,7 @@ export default function CategoryTabs({ items, activeTab, onSelectTab, onSelectIt
               className={tab === activeTab ? 'tab ripple active' : 'tab ripple'}
               onClick={() => onSelectTab(tab)}
             >
-              {LABELS[tab]}
+              {tabLabel(tab)}
               <span className="tab-count">{tabItems.length}</span>
             </button>
             {tabItems.length > 0 && (

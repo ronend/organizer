@@ -13,8 +13,14 @@ from src.middleware.auth import require_auth
 
 router = APIRouter(prefix="/api/organizers")
 
-CATEGORIES = {"errand", "project", "health", "finance", "home"}
-TYPES = {"simple", "complex", "repeat", "project"}
+# Categories are free-form labels (no fixed set). Types are a fixed enum.
+TYPES = {"simple", "complex", "repeat", "project", "routine"}
+
+
+def normalize_category(raw: Optional[str]) -> Optional[str]:
+    if raw is None:
+        return None
+    return (raw.strip().lower() or "errand")[:40]
 
 
 class CreateItem(BaseModel):
@@ -37,9 +43,7 @@ class UpdateItem(BaseModel):
     done: Optional[bool] = None
 
 
-def _validate(category: Optional[str], type_: Optional[str]) -> None:
-    if category is not None and category not in CATEGORIES:
-        raise HTTPException(status_code=400, detail=f"invalid category: {category}")
+def _validate_type(type_: Optional[str]) -> None:
     if type_ is not None and type_ not in TYPES:
         raise HTTPException(status_code=400, detail=f"invalid type: {type_}")
 
@@ -55,16 +59,20 @@ def create_item(body: CreateItem, user: dict = Depends(require_auth)):
         raise HTTPException(status_code=400, detail="title is required")
     if not body.dueDate.strip():
         raise HTTPException(status_code=400, detail="dueDate is required")
-    _validate(body.category, body.type)
-    return dynamo.create_organizer(user["sub"], body.model_dump())
+    _validate_type(body.type)
+    data = body.model_dump()
+    data["category"] = normalize_category(data.get("category"))
+    return dynamo.create_organizer(user["sub"], data)
 
 
 @router.put("/{organizer_id}")
 def update_item(
     organizer_id: str, body: UpdateItem, user: dict = Depends(require_auth)
 ):
-    _validate(body.category, body.type)
+    _validate_type(body.type)
     updates = body.model_dump(exclude_unset=True)
+    if "category" in updates:
+        updates["category"] = normalize_category(updates["category"])
     updated = dynamo.update_organizer(user["sub"], organizer_id, updates)
     if updated is None:
         raise HTTPException(status_code=404, detail="Item not found")
