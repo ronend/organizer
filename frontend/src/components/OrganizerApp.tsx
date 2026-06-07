@@ -22,7 +22,7 @@ export default function OrganizerApp() {
 
   const [activeTab, setActiveTab] = useState<Tab>('today');
   const [selection, setSelection] = useState<Selection>({ mode: 'none' });
-  const [showDone, setShowDone] = useState(true);
+  const [showDone, setShowDone] = useState(false);
 
   useEffect(() => installRipple(), []);
 
