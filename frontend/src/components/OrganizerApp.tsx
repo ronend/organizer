@@ -32,10 +32,17 @@ export default function OrganizerApp() {
 
   useEffect(() => installRipple(), []);
 
-  const visibleItems = useMemo(() => {
-    const list = itemsForTab(organizers, activeTab);
-    return showDone ? list : list.filter((i) => !i.done);
-  }, [organizers, activeTab, showDone]);
+  // Apply the show/hide-done switch once, up front, so tab counts, the hover
+  // dropdowns, and the list all reflect it consistently.
+  const sourceItems = useMemo(
+    () => (showDone ? organizers : organizers.filter((i) => !i.done)),
+    [organizers, showDone],
+  );
+
+  const visibleItems = useMemo(
+    () => itemsForTab(sourceItems, activeTab),
+    [sourceItems, activeTab],
+  );
 
   const selectedItem =
     selection.mode === 'edit'
@@ -90,7 +97,7 @@ export default function OrganizerApp() {
       <div className="bento">
         <div className="card card-tabs">
           <CategoryTabs
-            items={organizers}
+            items={sourceItems}
             activeTab={activeTab}
             onSelectTab={(tab) => setActiveTab(tab)}
             onSelectItem={(id, tab) => {
