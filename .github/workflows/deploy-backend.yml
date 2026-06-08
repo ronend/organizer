@@ -3,7 +3,7 @@ name: Deploy Backend
 on:
   push:
     branches: [main]
-    paths: ['backend/**', 'iac/**']
+    paths: ['backend/**', 'mcp-server/**', 'iac/**']
   workflow_dispatch: {}   # allow manual runs from the Actions tab (uses latest main)
 
 # Required for GitHub's OIDC token, used to assume the AWS deploy role.

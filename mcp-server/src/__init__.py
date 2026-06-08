@@ -1,0 +1,1 @@
+"""Organizer MCP server package."""

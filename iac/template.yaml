@@ -13,6 +13,12 @@ Parameters:
       the Cognito callback URLs up front would create a circular dependency.
       After the first deploy, read the CloudFrontUrl output and re-deploy with
       --parameter-overrides AppUrl=https://<domain> to finish OAuth wiring.
+  McpOAuthCallbackUrls:
+    Type: CommaDelimitedList
+    Default: 'https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback'
+    Description: >
+      OAuth redirect URIs allowed for the MCP connector app client. Defaults to
+      Claude.ai's connector callbacks; override if a client uses a different one.
 
 Conditions:
   HasAppUrl: !Not [!Equals [!Ref AppUrl, '']]
@@ -81,6 +87,29 @@ Resources:
         - ALLOW_REFRESH_TOKEN_AUTH
         - ALLOW_USER_SRP_AUTH
 
+  # Dedicated app client for the MCP OAuth connector (Claude.ai). Public client +
+  # PKCE (no secret), authorization-code flow, same hosted UI as the SPA. Its
+  # callback URLs are the connector's, not the app's. Cognito has no Dynamic
+  # Client Registration, so the connector is configured with THIS client's id.
+  MCPUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: organizer-mcp-client
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - openid
+        - email
+      AllowedOAuthFlowsUserPoolClient: true
+      CallbackURLs: !Ref McpOAuthCallbackUrls
+      SupportedIdentityProviders:
+        - COGNITO
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
@@ -109,6 +138,31 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref OrganizerTable
+
+  # --- MCP Server Lambda ---
+  # Wraps the Organizer API as an MCP server (Streamable HTTP, stateless + JSON).
+  # Sits behind CloudFront at /mcp. Needs no DynamoDB access — it calls the
+  # Organizer Function URL directly, forwarding the CALLER's Cognito access token
+  # (per-user pass-through) plus the shared origin secret. The endpoint itself is
+  # gated inside the app by origin-verify (x-origin-verify from CloudFront) and by
+  # validating the caller's Cognito token (COGNITO_USER_POOL_ID, inherited from
+  # Globals; AWS_REGION is provided by Lambda).
+  MCPFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src.handler.handler
+      CodeUri: ../mcp-server/
+      MemorySize: 512          # crypto + JWKS verification on cold start
+      Timeout: 30
+      FunctionUrlConfig:
+        AuthType: NONE         # Auth handled in-app (origin-verify + Cognito)
+      Environment:
+        Variables:
+          # The MCP server calls the Organizer API at its (internal) Function URL.
+          TODO_API_URL: !GetAtt OrganizerFunctionUrl.FunctionUrl
+          # Outbound x-origin-verify so the call clears the API's origin-verify
+          # middleware when hitting the Function URL directly (bypassing CloudFront).
+          TODO_ORIGIN_SECRET: !Sub '{{resolve:ssm:/organizer/origin-secret}}'
 
   # --- DynamoDB ---
   OrganizerTable:
@@ -211,7 +265,19 @@ Resources:
               - HeaderName: x-origin-verify
                 HeaderValue: !Sub '{{resolve:ssm:/organizer/origin-secret}}'
 
-        # Route /api/* to Lambda; everything else to S3
+          # Origin 3: MCP server Lambda Function URL
+          - Id: MCPOrigin
+            DomainName: !Select [2, !Split ["/", !GetAtt MCPFunctionUrl.FunctionUrl]]
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+            OriginCustomHeaders:
+              - HeaderName: x-origin-verify
+                HeaderValue: !Sub '{{resolve:ssm:/organizer/origin-secret}}'
+
+        # Route /api/* to the API Lambda and /mcp to the MCP Lambda; everything
+        # else to S3. AllViewerExceptHostHeader forwards the Authorization header
+        # (the caller's Cognito token) through to both Lambdas.
         CacheBehaviors:
           - PathPattern: /api/*
             TargetOriginId: LambdaOrigin
@@ -219,6 +285,22 @@ Resources:
             CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad        # CachingDisabled
             OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # AllViewerExceptHostHeader
             AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+
+          - PathPattern: /mcp
+            TargetOriginId: MCPOrigin
+            ViewerProtocolPolicy: https-only
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad        # CachingDisabled
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # AllViewerExceptHostHeader
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+
+          # OAuth 2.0 discovery (RFC 9728 protected-resource metadata) — served by
+          # the MCP Lambda, not the SPA. Keeps it off the S3/SPA default behavior.
+          - PathPattern: /.well-known/oauth-*
+            TargetOriginId: MCPOrigin
+            ViewerProtocolPolicy: https-only
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad        # CachingDisabled
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # AllViewerExceptHostHeader
+            AllowedMethods: [GET, HEAD, OPTIONS]
 
         DefaultCacheBehavior:
           TargetOriginId: S3Origin
@@ -235,10 +317,19 @@ Outputs:
   LambdaFunctionUrl:
     Description: Direct Lambda URL (keep secret — only CloudFront should call this)
     Value: !GetAtt OrganizerFunctionUrl.FunctionUrl
+  MCPUrl:
+    Description: MCP endpoint (Streamable HTTP) — use as the Claude connector URL
+    Value: !Sub 'https://${CloudFrontDistribution.DomainName}/mcp'
+  MCPFunctionUrl:
+    Description: Direct MCP Lambda URL (internal — only CloudFront should call this)
+    Value: !GetAtt MCPFunctionUrl.FunctionUrl
   UserPoolId:
     Value: !Ref UserPool
   UserPoolClientId:
     Value: !Ref UserPoolClient
+  MCPUserPoolClientId:
+    Description: Cognito app client ID for the Claude.ai MCP connector (public, PKCE, no secret)
+    Value: !Ref MCPUserPoolClient
   CognitoDomain:
     Value: !Sub 'https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com'
   TableName:
