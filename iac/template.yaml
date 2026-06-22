@@ -168,7 +168,10 @@ Resources:
   OrganizerTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: organizer-items
+      # No explicit TableName: CloudFormation generates a unique name so the
+      # table can be REPLACED on an immutable change (e.g. a key-schema change)
+      # without a name collision. The Lambda reads the actual name via
+      # `!Ref OrganizerTable` (see DYNAMO_TABLE in Globals), so nothing hardcodes it.
       BillingMode: PAY_PER_REQUEST
       # Single-table design: PK=userId, SK carries collection prefixes
       # (EVENT#, REMIDX#, TMPL#) — see backend/src/db/dynamo.py.

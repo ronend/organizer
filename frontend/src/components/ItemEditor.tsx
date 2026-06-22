@@ -2,9 +2,9 @@ import { useState } from 'react';
 import type { Item, ItemKind } from '../types/organizer';
 import { ITEM_KINDS, ITEM_KIND_META } from '../types/organizer';
 import { newLocalId } from '../lib/localId';
-import { splitDateTime, combineDateTime } from '../lib/dates';
 import AttrsEditor from './AttrsEditor';
 import ReminderEditor from './ReminderEditor';
+import DateTimeField from './DateTimeField';
 
 interface Props {
   value: Item[];
@@ -37,25 +37,59 @@ export function newItem(kind: ItemKind = 'task'): Item {
 
 const STATUS_OPTIONS = ['todo', 'confirmed', 'done', 'cancelled'];
 
+/** Keep sort_order aligned with array position after any reorder/add/remove. */
+function renumber(items: Item[]): Item[] {
+  return items.map((it, i) => ({ ...it, sort_order: i + 1 }));
+}
+
 function ItemCard({
   item,
   siblings,
+  isFirst,
+  isLast,
+  isDragging,
   onPatch,
   onRemove,
+  onMove,
+  onDragStart,
+  onDragEnd,
+  onDropOn,
 }: {
   item: Item;
   siblings: Item[];
+  isFirst: boolean;
+  isLast: boolean;
+  isDragging: boolean;
   onPatch: (p: Partial<Item>) => void;
   onRemove: () => void;
+  onMove: (delta: number) => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDropOn: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const sched = splitDateTime(item.scheduled_at);
-  const due = splitDateTime(item.due_at);
   const isReservation = item.kind === 'reservation';
 
   return (
-    <div className="item-card">
+    <div
+      className={'item-card' + (isDragging ? ' dragging' : '')}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropOn();
+      }}
+    >
       <div className="item-card-head">
+        <span
+          className="drag-handle"
+          draggable
+          title="Drag to reorder"
+          aria-label="Drag to reorder"
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+        >
+          ⠿
+        </span>
         <span className="type-emoji">{ITEM_KIND_META[item.kind].icon}</span>
         <input
           className="item-card-title"
@@ -63,6 +97,28 @@ function ItemCard({
           value={item.title}
           onChange={(e) => onPatch({ title: e.target.value })}
         />
+        <span className="move-btns">
+          <button
+            type="button"
+            className="move-btn"
+            disabled={isFirst}
+            aria-label="Move up"
+            title="Move up"
+            onClick={() => onMove(-1)}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            className="move-btn"
+            disabled={isLast}
+            aria-label="Move down"
+            title="Move down"
+            onClick={() => onMove(1)}
+          >
+            ↓
+          </button>
+        </span>
         <button type="button" className="section-toggle" onClick={() => setOpen((v) => !v)}>
           {open ? '▾' : '▸'}
         </button>
@@ -107,26 +163,18 @@ function ItemCard({
           <div className="field-row compact">
             <label className="field">
               <span>Scheduled</span>
-              <input
-                type="date"
-                value={sched.date}
-                onChange={(e) => onPatch({ scheduled_at: combineDateTime(e.target.value, sched.time) || null })}
-              />
-            </label>
-            <label className="field">
-              <span>Time</span>
-              <input
-                type="time"
-                value={sched.time}
-                onChange={(e) => onPatch({ scheduled_at: combineDateTime(sched.date, e.target.value) || null })}
+              <DateTimeField
+                value={item.scheduled_at}
+                ariaLabel="Scheduled date and time"
+                onChange={(v) => onPatch({ scheduled_at: v })}
               />
             </label>
             <label className="field">
               <span>Due</span>
-              <input
-                type="date"
-                value={due.date}
-                onChange={(e) => onPatch({ due_at: combineDateTime(e.target.value, due.time) || null })}
+              <DateTimeField
+                value={item.due_at}
+                ariaLabel="Due date and time"
+                onChange={(v) => onPatch({ due_at: v })}
               />
             </label>
           </div>
@@ -237,33 +285,71 @@ function ItemCard({
 }
 
 export default function ItemEditor({ value, onChange }: Props) {
+  const [dragId, setDragId] = useState<string | null>(null);
+
   function patch(id: string, p: Partial<Item>) {
     onChange(value.map((it) => (it.id === id ? { ...it, ...p } : it)));
   }
 
+  function move(fromId: string, toId: string) {
+    if (fromId === toId) return;
+    const from = value.findIndex((i) => i.id === fromId);
+    const to = value.findIndex((i) => i.id === toId);
+    if (from < 0 || to < 0) return;
+    const next = [...value];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange(renumber(next));
+  }
+
+  function moveBy(id: string, delta: number) {
+    const from = value.findIndex((i) => i.id === id);
+    const to = from + delta;
+    if (to < 0 || to >= value.length) return;
+    move(id, value[to].id);
+  }
+
   return (
     <div className="items-edit">
-      {value.map((item) => (
+      {value.map((item, i) => (
         <ItemCard
           key={item.id}
           item={item}
           siblings={value.filter((s) => s.id !== item.id)}
+          isFirst={i === 0}
+          isLast={i === value.length - 1}
+          isDragging={dragId === item.id}
           onPatch={(p) => patch(item.id, p)}
-          onRemove={() => onChange(value.filter((it) => it.id !== item.id))}
+          onRemove={() => onChange(renumber(value.filter((it) => it.id !== item.id)))}
+          onMove={(delta) => moveBy(item.id, delta)}
+          onDragStart={() => setDragId(item.id)}
+          onDragEnd={() => setDragId(null)}
+          onDropOn={() => {
+            if (dragId) move(dragId, item.id);
+            setDragId(null);
+          }}
         />
       ))}
       <div className="add-item-row">
-        <button type="button" className="seg-btn add" onClick={() => onChange([...value, newItem('task')])}>
+        <button
+          type="button"
+          className="seg-btn add"
+          onClick={() => onChange(renumber([...value, newItem('task')]))}
+        >
           + Task
         </button>
         <button
           type="button"
           className="seg-btn add"
-          onClick={() => onChange([...value, newItem('reservation')])}
+          onClick={() => onChange(renumber([...value, newItem('reservation')]))}
         >
           + Reservation
         </button>
-        <button type="button" className="seg-btn add" onClick={() => onChange([...value, newItem('entry')])}>
+        <button
+          type="button"
+          className="seg-btn add"
+          onClick={() => onChange(renumber([...value, newItem('entry')]))}
+        >
           + Entry
         </button>
       </div>

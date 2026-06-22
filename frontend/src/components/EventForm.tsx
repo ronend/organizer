@@ -9,6 +9,7 @@ import ReminderEditor from './ReminderEditor';
 import ChecklistEditor from './ChecklistEditor';
 import AttachmentEditor from './AttachmentEditor';
 import AttrsEditor from './AttrsEditor';
+import DateTimeField from './DateTimeField';
 import type { EventFormProps } from './EventDetail';
 
 const EVENT_STATUS = ['planned', 'active', 'done', 'cancelled'];
@@ -184,11 +185,21 @@ export default function EventForm({
           <div className="field-row compact">
             <label className="field">
               <span>Start date</span>
-              <input type="date" value={startDate ?? ''} onChange={(e) => wrap(setStartDate)(e.target.value)} />
+              <DateTimeField
+                mode="date"
+                value={startDate || null}
+                ariaLabel="Start date"
+                onChange={(v) => wrap(setStartDate)(v ?? '')}
+              />
             </label>
             <label className="field">
               <span>End date</span>
-              <input type="date" value={endDate ?? ''} onChange={(e) => wrap(setEndDate)(e.target.value)} />
+              <DateTimeField
+                mode="date"
+                value={endDate || null}
+                ariaLabel="End date"
+                onChange={(v) => wrap(setEndDate)(v ?? '')}
+              />
             </label>
           </div>
           <div className="field-row compact">

@@ -30,12 +30,12 @@ Cognito, persisted in DynamoDB.
      └──────────┘            └────────┬─────────┘
                                       │  originVerify → auth (JWT)
                                       ▼
-                              ┌───────────────────┐
-                              │   DynamoDB         │
-                              │   organizer-items  │
-                              │   PK userId        │
-                              │   SK organizerId   │
-                              └───────────────────┘
+                              ┌────────────────────────┐
+                              │   DynamoDB (single table)│
+                              │   PK userId              │
+                              │   SK  EVENT# / REMIDX# / │
+                              │       TMPL# prefixes     │
+                              └────────────────────────┘
 ```
 
 - The SPA and the API live behind **one** CloudFront domain, so requests are

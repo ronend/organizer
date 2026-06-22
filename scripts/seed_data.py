@@ -9,9 +9,14 @@ Single-table layout (see backend/src/db/dynamo.py): PK=userId, SK carries a
 collection prefix — EVENT#<id> for events, REMIDX#<fire_at>#<id> for the
 reminder index.
 
+The table name is CloudFormation-generated (no fixed name) — grab it from the
+stack's `TableName` output:
+  aws cloudformation describe-stacks --stack-name organizer-app \
+      --query "Stacks[0].Outputs[?OutputKey=='TableName'].OutputValue" --output text
+
 Usage:
   python3 scripts/seed_data.py --user-id <cognito-sub> \
-      --table organizer-items --region us-east-1
+      --table <generated-table-name> --region us-east-1
 """
 
 import argparse
@@ -261,7 +266,7 @@ def index_rows(event: dict) -> list[dict]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--user-id", required=True, help="Cognito sub of the target user")
-    ap.add_argument("--table", default="organizer-items")
+    ap.add_argument("--table", required=True, help="DynamoDB table name (stack TableName output)")
     ap.add_argument("--region", default="us-east-1")
     args = ap.parse_args()
 

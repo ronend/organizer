@@ -1,7 +1,8 @@
 import type { Reminder } from '../types/organizer';
 import { newLocalId } from '../lib/localId';
 import { describeOffset, buildRRule, parseRRule, type RRuleFreq } from '../lib/recurrence';
-import { splitDateTime, combineDateTime, formatDate } from '../lib/dates';
+import { formatDate } from '../lib/dates';
+import DateTimeField from './DateTimeField';
 
 interface Props {
   value: Reminder[];
@@ -9,6 +10,17 @@ interface Props {
   relativeToLabel?: string;
   onChange: (next: Reminder[]) => void;
 }
+
+// Common relative timings — one tap instead of typing the offset rule.
+const OFFSET_PRESETS: { label: string; value: string }[] = [
+  { label: '2h', value: '-2h' },
+  { label: '1d', value: '-1d' },
+  { label: '3d', value: '-3d' },
+  { label: '1wk', value: '-1w' },
+  { label: '2wk', value: '-2w' },
+  { label: '30d', value: '-30d' },
+  { label: 'at time', value: '0' },
+];
 
 export function newReminder(): Reminder {
   return {
@@ -41,7 +53,6 @@ export default function ReminderEditor({ value, relativeToLabel, onChange }: Pro
   return (
     <div className="reminders-edit">
       {value.map((r, i) => {
-        const { date, time } = splitDateTime(r.fire_at);
         const parsed = parseRRule(r.recurrence_rule);
         return (
           <div className="reminder-card" key={r.id}>
@@ -62,38 +73,43 @@ export default function ReminderEditor({ value, relativeToLabel, onChange }: Pro
               </button>
             </div>
 
-            <div className="field-row compact">
-              <label className="field">
-                <span>Offset {relativeToLabel ? `(${relativeToLabel})` : ''}</span>
+            <div className="field">
+              <span>Remind {relativeToLabel ? `(${relativeToLabel})` : ''}</span>
+              <div className="offset-presets">
+                {OFFSET_PRESETS.map((p) => (
+                  <button
+                    type="button"
+                    key={p.value}
+                    className={'dt-chip' + (r.offset_rule === p.value ? ' active' : '')}
+                    onClick={() => patch(i, { offset_rule: p.value })}
+                  >
+                    {p.label}
+                  </button>
+                ))}
                 <input
+                  className="offset-input"
                   placeholder="-30d, -2h, +1d, 0"
                   value={r.offset_rule ?? ''}
                   onChange={(e) => patch(i, { offset_rule: e.target.value || null })}
                 />
-                {r.offset_rule && <small className="muted">{describeOffset(r.offset_rule)}</small>}
-              </label>
-              <label className="field">
-                <span>Fire date</span>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => patch(i, { fire_at: combineDateTime(e.target.value, time) })}
-                />
-              </label>
-              <label className="field">
-                <span>Time</span>
-                <input
-                  type="time"
-                  value={time}
-                  onChange={(e) => patch(i, { fire_at: combineDateTime(date, e.target.value) })}
-                />
-              </label>
+              </div>
+              {r.offset_rule ? (
+                <small className="muted">
+                  {describeOffset(r.offset_rule)} — fire time is computed from this on save.
+                </small>
+              ) : (
+                <small className="muted">Or set an exact fire date &amp; time below.</small>
+              )}
             </div>
-            {r.offset_rule && (
-              <small className="muted">
-                fire_at is recomputed from the offset on save.
-              </small>
-            )}
+
+            <label className="field">
+              <span>Fire at (exact)</span>
+              <DateTimeField
+                value={r.fire_at || null}
+                ariaLabel="Reminder fire date and time"
+                onChange={(v) => patch(i, { fire_at: v ?? '' })}
+              />
+            </label>
 
             <div className="field-row compact">
               <label className="field">
