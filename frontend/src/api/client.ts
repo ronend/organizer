@@ -1,4 +1,12 @@
-import type { NewOrganizer, Organizer } from '../types/organizer';
+import type {
+  EventDocument,
+  NewEvent,
+  UpdateEvent,
+  Template,
+  NewTemplate,
+  ReminderIndexEntry,
+  ShoppingEntry,
+} from '../types/organizer';
 
 const BASE_URL = '/api';
 
@@ -43,32 +51,65 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function getOrganizers(): Promise<Organizer[]> {
-  return request<Organizer[]>('/organizers');
+// ── Events ─────────────────────────────────────────────────────────────────
+
+export function getEvents(): Promise<EventDocument[]> {
+  return request<EventDocument[]>('/events');
 }
 
-export function createOrganizer(data: NewOrganizer): Promise<Organizer> {
-  return request<Organizer>('/organizers', {
+export function createEvent(data: NewEvent): Promise<EventDocument> {
+  return request<EventDocument>('/events', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
-export function updateOrganizer(
-  id: string,
-  updates: Partial<NewOrganizer>,
-): Promise<Organizer> {
-  return request<Organizer>(`/organizers/${id}`, {
+export function updateEvent(id: string, updates: UpdateEvent): Promise<EventDocument> {
+  return request<EventDocument>(`/events/${id}`, {
     method: 'PUT',
     body: JSON.stringify(updates),
   });
 }
 
-export function deleteOrganizer(id: string): Promise<void> {
-  return request<void>(`/organizers/${id}`, { method: 'DELETE' });
+export function deleteEvent(id: string): Promise<void> {
+  return request<void>(`/events/${id}`, { method: 'DELETE' });
 }
 
-/** Atomically complete a routine occurrence; backend spawns the next one + prereqs. */
-export function completeRoutine(id: string): Promise<{ created: Organizer[] }> {
-  return request<{ created: Organizer[] }>(`/organizers/${id}/complete`, { method: 'POST' });
+/** Mark done; if the event recurs, the backend spawns the next occurrence. */
+export function completeEvent(
+  id: string,
+): Promise<{ completed: EventDocument; next: EventDocument | null }> {
+  return request(`/events/${id}/complete`, { method: 'POST' });
+}
+
+// ── Templates ────────────────────────────────────────────────────────────────
+
+export function getTemplates(): Promise<Template[]> {
+  return request<Template[]>('/templates');
+}
+
+export function createTemplate(data: NewTemplate): Promise<Template> {
+  return request<Template>('/templates', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function updateTemplate(id: string, updates: Partial<NewTemplate>): Promise<Template> {
+  return request<Template>(`/templates/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
+export function deleteTemplate(id: string): Promise<void> {
+  return request<void>(`/templates/${id}`, { method: 'DELETE' });
+}
+
+// ── Derived views ────────────────────────────────────────────────────────────
+
+export function getUpcomingReminders(before?: string): Promise<ReminderIndexEntry[]> {
+  const qs = before ? `?before=${encodeURIComponent(before)}` : '';
+  return request<ReminderIndexEntry[]>(`/reminders/upcoming${qs}`);
+}
+
+export function getShoppingList(): Promise<ShoppingEntry[]> {
+  return request<ShoppingEntry[]>('/views/shopping');
 }

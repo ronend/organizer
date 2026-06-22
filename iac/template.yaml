@@ -170,15 +170,17 @@ Resources:
     Properties:
       TableName: organizer-items
       BillingMode: PAY_PER_REQUEST
+      # Single-table design: PK=userId, SK carries collection prefixes
+      # (EVENT#, REMIDX#, TMPL#) — see backend/src/db/dynamo.py.
       AttributeDefinitions:
         - AttributeName: userId
           AttributeType: S
-        - AttributeName: organizerId
+        - AttributeName: SK
           AttributeType: S
       KeySchema:
         - AttributeName: userId
           KeyType: HASH
-        - AttributeName: organizerId
+        - AttributeName: SK
           KeyType: RANGE
 
   # --- S3 Bucket for frontend ---

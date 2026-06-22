@@ -1,102 +1,68 @@
-import type { Reminder, Recurrence } from '../types/organizer';
-import { toDateStr } from './dates';
+// RFC 5545 RRULE + reminder offset_rule helpers (the supported subset mirrors
+// backend/src/recurrence.py: FREQ=DAILY|WEEKLY|MONTHLY|YEARLY + INTERVAL).
 
-const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+export type RRuleFreq = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
 
-export function toTimeStr(d: Date): string {
-  const h = String(d.getHours()).padStart(2, '0');
-  const m = String(d.getMinutes()).padStart(2, '0');
-  return `${h}:${m}`;
+export interface ParsedRRule {
+  freq: RRuleFreq;
+  interval: number;
 }
 
-export function parseDue(dateStr: string, timeStr: string): Date {
-  return new Date(`${dateStr}T${timeStr || '00:00'}`);
+/** Build an RRULE string, e.g. buildRRule('MONTHLY', 6) → "RRULE:FREQ=MONTHLY;INTERVAL=6". */
+export function buildRRule(freq: RRuleFreq, interval: number): string {
+  const n = Math.max(1, Math.floor(interval || 1));
+  return n > 1 ? `RRULE:FREQ=${freq};INTERVAL=${n}` : `RRULE:FREQ=${freq}`;
 }
 
-function startOfWeek(d: Date): Date {
-  const s = new Date(d);
-  s.setHours(0, 0, 0, 0);
-  s.setDate(s.getDate() - s.getDay());
-  return s;
-}
-
-function daysInMonth(year: number, month: number): number {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-/**
- * Next occurrence strictly after `prev`, honoring the recurrence rule.
- * `anchor` aligns interval steps for weekly/monthly rules.
- */
-export function nextOccurrence(prev: Date, r: Recurrence, anchor: Date): Date {
-  const interval = Math.max(1, Math.floor(r.interval || 1));
-
-  if (r.freq === 'day') {
-    const d = new Date(prev);
-    d.setDate(d.getDate() + interval);
-    return d;
+export function parseRRule(rule: string | null | undefined): ParsedRRule | null {
+  if (!rule) return null;
+  const body = rule.includes(':') ? rule.split(':', 2)[1] : rule;
+  const parts: Record<string, string> = {};
+  for (const chunk of body.split(';')) {
+    const [k, v] = chunk.split('=');
+    if (k && v) parts[k.trim().toUpperCase()] = v.trim().toUpperCase();
   }
-
-  if (r.freq === 'week') {
-    if (r.weekdays && r.weekdays.length) {
-      const set = new Set(r.weekdays);
-      const anchorWeek = startOfWeek(anchor).getTime();
-      const d = new Date(prev);
-      for (let i = 0; i < 366; i++) {
-        d.setDate(d.getDate() + 1);
-        const weeksFromAnchor = Math.round(
-          (startOfWeek(d).getTime() - anchorWeek) / (7 * 86400000),
-        );
-        if (set.has(d.getDay()) && ((weeksFromAnchor % interval) + interval) % interval === 0) {
-          return d;
-        }
-      }
-    }
-    const d = new Date(prev);
-    d.setDate(d.getDate() + 7 * interval);
-    return d;
-  }
-
-  // month
-  const d = new Date(prev);
-  if (r.monthDay) {
-    d.setMonth(d.getMonth() + interval, 1);
-    d.setDate(Math.min(r.monthDay, daysInMonth(d.getFullYear(), d.getMonth())));
-    return d;
-  }
-  d.setMonth(d.getMonth() + interval);
-  return d;
+  const freq = parts.FREQ as RRuleFreq | undefined;
+  if (!freq || !['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(freq)) return null;
+  const interval = Math.max(1, parseInt(parts.INTERVAL ?? '1', 10) || 1);
+  return { freq, interval };
 }
 
-/** Due date/time of a reminder for an occurrence at `occurrence`. */
-export function reminderDue(occurrence: Date, r: Reminder): Date {
-  const d = new Date(occurrence);
-  d.setDate(d.getDate() - (r.daysBefore || 0));
-  return d;
+const FREQ_UNIT: Record<RRuleFreq, string> = {
+  DAILY: 'day',
+  WEEKLY: 'week',
+  MONTHLY: 'month',
+  YEARLY: 'year',
+};
+
+/** Human-readable cadence, e.g. "Every 6 months". */
+export function describeRRule(rule: string | null | undefined): string {
+  const parsed = parseRRule(rule);
+  if (!parsed) return '';
+  const unit = FREQ_UNIT[parsed.freq];
+  return parsed.interval > 1 ? `Every ${parsed.interval} ${unit}s` : `Every ${unit}`;
 }
 
-export function reminderDueStrings(occurrence: Date, r: Reminder): {
-  dueDate: string;
-  dueTime: string;
-} {
-  const d = reminderDue(occurrence, r);
-  return { dueDate: toDateStr(d), dueTime: toTimeStr(d) };
-}
+// ── offset_rule ────────────────────────────────────────────────────────────
 
-/** Human-readable cadence, e.g. "Every 3 weeks on Mon, Thu". */
-export function describeRecurrence(r: Recurrence | null | undefined): string {
-  if (!r) return '';
-  const n = Math.max(1, Math.floor(r.interval || 1));
-  const unit = r.freq;
-  const every = n > 1 ? `Every ${n} ${unit}s` : `Every ${unit}`;
-  if (r.freq === 'week' && r.weekdays && r.weekdays.length) {
-    const days = [...r.weekdays].sort((a, b) => a - b).map((w) => WEEKDAY_NAMES[w]).join(', ');
-    return `${every} on ${days}`;
-  }
-  if (r.freq === 'month' && r.monthDay) {
-    return `${every} on day ${r.monthDay}`;
-  }
-  return every;
-}
+const OFFSET_RE = /^([+-]?)(\d+)\s*([smhdw])$/i;
+const UNIT_LABEL: Record<string, string> = {
+  s: 'second',
+  m: 'minute',
+  h: 'hour',
+  d: 'day',
+  w: 'week',
+};
 
-export { WEEKDAY_NAMES };
+/** Human-readable offset, e.g. "-30d" → "30 days before", "+1d" → "1 day after". */
+export function describeOffset(rule: string | null | undefined): string {
+  if (rule == null) return '';
+  const r = rule.trim().toLowerCase();
+  if (r === '0' || r === '+0' || r === '-0') return 'at the time of the event';
+  const m = OFFSET_RE.exec(r);
+  if (!m) return rule;
+  const [, sign, num, unit] = m;
+  const n = parseInt(num, 10);
+  const label = UNIT_LABEL[unit] + (n === 1 ? '' : 's');
+  return `${n} ${label} ${sign === '-' ? 'before' : 'after'}`;
+}

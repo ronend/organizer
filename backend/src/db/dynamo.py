@@ -1,22 +1,43 @@
-"""DynamoDB helpers (boto3). Single table, partition key userId, sort key
-organizerId. boto3 is provided by the Lambda runtime."""
+"""DynamoDB data layer for the event model (see data-structure.md).
+
+Single table, partition key ``userId``. The three logical collections share the
+partition and are separated by sort-key (``SK``) prefixes:
+
+    EVENT#<event_id>                 → an EventDocument (items/reminders/
+                                       checklists/attachments embedded)
+    REMIDX#<fire_at>#<reminder_id>   → a flat ReminderIndexEntry projection
+    TMPL#<template_id>               → a reusable checklist Template
+
+The reminders_index rows are a write-through projection of every reminder across
+all events — never the source of truth. They are re-synced on every event write
+and deleted with their event. boto3 is provided by the Lambda runtime.
+"""
 
 import os
-import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Optional, TypedDict
+from typing import Any, Optional
 
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
+from src import ids
+from src import recurrence as rec
+
 _TABLE_NAME = os.environ["DYNAMO_TABLE"]
 _table = boto3.resource("dynamodb").Table(_TABLE_NAME)
 
+EVENT_PREFIX = "EVENT#"
+REMIDX_PREFIX = "REMIDX#"
+TMPL_PREFIX = "TMPL#"
+
+
+# ── (de)serialization helpers ──────────────────────────────────────────────────
+
 
 def _plain(v: Any) -> Any:
-    """Convert DynamoDB Decimals (incl. nested) to plain JSON numbers."""
+    """DynamoDB Decimals (incl. nested) → plain JSON numbers."""
     if isinstance(v, Decimal):
         return int(v) if v % 1 == 0 else float(v)
     if isinstance(v, list):
@@ -26,262 +47,505 @@ def _plain(v: Any) -> Any:
     return v
 
 
-class Organizer(TypedDict, total=False):
-    id: str
-    userId: str
-    createdAt: str
-    tags: list           # free-form labels (replaces old single `category`)
-    type: str            # task | trip | recurring
-    title: str
-    description: str     # rich text (HTML)
-    dueDate: str         # YYYY-MM-DD
-    dueTime: str         # HH:MM
-    done: bool
-    link: str            # task: optional URL
-    contacts: list       # task: [{name, role, phone, email}]
-    dependsOn: list      # task: [{entryId, daysBefore}]
-    startDate: str       # trip: itinerary start (YYYY-MM-DD)
-    endDate: str         # trip: itinerary end (YYYY-MM-DD)
-    segments: list       # trip: ordered itinerary segments
-    recurrence: Any      # recurring cadence (or None)
-    reminders: list      # recurring: auto-spawn reminder templates
-    parentId: Any        # spawned reminder -> parent recurring id (or None)
-    isPrereq: bool       # spawned reminder sub-task flag
+def _numify(v: Any) -> Any:
+    """floats → Decimal (DynamoDB rejects float). bool/int pass through."""
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, float):
+        return Decimal(str(v))
+    if isinstance(v, list):
+        return [_numify(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _numify(x) for k, x in v.items()}
+    return v
 
 
-# Legacy entry types -> new types (lazy migration on read, no DB write).
-_TYPE_MIGRATION = {
-    "simple": "task",
-    "complex": "task",
-    "project": "task",
-    "repeat": "recurring",
-    "routine": "recurring",
-}
+def _now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def _migrate_tags(item: dict) -> list:
-    """Prefer stored `tags`; else derive from the legacy single `category`
-    (the old default 'errand' becomes no tag)."""
-    stored = _plain(item.get("tags"))
-    if stored:
-        return stored
-    cat = item.get("category")
-    if cat and cat != "errand":
-        return [cat]
-    return []
+def _get(d: dict, key: str, default: Any) -> Any:
+    val = d.get(key, default)
+    return default if val is None else val
 
 
-def _migrate_reminders(item: dict) -> list:
-    """Prefer stored `reminders`; else map legacy `prerequisites`
-    (title -> label, leadDays -> daysBefore)."""
-    stored = _plain(item.get("reminders"))
-    if stored:
-        return stored
-    legacy = _plain(item.get("prerequisites")) or []
-    return [
-        {
-            "label": p.get("title", ""),
-            "daysBefore": int(p.get("leadDays", 0) or 0),
-            "note": p.get("note", ""),
-        }
-        for p in legacy
-    ]
+# ── Subdocument builders (assign ids, fill defaults, compute fire_at) ──────────
 
 
-def _to_organizer(item: dict) -> Organizer:
-    # Defaults keep any legacy {text, done} items readable.
-    raw_type = item.get("type", "task")
+def _build_reminder(raw: dict, parent_date: Optional[datetime]) -> dict:
+    raw = raw or {}
+    offset_rule = raw.get("offset_rule")
+    fire_at = raw.get("fire_at") or ""
+    # Resolve offset_rule against the parent date when possible; otherwise keep
+    # whatever fire_at was supplied.
+    if offset_rule and parent_date is not None:
+        computed = rec.resolve_offset(parent_date, offset_rule)
+        if computed is not None:
+            fire_at = rec.to_iso(computed)
     return {
-        "id": item["organizerId"],
-        "userId": item["userId"],
-        "createdAt": item.get("createdAt", ""),
-        "tags": _migrate_tags(item),
-        "type": _TYPE_MIGRATION.get(raw_type, raw_type),
-        "title": item.get("title", item.get("text", "(untitled)")),
-        "description": item.get("description", ""),
-        "dueDate": item.get("dueDate", ""),
-        "dueTime": item.get("dueTime", "09:00"),
-        "done": bool(item.get("done", False)),
-        "link": item.get("link", ""),
-        "contacts": _plain(item.get("contacts", [])) or [],
-        "dependsOn": _plain(item.get("dependsOn", [])) or [],
-        "startDate": item.get("startDate", ""),
-        "endDate": item.get("endDate", ""),
-        "segments": _plain(item.get("segments", [])) or [],
-        "recurrence": _plain(item.get("recurrence")) or None,
-        "reminders": _migrate_reminders(item),
-        "parentId": item.get("parentId") or None,
-        "isPrereq": bool(item.get("isPrereq", False)),
+        "id": raw.get("id") or ids.reminder_id(),
+        "title": _get(raw, "title", ""),
+        "status": _get(raw, "status", "pending"),
+        "fire_at": fire_at,
+        "offset_rule": offset_rule,
+        "recurrence_rule": raw.get("recurrence_rule"),
+        "notes": raw.get("notes"),
+        "url": raw.get("url"),
+        "login_hint": raw.get("login_hint"),
+        "attrs": _get(raw, "attrs", {}),
     }
 
 
-def list_organizers(user_id: str) -> list[Organizer]:
-    resp = _table.query(KeyConditionExpression=Key("userId").eq(user_id))
-    return [_to_organizer(item) for item in resp.get("Items", [])]
-
-
-def create_organizer(user_id: str, data: dict[str, Any]) -> Organizer:
-    item = {
-        "userId": user_id,
-        "organizerId": str(uuid.uuid4()),
-        "createdAt": datetime.now(timezone.utc).isoformat(),
-        "tags": data.get("tags") or [],
-        "type": data.get("type") or "task",
-        "title": data.get("title") or "",
-        "description": data.get("description") or "",
-        "dueDate": data.get("dueDate") or "",
-        "dueTime": data.get("dueTime") or "09:00",
-        "done": bool(data.get("done", False)),
-        "link": data.get("link") or "",
-        "contacts": data.get("contacts") or [],
-        "dependsOn": data.get("dependsOn") or [],
-        "startDate": data.get("startDate") or "",
-        "endDate": data.get("endDate") or "",
-        "segments": data.get("segments") or [],
-        "reminders": data.get("reminders") or [],
-        "isPrereq": bool(data.get("isPrereq", False)),
+def _build_checklist_item(raw: dict) -> dict:
+    raw = raw or {}
+    return {
+        "id": raw.get("id") or ids.checklist_item_id(),
+        "label": _get(raw, "label", ""),
+        "checked": bool(raw.get("checked", False)),
+        "needs_purchase": bool(raw.get("needs_purchase", False)),
+        "purchased": bool(raw.get("purchased", False)),
+        "notes": raw.get("notes"),
+        "sort_order": _get(raw, "sort_order", 0),
     }
-    if data.get("recurrence"):
-        item["recurrence"] = data["recurrence"]
-    if data.get("parentId"):
-        item["parentId"] = data["parentId"]
-    _table.put_item(Item=item)
-    return _to_organizer(item)
 
 
-def update_organizer(
-    user_id: str,
-    organizer_id: str,
-    updates: dict[str, Any],
-) -> Optional[Organizer]:
-    # Build a SET expression with aliased names (covers reserved words like
-    # `type` and `done`) for whichever fields were provided.
-    sets: list[str] = []
-    names: dict[str, str] = {}
-    values: dict[str, Any] = {}
-    for i, (field, value) in enumerate(updates.items()):
-        if value is None:
-            continue
-        nk, vk = f"#f{i}", f":v{i}"
-        names[nk] = field
-        values[vk] = value
-        sets.append(f"{nk} = {vk}")
+def _build_checklist(raw: dict) -> dict:
+    raw = raw or {}
+    return {
+        "id": raw.get("id") or ids.checklist_id(),
+        "template_id": raw.get("template_id"),
+        "name": _get(raw, "name", ""),
+        "items": [_build_checklist_item(i) for i in _get(raw, "items", [])],
+    }
 
-    if not sets:
-        # Nothing to update — return the current item if it exists.
-        return next(
-            (o for o in list_organizers(user_id) if o["id"] == organizer_id), None
+
+def _build_attachment(raw: dict) -> dict:
+    raw = raw or {}
+    return {
+        "id": raw.get("id") or ids.attachment_id(),
+        "label": _get(raw, "label", ""),
+        "item_id": raw.get("item_id"),
+        "mime_type": raw.get("mime_type"),
+        "url": raw.get("url"),
+        "storage_key": raw.get("storage_key"),
+    }
+
+
+def _build_item(raw: dict) -> dict:
+    raw = raw or {}
+    # An item's reminders are relative to when the item happens / is due.
+    parent_date = rec.parse_iso(raw.get("scheduled_at")) or rec.parse_iso(raw.get("due_at"))
+    return {
+        "id": raw.get("id") or ids.item_id(),
+        "kind": _get(raw, "kind", "task"),
+        "subtype": _get(raw, "subtype", ""),
+        "tags": _get(raw, "tags", []),
+        "title": _get(raw, "title", ""),
+        "status": _get(raw, "status", "todo"),
+        "scheduled_at": raw.get("scheduled_at"),
+        "due_at": raw.get("due_at"),
+        "sort_order": _get(raw, "sort_order", 0),
+        "confirmation_ref": raw.get("confirmation_ref"),
+        "cost": raw.get("cost"),
+        "currency": raw.get("currency"),
+        "address": raw.get("address"),
+        "phone": raw.get("phone"),
+        "url": raw.get("url"),
+        "login_hint": raw.get("login_hint"),
+        "prereq_ids": _get(raw, "prereq_ids", []),
+        "attrs": _get(raw, "attrs", {}),
+        "reminders": [_build_reminder(r, parent_date) for r in _get(raw, "reminders", [])],
+    }
+
+
+def _build_event(user_id: str, raw: dict, existing: Optional[dict] = None) -> dict:
+    """Assemble a canonical EventDocument: assign missing ids, fill defaults,
+    resolve reminder fire_at. ``existing`` preserves id/created_at on update."""
+    raw = raw or {}
+    event_id = (existing or {}).get("id") or raw.get("id") or ids.event_id()
+    created_at = (existing or {}).get("created_at") or raw.get("created_at") or _now()
+    parent_date = rec.parse_iso(raw.get("start_date"))
+    return {
+        "id": event_id,
+        "parent_id": raw.get("parent_id"),
+        "kind": _get(raw, "kind", "list"),
+        "subtype": _get(raw, "subtype", ""),
+        "tags": _get(raw, "tags", []),
+        "title": _get(raw, "title", ""),
+        "status": _get(raw, "status", "planned"),
+        "start_date": raw.get("start_date"),
+        "end_date": raw.get("end_date"),
+        "recurrence_rule": raw.get("recurrence_rule"),
+        "attrs": _get(raw, "attrs", {}),
+        "items": [_build_item(i) for i in _get(raw, "items", [])],
+        "reminders": [_build_reminder(r, parent_date) for r in _get(raw, "reminders", [])],
+        "checklists": [_build_checklist(c) for c in _get(raw, "checklists", [])],
+        "attachments": [_build_attachment(a) for a in _get(raw, "attachments", [])],
+        "created_at": created_at,
+        "updated_at": _now(),
+    }
+
+
+# ── Reminder index projection ──────────────────────────────────────────────────
+
+
+def _index_entries(event: dict) -> list[dict]:
+    """Flatten every reminder in an event (event-level + per-item) into index
+    entry dicts. Only reminders with a non-empty fire_at are indexable."""
+    out: list[dict] = []
+
+    def add(rem: dict, item_id: Optional[str]) -> None:
+        fire_at = rem.get("fire_at")
+        if not fire_at:
+            return
+        out.append(
+            {
+                "id": rem["id"],
+                "event_id": event["id"],
+                "item_id": item_id,
+                "title": rem.get("title", ""),
+                "fire_at": fire_at,
+                "recurrence_rule": rem.get("recurrence_rule"),
+                "status": rem.get("status", "pending"),
+            }
         )
 
-    try:
-        resp = _table.update_item(
-            Key={"userId": user_id, "organizerId": organizer_id},
-            UpdateExpression="SET " + ", ".join(sets),
-            ExpressionAttributeNames=names,
-            ExpressionAttributeValues=values,
-            # Only update an item that already exists for this user.
-            ConditionExpression="attribute_exists(organizerId)",
-            ReturnValues="ALL_NEW",
-        )
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
-            return None
-        raise
-
-    return _to_organizer(resp["Attributes"])
+    for rem in event.get("reminders", []):
+        add(rem, None)
+    for item in event.get("items", []):
+        for rem in item.get("reminders", []):
+            add(rem, item["id"])
+    return out
 
 
-def delete_organizer(user_id: str, organizer_id: str) -> None:
-    _table.delete_item(Key={"userId": user_id, "organizerId": organizer_id})
+def _delete_index_for_event(user_id: str, event_id: str) -> None:
+    resp = _table.query(
+        KeyConditionExpression=Key("userId").eq(user_id)
+        & Key("SK").begins_with(REMIDX_PREFIX),
+        FilterExpression="event_id = :e",
+        ExpressionAttributeValues={":e": event_id},
+    )
+    rows = resp.get("Items", [])
+    if not rows:
+        return
+    with _table.batch_writer() as bw:
+        for row in rows:
+            bw.delete_item(Key={"userId": user_id, "SK": row["SK"]})
 
 
-def get_organizer(user_id: str, organizer_id: str) -> Optional[Organizer]:
-    resp = _table.get_item(Key={"userId": user_id, "organizerId": organizer_id})
+def _sync_index(user_id: str, event: dict) -> None:
+    """Write-through: replace this event's index rows with a fresh projection."""
+    _delete_index_for_event(user_id, event["id"])
+    entries = _index_entries(event)
+    if not entries:
+        return
+    with _table.batch_writer() as bw:
+        for entry in entries:
+            sk = f"{REMIDX_PREFIX}{entry['fire_at']}#{entry['id']}"
+            bw.put_item(Item=_numify({"userId": user_id, "SK": sk, **entry}))
+
+
+# ── Event persistence ──────────────────────────────────────────────────────────
+
+
+def _put_event(user_id: str, event: dict) -> None:
+    item = {"userId": user_id, "SK": f"{EVENT_PREFIX}{event['id']}", **event}
+    _table.put_item(Item=_numify(item))
+
+
+def _strip(item: dict) -> dict:
+    """Drop internal table keys, returning the bare document."""
+    out = _plain(item)
+    out.pop("userId", None)
+    out.pop("SK", None)
+    return out
+
+
+def list_events(user_id: str) -> list[dict]:
+    resp = _table.query(
+        KeyConditionExpression=Key("userId").eq(user_id)
+        & Key("SK").begins_with(EVENT_PREFIX)
+    )
+    return [_strip(i) for i in resp.get("Items", [])]
+
+
+def get_event(user_id: str, event_id: str) -> Optional[dict]:
+    resp = _table.get_item(Key={"userId": user_id, "SK": f"{EVENT_PREFIX}{event_id}"})
     item = resp.get("Item")
-    return _to_organizer(item) if item else None
+    return _strip(item) if item else None
 
 
-# --- Routine rollover (atomic) ---
-from boto3.dynamodb.types import TypeSerializer  # noqa: E402
-from src import recurrence as _occurrence  # noqa: E402
-
-_serializer = TypeSerializer()
-
-
-def _marshal(item: dict) -> dict:
-    return {k: _serializer.serialize(v) for k, v in item.items()}
+def create_event(user_id: str, data: dict) -> dict:
+    event = _build_event(user_id, data)
+    _apply_matching_templates(user_id, event)
+    _put_event(user_id, event)
+    _sync_index(user_id, event)
+    return event
 
 
-def complete_routine(user_id: str, organizer_id: str) -> Optional[list[Organizer]]:
-    """Mark a routine occurrence done and, in a single DynamoDB transaction,
-    create the next occurrence plus its prerequisite items. Returns the newly
-    created items, or None if the routine doesn't exist."""
-    resp = _table.get_item(Key={"userId": user_id, "organizerId": organizer_id})
-    raw = resp.get("Item")
-    if not raw:
+def update_event(user_id: str, event_id: str, updates: dict) -> Optional[dict]:
+    existing = get_event(user_id, event_id)
+    if existing is None:
+        return None
+    # Merge: provided top-level fields replace; everything else is preserved.
+    merged = {**existing, **updates}
+    event = _build_event(user_id, merged, existing=existing)
+    _put_event(user_id, event)
+    _sync_index(user_id, event)
+    return event
+
+
+def delete_event(user_id: str, event_id: str) -> bool:
+    existing = get_event(user_id, event_id)
+    if existing is None:
+        return False
+    _table.delete_item(Key={"userId": user_id, "SK": f"{EVENT_PREFIX}{event_id}"})
+    _delete_index_for_event(user_id, event_id)
+    return True
+
+
+def complete_event_occurrence(user_id: str, event_id: str) -> Optional[dict]:
+    """Mark an event done. If it carries a recurrence_rule, generate the next
+    occurrence as a fresh event document (copying structure, resetting state).
+    Returns {"completed": <event>, "next": <event|None>}, or None if missing.
+    """
+    existing = get_event(user_id, event_id)
+    if existing is None:
         return None
 
-    client = _table.meta.client
-    transact: list[dict] = [
-        {
-            "Update": {
-                "TableName": _TABLE_NAME,
-                "Key": {"userId": {"S": user_id}, "organizerId": {"S": organizer_id}},
-                "UpdateExpression": "SET #d = :t",
-                "ExpressionAttributeNames": {"#d": "done"},
-                "ExpressionAttributeValues": {":t": {"BOOL": True}},
-                "ConditionExpression": "attribute_exists(organizerId)",
-            }
+    completed = {**existing, "status": "done"}
+    completed = _build_event(user_id, completed, existing=existing)
+    _put_event(user_id, completed)
+    _sync_index(user_id, completed)
+
+    nxt = None
+    rule = existing.get("recurrence_rule")
+    prev = rec.parse_iso(existing.get("start_date"))
+    if rule and prev is not None:
+        nxt_date = rec.next_occurrence(prev, rule)
+        if nxt_date is not None:
+            nxt = _spawn_next_occurrence(user_id, existing, nxt_date)
+
+    return {"completed": completed, "next": nxt}
+
+
+def _spawn_next_occurrence(user_id: str, prev: dict, next_start: datetime) -> dict:
+    """Copy an event's structure into a new occurrence: new ids, reset statuses,
+    cleared fire_at (recomputed from the new start_date via offset_rule)."""
+    span_days = 0
+    start_prev = rec.parse_iso(prev.get("start_date"))
+    end_prev = rec.parse_iso(prev.get("end_date"))
+    if start_prev and end_prev:
+        span_days = (end_prev - start_prev).days
+    new_start = rec.to_date_str(next_start)
+    new_end = rec.to_date_str(next_start + _rec_timedelta(span_days)) if end_prev else None
+
+    def reset_reminder(r: dict) -> dict:
+        return {**r, "id": None, "status": "pending", "fire_at": ""}
+
+    def reset_item(i: dict) -> dict:
+        return {
+            **i,
+            "id": None,
+            "status": "todo",
+            # drop absolute dates on the copy; the user re-times the occurrence
+            "reminders": [reset_reminder(r) for r in i.get("reminders", [])],
         }
+
+    template = {
+        **prev,
+        "id": None,
+        "status": "planned",
+        "start_date": new_start,
+        "end_date": new_end,
+        "items": [reset_item(i) for i in prev.get("items", [])],
+        "reminders": [reset_reminder(r) for r in prev.get("reminders", [])],
+        "created_at": None,
+    }
+    nxt = _build_event(user_id, template)
+    _put_event(user_id, nxt)
+    _sync_index(user_id, nxt)
+    return nxt
+
+
+def _rec_timedelta(days: int):
+    from datetime import timedelta
+
+    return timedelta(days=days)
+
+
+# ── Templates ───────────────────────────────────────────────────────────────────
+
+
+def _build_template(raw: dict, existing: Optional[dict] = None) -> dict:
+    raw = raw or {}
+    tmpl_id = (existing or {}).get("id") or raw.get("id") or ids.template_id(raw.get("name", ""))
+    created_at = (existing or {}).get("created_at") or _now()
+    items = []
+    for i in _get(raw, "items", []):
+        items.append(
+            {
+                "id": i.get("id") or ids.nanoid(6),
+                "label": _get(i, "label", ""),
+                "category": i.get("category"),
+                "needs_purchase": bool(i.get("needs_purchase", False)),
+                "sort_order": _get(i, "sort_order", 0),
+                "default_reminder_offset": i.get("default_reminder_offset"),
+                "notes": i.get("notes"),
+            }
+        )
+    return {
+        "id": tmpl_id,
+        "name": _get(raw, "name", ""),
+        "applies_to_subtype": raw.get("applies_to_subtype"),
+        "auto_apply": bool(raw.get("auto_apply", False)),
+        "description": raw.get("description"),
+        "tags": _get(raw, "tags", []),
+        "items": items,
+        "created_at": created_at,
+        "updated_at": _now(),
+    }
+
+
+def list_templates(user_id: str) -> list[dict]:
+    resp = _table.query(
+        KeyConditionExpression=Key("userId").eq(user_id)
+        & Key("SK").begins_with(TMPL_PREFIX)
+    )
+    return [_strip(i) for i in resp.get("Items", [])]
+
+
+def get_template(user_id: str, template_id: str) -> Optional[dict]:
+    resp = _table.get_item(Key={"userId": user_id, "SK": f"{TMPL_PREFIX}{template_id}"})
+    item = resp.get("Item")
+    return _strip(item) if item else None
+
+
+def _put_template(user_id: str, tmpl: dict) -> None:
+    item = {"userId": user_id, "SK": f"{TMPL_PREFIX}{tmpl['id']}", **tmpl}
+    _table.put_item(Item=_numify(item))
+
+
+def create_template(user_id: str, data: dict) -> dict:
+    tmpl = _build_template(data)
+    _put_template(user_id, tmpl)
+    return tmpl
+
+
+def update_template(user_id: str, template_id: str, updates: dict) -> Optional[dict]:
+    existing = get_template(user_id, template_id)
+    if existing is None:
+        return None
+    tmpl = _build_template({**existing, **updates}, existing=existing)
+    _put_template(user_id, tmpl)
+    return tmpl
+
+
+def delete_template(user_id: str, template_id: str) -> bool:
+    existing = get_template(user_id, template_id)
+    if existing is None:
+        return False
+    _table.delete_item(Key={"userId": user_id, "SK": f"{TMPL_PREFIX}{template_id}"})
+    return True
+
+
+def _apply_matching_templates(user_id: str, event: dict) -> None:
+    """On event create: for every auto_apply template whose applies_to_subtype
+    matches the event's subtype, instantiate a checklist (snapshot of the
+    template items) and create event-level reminders for items that carry a
+    default_reminder_offset. Mutates ``event`` in place."""
+    subtype = (event.get("subtype") or "").strip().lower()
+    if not subtype:
+        return
+    matches = [
+        t
+        for t in list_templates(user_id)
+        if t.get("auto_apply")
+        and (t.get("applies_to_subtype") or "").strip().lower() == subtype
     ]
-
-    recurrence = _plain(raw.get("recurrence"))
-    created: list[dict] = []
-
-    if recurrence:
-        prev = _occurrence.parse_due(raw.get("dueDate", ""), raw.get("dueTime", "09:00"))
-        nxt = _occurrence.next_occurrence(prev, recurrence, prev)
-        tags = _migrate_tags(raw)
-        reminders = _migrate_reminders(raw)
-        next_id = str(uuid.uuid4())
-        next_item = {
-            "userId": user_id,
-            "organizerId": next_id,
-            "createdAt": datetime.now(timezone.utc).isoformat(),
-            "tags": tags,
-            "type": "recurring",
-            "title": raw.get("title", ""),
-            "description": raw.get("description", ""),
-            "dueDate": _occurrence.to_date_str(nxt),
-            "dueTime": _occurrence.to_time_str(nxt),
-            "done": False,
-            "recurrence": recurrence,
-            "reminders": reminders,
-            "isPrereq": False,
+    if not matches:
+        return
+    start = rec.parse_iso(event.get("start_date"))
+    for tmpl in matches:
+        checklist = {
+            "id": ids.checklist_id(),
+            "template_id": tmpl["id"],
+            "name": tmpl.get("name", ""),
+            "items": [],
         }
-        transact.append({"Put": {"TableName": _TABLE_NAME, "Item": _marshal(next_item)}})
-        created.append(next_item)
+        for ti in tmpl.get("items", []):
+            checklist["items"].append(
+                _build_checklist_item(
+                    {
+                        "label": ti.get("label", ""),
+                        "needs_purchase": ti.get("needs_purchase", False),
+                        "sort_order": ti.get("sort_order", 0),
+                        "notes": ti.get("notes"),
+                    }
+                )
+            )
+            offset = ti.get("default_reminder_offset")
+            if offset and start is not None:
+                event["reminders"].append(
+                    _build_reminder(
+                        {
+                            "title": ti.get("label", ""),
+                            "offset_rule": offset,
+                            "notes": ti.get("notes"),
+                        },
+                        start,
+                    )
+                )
+        event["checklists"].append(checklist)
 
-        # none / one / many reminders -> auto-created sub-tasks
-        for r in reminders:
-            due = _occurrence.prereq_due(nxt, r)
-            reminder_item = {
-                "userId": user_id,
-                "organizerId": str(uuid.uuid4()),
-                "createdAt": datetime.now(timezone.utc).isoformat(),
-                "tags": tags,
-                "type": "task",
-                "title": r.get("label", ""),
-                "description": r.get("note", ""),
-                "dueDate": _occurrence.to_date_str(due),
-                "dueTime": _occurrence.to_time_str(due),
-                "done": False,
-                "reminders": [],
-                "parentId": next_id,
-                "isPrereq": True,
-            }
-            transact.append({"Put": {"TableName": _TABLE_NAME, "Item": _marshal(reminder_item)}})
-            created.append(reminder_item)
 
-    client.transact_write_items(TransactItems=transact)
-    return [_to_organizer(i) for i in created]
+# ── reminders_index queries + derived views ────────────────────────────────────
+
+
+def upcoming_reminders(
+    user_id: str,
+    before_iso: Optional[str] = None,
+    status: Optional[str] = "pending",
+    limit: int = 50,
+) -> list[dict]:
+    """Query the flat index ordered by fire_at (SK sorts lexicographically,
+    which matches ISO 8601 chronological order)."""
+    cond = Key("userId").eq(user_id) & Key("SK").begins_with(REMIDX_PREFIX)
+    filters = []
+    values: dict[str, Any] = {}
+    if status is not None:
+        filters.append("#s = :st")
+        values[":st"] = status
+    if before_iso is not None:
+        filters.append("fire_at <= :b")
+        values[":b"] = before_iso
+    kwargs: dict[str, Any] = {"KeyConditionExpression": cond}
+    if filters:
+        kwargs["FilterExpression"] = " AND ".join(filters)
+        kwargs["ExpressionAttributeValues"] = values
+        if status is not None:
+            kwargs["ExpressionAttributeNames"] = {"#s": "status"}
+    resp = _table.query(**kwargs)
+    rows = [_strip(i) for i in resp.get("Items", [])]
+    return rows[:limit]
+
+
+def shopping_list(user_id: str) -> list[dict]:
+    """Derived view: every checklist item that needs purchasing and isn't yet
+    purchased, across all events, annotated with event/checklist context."""
+    out: list[dict] = []
+    for event in list_events(user_id):
+        for cl in event.get("checklists", []):
+            for ci in cl.get("items", []):
+                if ci.get("needs_purchase") and not ci.get("purchased"):
+                    out.append(
+                        {
+                            **ci,
+                            "event_id": event["id"],
+                            "event_title": event.get("title", ""),
+                            "checklist_id": cl["id"],
+                            "checklist_name": cl.get("name", ""),
+                        }
+                    )
+    out.sort(key=lambda x: (x.get("event_title", ""), x.get("sort_order", 0)))
+    return out

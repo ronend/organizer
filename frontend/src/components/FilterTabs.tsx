@@ -1,36 +1,48 @@
-import type { Organizer } from '../types/organizer';
+import type { EventDocument } from '../types/organizer';
 import { labelize } from '../types/organizer';
-import { compareByDue, isOverdue, isToday } from '../lib/dates';
+import { compareByStart, isOverdue, isToday } from '../lib/dates';
 
-// Built-in tabs come first; any user tag becomes an additional cross-type tab.
-export const SPECIAL_TABS = ['today', 'tasks', 'trips', 'recurring'] as const;
-export type Tab = string; // 'today' | 'tasks' | 'trips' | 'recurring' | a tag label
+// Event-card tabs (filter the events list).
+export const KIND_TABS = ['container', 'occurrence', 'habit', 'list'] as const;
+export const SPECIAL_TABS = ['today', ...KIND_TABS] as const;
+// Derived-view tabs (render their own views, not event cards).
+export const VIEW_TABS = ['reminders', 'shopping'] as const;
 
-const SPECIAL_LABELS: Record<string, string> = {
+export type Tab = string;
+
+const TAB_LABELS: Record<string, string> = {
   today: 'Today',
-  tasks: 'Tasks',
-  trips: 'Trips',
-  recurring: 'Recurring',
+  container: 'Trips / Projects',
+  occurrence: 'Appointments',
+  habit: 'Habits',
+  list: 'Lists',
+  reminders: 'Reminders',
+  shopping: 'Shopping',
 };
 
-/** Entries belonging to a tab. */
-export function itemsForTab(items: Organizer[], tab: Tab): Organizer[] {
-  let filtered: Organizer[];
+export function isViewTab(tab: Tab): boolean {
+  return (VIEW_TABS as readonly string[]).includes(tab);
+}
+
+/** Events belonging to a (non-view) tab. */
+export function itemsForTab(items: EventDocument[], tab: Tab): EventDocument[] {
+  let filtered: EventDocument[];
   if (tab === 'today') filtered = items.filter((i) => isToday(i) || isOverdue(i));
-  else if (tab === 'tasks') filtered = items.filter((i) => i.type === 'task');
-  else if (tab === 'trips') filtered = items.filter((i) => i.type === 'trip');
-  else if (tab === 'recurring') filtered = items.filter((i) => i.type === 'recurring');
-  else filtered = items.filter((i) => i.tags?.includes(tab));
-  return [...filtered].sort(compareByDue);
+  else if ((KIND_TABS as readonly string[]).includes(tab)) filtered = items.filter((i) => i.kind === tab);
+  else if (isViewTab(tab)) filtered = [];
+  else filtered = items.filter((i) => i.tags.includes(tab));
+  return [...filtered].sort(compareByStart);
 }
 
 export function tabLabel(tab: Tab): string {
-  return SPECIAL_LABELS[tab] ?? labelize(tab);
+  return TAB_LABELS[tab] ?? labelize(tab);
 }
 
 interface Props {
-  items: Organizer[];
-  tags: string[]; // user tags currently in use (sorted)
+  items: EventDocument[];
+  tags: string[];
+  reminderCount: number;
+  shoppingCount: number;
   activeTab: Tab;
   onSelectTab: (tab: Tab) => void;
   onSelectItem: (id: string, tab: Tab) => void;
@@ -40,19 +52,24 @@ interface Props {
 export default function FilterTabs({
   items,
   tags,
+  reminderCount,
+  shoppingCount,
   activeTab,
   onSelectTab,
   onSelectItem,
   onDeleteTag,
 }: Props) {
-  const tabs: Tab[] = [...SPECIAL_TABS, ...tags];
+  const viewCounts: Record<string, number> = { reminders: reminderCount, shopping: shoppingCount };
+  const tabs: Tab[] = [...SPECIAL_TABS, ...VIEW_TABS, ...tags];
+
   return (
     <nav className="tabs">
       {tabs.map((tab) => {
-        const tabItems = itemsForTab(items, tab);
-        const isTag = !SPECIAL_TABS.includes(tab as (typeof SPECIAL_TABS)[number]);
-        // Tag tabs always get a dropdown (so Delete is reachable even at 0).
-        const showDropdown = tabItems.length > 0 || isTag;
+        const view = isViewTab(tab);
+        const tabItems = view ? [] : itemsForTab(items, tab);
+        const isTag = !(SPECIAL_TABS as readonly string[]).includes(tab) && !view;
+        const count = view ? viewCounts[tab] ?? 0 : tabItems.length;
+        const showDropdown = !view && (tabItems.length > 0 || isTag);
         return (
           <div key={tab} className="tab-wrap">
             <button
@@ -60,29 +77,29 @@ export default function FilterTabs({
               onClick={() => onSelectTab(tab)}
             >
               {tabLabel(tab)}
-              <span className="tab-count">{tabItems.length}</span>
+              <span className="tab-count">{count}</span>
             </button>
             {showDropdown && (
               <ul className="tab-dropdown">
                 {tabItems.map((item) => (
                   <li key={item.id}>
-                    <button
-                      className="tab-dropdown-item"
-                      onClick={() => onSelectItem(item.id, tab)}
-                    >
-                      <span className={item.done ? 'dd-title done' : 'dd-title'}>
+                    <button className="tab-dropdown-item" onClick={() => onSelectItem(item.id, tab)}>
+                      <span
+                        className={
+                          item.status === 'done' || item.status === 'cancelled'
+                            ? 'dd-title done'
+                            : 'dd-title'
+                        }
+                      >
                         {item.title || '(untitled)'}
                       </span>
                     </button>
                   </li>
                 ))}
-                {tabItems.length === 0 && <li className="dd-empty">No entries</li>}
+                {tabItems.length === 0 && <li className="dd-empty">No events</li>}
                 {isTag && (
                   <li>
-                    <button
-                      className="tab-dropdown-item delete"
-                      onClick={() => onDeleteTag(tab)}
-                    >
+                    <button className="tab-dropdown-item delete" onClick={() => onDeleteTag(tab)}>
                       🗑 Delete tag
                     </button>
                   </li>

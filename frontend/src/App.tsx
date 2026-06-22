@@ -3,7 +3,7 @@ import { AuthProvider } from './auth/AuthContext';
 import { useAuth } from './auth/useAuth';
 import { configureApiClient } from './api/client';
 import AuthCallback from './auth/AuthCallback';
-import OrganizerApp from './components/OrganizerApp';
+import EventApp from './components/EventApp';
 import './index.css';
 
 /** Wires the non-React api client to the auth context, then guards routes. */
@@ -11,7 +11,7 @@ function Protected({ children }: { children: React.ReactNode }) {
   const { getAccessToken, login } = useAuth();
 
   // Wire the api client SYNCHRONOUSLY during render — not in an effect. Child
-  // effects (useOrganizers' first fetch) run before parent effects, so an
+  // effects (useEvents' first fetch) run before parent effects, so an
   // effect here would leave the token getter unset on the initial request.
   configureApiClient(getAccessToken, login);
 
@@ -43,7 +43,7 @@ function AppRoutes() {
         path="/"
         element={
           <Protected>
-            <OrganizerApp />
+            <EventApp />
           </Protected>
         }
       />

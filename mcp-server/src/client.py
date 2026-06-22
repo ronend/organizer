@@ -9,14 +9,15 @@ directly. The Organizer API expects:
     this header itself, so it is OPTIONAL when TODO_API_URL is the CloudFront URL)
 
 Auth is **per-request, pass-through**: the caller's Cognito access token (sent to
-this MCP server) is forwarded to the API, so entries stay owned by the real user.
+this MCP server) is forwarded to the API, so events stay owned by the real user.
   - HTTP transport: the token is read from the incoming request's Authorization
     header via the MCP request context (see `token_from_context`).
   - stdio transport: there is no incoming HTTP request, so the token falls back
     to the TODO_API_KEY environment variable.
 
-Types below mirror the webapp's actual shapes (camelCase) — see
-backend/src/routes/organizers.py and frontend/src/types/organizer.ts.
+Types below mirror the webapp's event model (snake_case) — see
+backend/src/routes/events.py and frontend/src/types/organizer.ts, which both
+follow data-structure.md.
 """
 
 from __future__ import annotations
@@ -25,49 +26,88 @@ import os
 from typing import Any, Literal, Optional
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 BASE_URL = os.environ.get("TODO_API_URL", "http://localhost:8000").rstrip("/")
 # Only needed when hitting the Lambda Function URL directly (bypassing CloudFront).
 ORIGIN_SECRET = os.environ.get("TODO_ORIGIN_SECRET", "")
 
-EntryType = Literal["task", "trip", "recurring"]
-SegmentType = Literal["flight", "hotel", "car", "activity", "train", "note"]
-RecurrenceFreq = Literal["day", "week", "month"]
+EventKind = Literal["container", "occurrence", "habit", "list"]
+ItemKind = Literal["task", "reservation", "entry", "checklist_item"]
 
 
 # ── Domain models (mirror the webapp; used as typed tool inputs) ──────────────
 
 
-class Recurrence(BaseModel):
-    freq: RecurrenceFreq
-    interval: int = 1
-    weekdays: Optional[list[int]] = None
-    monthDay: Optional[int] = None
-
-
 class Reminder(BaseModel):
-    label: str
-    daysBefore: int = 0
-    note: Optional[str] = None
+    id: Optional[str] = None
+    title: str = ""
+    status: str = "pending"
+    fire_at: str = ""
+    offset_rule: Optional[str] = None  # "-30d", "-2h", "+1d", "0"
+    recurrence_rule: Optional[str] = None  # RFC 5545 RRULE
+    notes: Optional[str] = None
+    url: Optional[str] = None
+    login_hint: Optional[str] = None
+    attrs: dict[str, Any] = Field(default_factory=dict)
 
 
-class Contact(BaseModel):
+class Item(BaseModel):
+    id: Optional[str] = None
+    kind: ItemKind = "task"
+    subtype: str = ""
+    tags: list[str] = Field(default_factory=list)
+    title: str = ""
+    status: str = "todo"
+    scheduled_at: Optional[str] = None
+    due_at: Optional[str] = None
+    sort_order: int = 0
+    confirmation_ref: Optional[str] = None
+    cost: Optional[float] = None
+    currency: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    url: Optional[str] = None
+    login_hint: Optional[str] = None
+    prereq_ids: list[str] = Field(default_factory=list)
+    attrs: dict[str, Any] = Field(default_factory=dict)
+    reminders: list[Reminder] = Field(default_factory=list)
+
+
+class ChecklistItem(BaseModel):
+    id: Optional[str] = None
+    label: str = ""
+    checked: bool = False
+    needs_purchase: bool = False
+    purchased: bool = False
+    notes: Optional[str] = None
+    sort_order: int = 0
+
+
+class ChecklistInstance(BaseModel):
+    id: Optional[str] = None
+    template_id: Optional[str] = None
     name: str = ""
-    role: str = ""
-    phone: str = ""
-    email: str = ""
+    items: list[ChecklistItem] = Field(default_factory=list)
 
 
-class DependsOnRef(BaseModel):
-    entryId: str
-    daysBefore: int = 0
+class Attachment(BaseModel):
+    id: Optional[str] = None
+    label: str = ""
+    item_id: Optional[str] = None
+    mime_type: Optional[str] = None
+    url: Optional[str] = None
+    storage_key: Optional[str] = None
 
 
-class Segment(BaseModel):
-    id: str = ""
-    type: SegmentType
-    fields: dict[str, str] = {}
+class TemplateItem(BaseModel):
+    id: Optional[str] = None
+    label: str = ""
+    category: Optional[str] = None
+    needs_purchase: bool = False
+    sort_order: int = 0
+    default_reminder_offset: Optional[str] = None
+    notes: Optional[str] = None
 
 
 # ── Token resolution (per-request pass-through) ───────────────────────────────
@@ -135,30 +175,29 @@ async def _request(method: str, path: str, token: str, json: Any = None) -> Any:
     return resp.json()
 
 
-# ── API surface ───────────────────────────────────────────────────────────────
+# ── Events ─────────────────────────────────────────────────────────────────────
 #
-# GET /api/organizers returns ALL of a user's entries (no server-side filtering,
-# no list/project concept, no single-GET route). We add thin client-side
-# conveniences — filtering, find-by-id, tag derivation — on top. Every function
+# GET /api/events returns ALL of a user's event documents. We add thin
+# client-side conveniences (filtering, tag derivation) on top. Every function
 # takes the caller's `token`.
 
 
-async def list_entries(
+async def list_events(
     token: str,
-    type: Optional[EntryType] = None,
+    kind: Optional[EventKind] = None,
     tag: Optional[str] = None,
-    done: Optional[bool] = None,
+    status: Optional[str] = None,
 ) -> list[dict]:
-    """GET /api/organizers, optionally filtered client-side."""
-    entries: list[dict] = await _request("GET", "/api/organizers", token)
-    if type is None and tag is None and done is None:
-        return entries
+    """GET /api/events, optionally filtered client-side by kind/tag/status."""
+    events: list[dict] = await _request("GET", "/api/events", token)
+    if kind is None and tag is None and status is None:
+        return events
     needle = tag.strip().lower() if tag else None
     result = []
-    for e in entries:
-        if type is not None and e.get("type") != type:
+    for e in events:
+        if kind is not None and e.get("kind") != kind:
             continue
-        if done is not None and bool(e.get("done")) != done:
+        if status is not None and e.get("status") != status:
             continue
         if needle is not None and needle not in (e.get("tags") or []):
             continue
@@ -166,41 +205,77 @@ async def list_entries(
     return result
 
 
-async def get_entry(token: str, entry_id: str) -> dict:
-    """No single-GET route exists — find within the full list."""
-    entries: list[dict] = await _request("GET", "/api/organizers", token)
-    for e in entries:
-        if e.get("id") == entry_id:
-            return e
-    raise RuntimeError(f"Entry {entry_id} not found")
+async def get_event(token: str, event_id: str) -> dict:
+    """GET /api/events/{id} — full event document (404 if missing)."""
+    return await _request("GET", f"/api/events/{event_id}", token)
 
 
-async def create_entry(token: str, body: dict) -> dict:
-    """POST /api/organizers — returns the created entry (201)."""
-    return await _request("POST", "/api/organizers", token, json=body)
+async def create_event(token: str, body: dict) -> dict:
+    """POST /api/events — returns the created event (201)."""
+    return await _request("POST", "/api/events", token, json=body)
 
 
-async def update_entry(token: str, entry_id: str, body: dict) -> dict:
-    """PUT /api/organizers/{id} — returns the updated entry (404 if missing)."""
-    return await _request("PUT", f"/api/organizers/{entry_id}", token, json=body)
+async def update_event(token: str, event_id: str, body: dict) -> dict:
+    """PUT /api/events/{id} — returns the updated event (404 if missing)."""
+    return await _request("PUT", f"/api/events/{event_id}", token, json=body)
 
 
-async def complete_recurring(token: str, entry_id: str) -> dict:
-    """POST /api/organizers/{id}/complete — complete a recurring occurrence and
-    spawn the next occurrence (+ its reminder sub-tasks)."""
-    return await _request("POST", f"/api/organizers/{entry_id}/complete", token)
+async def complete_event(token: str, event_id: str) -> dict:
+    """POST /api/events/{id}/complete — mark done; if it recurs, spawn the next
+    occurrence. Returns {"completed": <event>, "next": <event|None>}."""
+    return await _request("POST", f"/api/events/{event_id}/complete", token)
 
 
-async def delete_entry(token: str, entry_id: str) -> None:
-    """DELETE /api/organizers/{id} — 204 No Content."""
-    await _request("DELETE", f"/api/organizers/{entry_id}", token)
+async def delete_event(token: str, event_id: str) -> None:
+    """DELETE /api/events/{id} — 204 No Content."""
+    await _request("DELETE", f"/api/events/{event_id}", token)
+
+
+# ── Templates ────────────────────────────────────────────────────────────────
+
+
+async def list_templates(token: str) -> list[dict]:
+    return await _request("GET", "/api/templates", token)
+
+
+async def create_template(token: str, body: dict) -> dict:
+    return await _request("POST", "/api/templates", token, json=body)
+
+
+async def update_template(token: str, template_id: str, body: dict) -> dict:
+    return await _request("PUT", f"/api/templates/{template_id}", token, json=body)
+
+
+async def delete_template(token: str, template_id: str) -> None:
+    await _request("DELETE", f"/api/templates/{template_id}", token)
+
+
+# ── Derived views ──────────────────────────────────────────────────────────────
+
+
+async def upcoming_reminders(
+    token: str, before: Optional[str] = None, status: Optional[str] = "pending"
+) -> list[dict]:
+    """GET /api/reminders/upcoming — the flat reminders_index, ordered by fire_at."""
+    params = []
+    if before:
+        params.append(f"before={before}")
+    if status is not None:
+        params.append(f"status={status}")
+    qs = ("?" + "&".join(params)) if params else ""
+    return await _request("GET", f"/api/reminders/upcoming{qs}", token)
+
+
+async def shopping_list(token: str) -> list[dict]:
+    """GET /api/views/shopping — checklist items that need purchasing."""
+    return await _request("GET", "/api/views/shopping", token)
 
 
 async def list_tags(token: str) -> list[dict]:
-    """Derived: distinct tags across all entries, with counts."""
-    entries: list[dict] = await _request("GET", "/api/organizers", token)
+    """Derived: distinct tags across all events, with counts."""
+    events: list[dict] = await _request("GET", "/api/events", token)
     counts: dict[str, int] = {}
-    for e in entries:
+    for e in events:
         for t in e.get("tags") or []:
             counts[t] = counts.get(t, 0) + 1
     return [

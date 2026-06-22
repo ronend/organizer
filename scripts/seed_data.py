@@ -1,140 +1,261 @@
 #!/usr/bin/env python3
-"""Seed the organizer DynamoDB table with test items for one user.
+"""Seed the organizer DynamoDB table with example events for one user.
 
-Generates 10-15 items per category spanning all types, with a mix of overdue /
-today / upcoming due dates and some marked done. Uses the AWS CLI (so it relies
-on whatever AWS credentials are already in the environment); no boto3 needed.
+Generates a handful of event documents spanning all four kinds (container,
+occurrence, habit, list) following data-structure.md, plus the matching
+reminders_index rows so the "upcoming reminders" view is populated.
+
+Single-table layout (see backend/src/db/dynamo.py): PK=userId, SK carries a
+collection prefix — EVENT#<id> for events, REMIDX#<fire_at>#<id> for the
+reminder index.
 
 Usage:
   python3 scripts/seed_data.py --user-id <cognito-sub> \
-      --table organizer-items --region us-east-1 [--per-category 12]
+      --table organizer-items --region us-east-1
 """
 
 import argparse
 import datetime as dt
-import json
 import random
-import subprocess
-import tempfile
-import uuid
+import secrets
+from decimal import Decimal
 
-CATEGORIES = ["errand", "project", "health", "finance", "home"]
-TYPES = ["simple", "complex", "repeat", "project"]
-TIMES = ["08:00", "09:00", "10:30", "12:30", "15:00", "18:45"]
+import boto3
 
-TITLES = {
-    "errand": [
-        "Buy groceries", "Pick up dry cleaning", "Return Amazon package",
-        "Renew library books", "Car oil change", "Refill prescription",
-        "Mail birthday gift", "Buy coffee beans", "Get a haircut",
-        "Replace air filter", "Drop off donation", "Buy stamps",
-        "Pick up package", "Grocery run",
-    ],
-    "project": [
-        "Draft Q3 roadmap", "Write design doc", "Refactor auth module",
-        "Prepare client demo", "Migrate database", "Set up CI pipeline",
-        "Review open PRs", "Plan next sprint", "Write unit tests",
-        "Update dependencies", "Spec API v2", "Investigate latency",
-        "Onboard new hire", "Polish bento layout",
-    ],
-    "health": [
-        "Morning run", "Dentist appointment", "Annual physical", "Meal prep",
-        "Yoga session", "Take vitamins", "Schedule eye exam", "Hit 10k steps",
-        "Meditate 10 min", "Therapy session", "Blood test", "Stretch routine",
-        "Sleep by 11pm", "Refill inhaler",
-    ],
-    "finance": [
-        "Pay credit card", "File expense report", "Review monthly budget",
-        "Pay rent", "Transfer to savings", "Renew insurance", "File taxes",
-        "Cancel unused subscription", "Review investments", "Pay utilities",
-        "Reconcile accounts", "Update 401k contribution", "Pay tuition",
-        "Dispute a charge",
-    ],
-    "home": [
-        "Water the plants", "Fix leaky faucet", "Clean the garage",
-        "Assemble new shelf", "Replace lightbulb", "Vacuum living room",
-        "Organize closet", "Deep clean kitchen", "Hang pictures",
-        "Service HVAC", "Wash the windows", "Declutter desk",
-        "Repaint the fence", "Change smoke alarm battery",
-    ],
-}
-
-# A few description shapes (rich-text HTML, matching the TipTap editor output).
-DESCRIPTIONS = [
-    "<p>{t}.</p>",
-    "<p>{t} — don't forget the details.</p>",
-    "<p>Steps:</p><ul><li>Prep</li><li>{t}</li><li>Wrap up</li></ul>",
-    "<h2>{t}</h2><p>Notes go here.</p>",
-    "<p><strong>Priority:</strong> {t}.</p>",
-    "",
-]
+_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz"
 
 
-def make_items(user_id: str, per_category: int) -> list[dict]:
-    today = dt.date.today()
-    items: list[dict] = []
-    for category in CATEGORIES:
-        n = per_category if per_category else random.randint(10, 15)
-        titles = random.sample(TITLES[category], k=min(n, len(TITLES[category])))
-        for i, title in enumerate(titles):
-            # Spread due dates: some overdue, some today, mostly upcoming.
-            offset = random.choice([-5, -3, -1, 0, 0, 1, 2, 3, 5, 7, 10, 14, 21])
-            due_date = (today + dt.timedelta(days=offset)).isoformat()
-            done = random.random() < 0.28
-            desc = random.choice(DESCRIPTIONS).format(t=title)
-            items.append(
-                {
-                    "userId": user_id,
-                    "organizerId": str(uuid.uuid4()),
-                    "createdAt": dt.datetime.now(dt.timezone.utc).isoformat(),
-                    "category": category,
-                    "type": TYPES[i % len(TYPES)],
-                    "title": title,
-                    "description": desc,
-                    "dueDate": due_date,
-                    "dueTime": random.choice(TIMES),
-                    "done": done,
-                }
-            )
-    return items
+def _nano(n: int) -> str:
+    return "".join(secrets.choice(_ALPHABET) for _ in range(n))
 
 
-def to_put_request(item: dict) -> dict:
-    attrs = {}
-    for k, v in item.items():
-        if isinstance(v, bool):
-            attrs[k] = {"BOOL": v}
-        else:
-            attrs[k] = {"S": str(v)}
-    return {"PutRequest": {"Item": attrs}}
+def evt() -> str:
+    return f"evt_{_nano(8)}"
 
 
-def chunked(seq, size):
-    for i in range(0, len(seq), size):
-        yield seq[i : i + size]
+def itm() -> str:
+    return f"itm_{_nano(6)}"
 
 
-def batch_write(table: str, region: str, requests: list[dict]) -> None:
-    payload = {table: requests}
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(payload, f)
-        path = f.name
-    out = subprocess.run(
-        [
-            "aws", "dynamodb", "batch-write-item",
-            "--request-items", f"file://{path}",
-            "--region", region,
-            "--output", "json",
+def rem() -> str:
+    return f"rem_{_nano(6)}"
+
+
+def cl() -> str:
+    return f"cl_{_nano(6)}"
+
+
+def cli() -> str:
+    return f"cli_{_nano(6)}"
+
+
+def _iso_now() -> str:
+    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _date(offset_days: int) -> str:
+    return (dt.date.today() + dt.timedelta(days=offset_days)).isoformat()
+
+
+def _reminder(title: str, fire_offset_days: int, **extra) -> dict:
+    fire_at = (
+        dt.datetime.now() + dt.timedelta(days=fire_offset_days)
+    ).replace(microsecond=0).isoformat()
+    base = {
+        "id": rem(),
+        "title": title,
+        "status": "pending",
+        "fire_at": fire_at,
+        "offset_rule": None,
+        "recurrence_rule": None,
+        "notes": None,
+        "url": None,
+        "login_hint": None,
+        "attrs": {},
+    }
+    base.update(extra)
+    return base
+
+
+def build_events() -> list[dict]:
+    """Four exemplar events, one per kind."""
+    now = _iso_now()
+
+    trip = {
+        "id": evt(),
+        "parent_id": None,
+        "kind": "container",
+        "subtype": "backpacking",
+        "tags": ["travel", "outdoors"],
+        "title": "Zion trip",
+        "status": "planned",
+        "start_date": _date(20),
+        "end_date": _date(27),
+        "recurrence_rule": None,
+        "attrs": {"destination": "Zion NP, Utah", "budget": Decimal("2400"), "currency": "USD"},
+        "items": [
+            {
+                "id": itm(),
+                "kind": "reservation",
+                "subtype": "flight",
+                "tags": [],
+                "title": "DL 442 JFK → LAS",
+                "status": "confirmed",
+                "scheduled_at": f"{_date(20)}T08:30:00",
+                "due_at": None,
+                "sort_order": 1,
+                "confirmation_ref": "XKQP7R",
+                "cost": Decimal("380"),
+                "currency": "USD",
+                "address": None,
+                "phone": None,
+                "url": "https://delta.com/manage",
+                "login_hint": "me@email.com",
+                "prereq_ids": [],
+                "attrs": {"airline": "Delta", "seat": "14C"},
+                "reminders": [_reminder("Check in online", 19)],
+            }
         ],
-        capture_output=True,
-        text=True,
-    )
-    if out.returncode != 0:
-        raise RuntimeError(out.stderr.strip())
-    unprocessed = json.loads(out.stdout or "{}").get("UnprocessedItems", {})
-    if unprocessed.get(table):
-        # one simple retry
-        batch_write(table, region, unprocessed[table])
+        "reminders": [_reminder("Buy travel insurance", 5)],
+        "checklists": [
+            {
+                "id": cl(),
+                "template_id": None,
+                "name": "Backpacking gear",
+                "items": [
+                    {"id": cli(), "label": "Tent", "checked": False, "needs_purchase": False, "purchased": False, "notes": None, "sort_order": 1},
+                    {"id": cli(), "label": "Sunscreen SPF 50", "checked": False, "needs_purchase": True, "purchased": False, "notes": "REI", "sort_order": 2},
+                ],
+            }
+        ],
+        "attachments": [],
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    dental = {
+        "id": evt(),
+        "parent_id": None,
+        "kind": "occurrence",
+        "subtype": "dental checkup",
+        "tags": ["health"],
+        "title": "6-month dental cleaning",
+        "status": "active",
+        "start_date": _date(40),
+        "end_date": None,
+        "recurrence_rule": "RRULE:FREQ=MONTHLY;INTERVAL=6",
+        "attrs": {"dentist": "Dr. Park", "clinic": "Downtown Dental"},
+        "items": [],
+        "reminders": [_reminder("Confirm appointment", 39)],
+        "checklists": [],
+        "attachments": [],
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    groceries = {
+        "id": evt(),
+        "parent_id": None,
+        "kind": "list",
+        "subtype": "groceries",
+        "tags": ["home", "shopping"],
+        "title": "Weekly groceries",
+        "status": "active",
+        "start_date": None,
+        "end_date": None,
+        "recurrence_rule": None,
+        "attrs": {"store": "Whole Foods"},
+        "items": [],
+        "reminders": [],
+        "checklists": [
+            {
+                "id": cl(),
+                "template_id": None,
+                "name": "Staples",
+                "items": [
+                    {"id": cli(), "label": "Milk", "checked": False, "needs_purchase": True, "purchased": False, "notes": None, "sort_order": 1},
+                    {"id": cli(), "label": "Eggs", "checked": True, "needs_purchase": False, "purchased": True, "notes": None, "sort_order": 2},
+                    {"id": cli(), "label": "Coffee beans", "checked": False, "needs_purchase": True, "purchased": False, "notes": None, "sort_order": 3},
+                ],
+            }
+        ],
+        "attachments": [],
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    medication = {
+        "id": evt(),
+        "parent_id": None,
+        "kind": "habit",
+        "subtype": "medication",
+        "tags": ["health", "daily"],
+        "title": "Metformin 500mg — daily",
+        "status": "active",
+        "start_date": _date(-120),
+        "end_date": None,
+        "recurrence_rule": "RRULE:FREQ=DAILY",
+        "attrs": {"prescriber": "Dr. Levi", "pharmacy": "CVS 86th St"},
+        "items": [
+            {
+                "id": itm(),
+                "kind": "entry",
+                "subtype": "medication dose",
+                "tags": [],
+                "title": "Metformin 500mg",
+                "status": "active",
+                "scheduled_at": None,
+                "due_at": None,
+                "sort_order": 1,
+                "confirmation_ref": None,
+                "cost": None,
+                "currency": None,
+                "address": None,
+                "phone": None,
+                "url": None,
+                "login_hint": None,
+                "prereq_ids": [],
+                "attrs": {"dosage": "500mg", "with_food": True},
+                "reminders": [
+                    _reminder("Take Metformin with breakfast", 1, recurrence_rule="RRULE:FREQ=DAILY;BYHOUR=8"),
+                ],
+            }
+        ],
+        "reminders": [],
+        "checklists": [],
+        "attachments": [],
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    return [trip, dental, groceries, medication]
+
+
+def index_rows(event: dict) -> list[dict]:
+    """Flat reminders_index projection of an event's reminders."""
+    rows: list[dict] = []
+
+    def add(r: dict, item_id):
+        if not r.get("fire_at"):
+            return
+        rows.append(
+            {
+                "id": r["id"],
+                "event_id": event["id"],
+                "item_id": item_id,
+                "title": r.get("title", ""),
+                "fire_at": r["fire_at"],
+                "recurrence_rule": r.get("recurrence_rule"),
+                "status": r.get("status", "pending"),
+            }
+        )
+
+    for r in event.get("reminders", []):
+        add(r, None)
+    for it in event.get("items", []):
+        for r in it.get("reminders", []):
+            add(r, it["id"])
+    return rows
 
 
 def main() -> None:
@@ -142,25 +263,24 @@ def main() -> None:
     ap.add_argument("--user-id", required=True, help="Cognito sub of the target user")
     ap.add_argument("--table", default="organizer-items")
     ap.add_argument("--region", default="us-east-1")
-    ap.add_argument(
-        "--per-category",
-        type=int,
-        default=0,
-        help="Items per category (0 = random 10-15)",
-    )
     args = ap.parse_args()
 
-    items = make_items(args.user_id, args.per_category)
-    requests = [to_put_request(it) for it in items]
-    for chunk in chunked(requests, 25):  # DynamoDB batch limit
-        batch_write(args.table, args.region, chunk)
+    table = boto3.resource("dynamodb", region_name=args.region).Table(args.table)
+    events = build_events()
 
-    by_cat: dict[str, int] = {}
-    for it in items:
-        by_cat[it["category"]] = by_cat.get(it["category"], 0) + 1
-    print(f"Seeded {len(items)} items into {args.table} for user {args.user_id}")
-    for c in CATEGORIES:
-        print(f"  {c:8} {by_cat.get(c, 0)}")
+    with table.batch_writer() as bw:
+        for event in events:
+            bw.put_item(Item={"userId": args.user_id, "SK": f"EVENT#{event['id']}", **event})
+            for row in index_rows(event):
+                sk = f"REMIDX#{row['fire_at']}#{row['id']}"
+                bw.put_item(Item={"userId": args.user_id, "SK": sk, **row})
+
+    kinds: dict[str, int] = {}
+    for e in events:
+        kinds[e["kind"]] = kinds.get(e["kind"], 0) + 1
+    print(f"Seeded {len(events)} events into {args.table} for user {args.user_id}")
+    for k, n in sorted(kinds.items()):
+        print(f"  {k:12} {n}")
 
 
 if __name__ == "__main__":
