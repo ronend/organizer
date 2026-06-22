@@ -68,6 +68,14 @@ Resources:
       ClientName: organizer-client
       UserPoolId: !Ref UserPool
       GenerateSecret: false                 # Public client — no secret needed for SPA
+      # Keep the user signed in for 24h. The SPA logs out when the access token's
+      # `exp` passes (no silent refresh), so session length == access-token TTL.
+      # 24h (1 day) is Cognito's maximum for access/ID tokens.
+      AccessTokenValidity: 24
+      IdTokenValidity: 24
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
       AllowedOAuthFlows:
         - code                              # Authorization code flow only
       AllowedOAuthScopes:
