@@ -13,14 +13,6 @@ Parameters:
       the Cognito callback URLs up front would create a circular dependency.
       After the first deploy, read the CloudFrontUrl output and re-deploy with
       --parameter-overrides AppUrl=https://<domain> to finish OAuth wiring.
-  McpOAuthCallbackUrls:
-    Type: CommaDelimitedList
-    Default: 'https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback,http://localhost:39702/oauth/callback'
-    Description: >
-      OAuth redirect URIs allowed for the MCP connector app client. Includes
-      Claude.ai's connector callbacks plus mcp-remote's localhost callback
-      (pin its port to 39702: `npx mcp-remote <url> 39702`). Cognito requires an
-      exact match (host+port+path), so add the precise URI any other client uses.
 
 Conditions:
   HasAppUrl: !Not [!Equals [!Ref AppUrl, '']]
@@ -117,7 +109,16 @@ Resources:
         - openid
         - email
       AllowedOAuthFlowsUserPoolClient: true
-      CallbackURLs: !Ref McpOAuthCallbackUrls
+      # Hardcoded as a resource property (not a parameter Default): the CI deploy
+      # only overrides AppUrl, so CloudFormation keeps the previous value of any
+      # other parameter — a Default change would never apply. A literal list is a
+      # real resource diff that deploys. Includes Claude.ai's connector callbacks
+      # plus mcp-remote's localhost callback (pin its port: `npx mcp-remote <url>
+      # 39702`). Cognito requires an exact host+port+path match.
+      CallbackURLs:
+        - https://claude.ai/api/mcp/auth_callback
+        - https://claude.com/api/mcp/auth_callback
+        - http://localhost:39702/oauth/callback
       SupportedIdentityProviders:
         - COGNITO
       ExplicitAuthFlows:
