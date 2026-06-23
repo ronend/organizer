@@ -15,10 +15,12 @@ Parameters:
       --parameter-overrides AppUrl=https://<domain> to finish OAuth wiring.
   McpOAuthCallbackUrls:
     Type: CommaDelimitedList
-    Default: 'https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback'
+    Default: 'https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback,http://localhost:39702/oauth/callback'
     Description: >
-      OAuth redirect URIs allowed for the MCP connector app client. Defaults to
-      Claude.ai's connector callbacks; override if a client uses a different one.
+      OAuth redirect URIs allowed for the MCP connector app client. Includes
+      Claude.ai's connector callbacks plus mcp-remote's localhost callback
+      (pin its port to 39702: `npx mcp-remote <url> 39702`). Cognito requires an
+      exact match (host+port+path), so add the precise URI any other client uses.
 
 Conditions:
   HasAppUrl: !Not [!Equals [!Ref AppUrl, '']]
