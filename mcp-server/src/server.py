@@ -25,11 +25,20 @@ from .tools import register_tools
 
 
 def build_server() -> FastMCP:
+    from mcp.server.transport_security import TransportSecuritySettings
+
     kwargs: dict = dict(
         host=os.environ.get("HOST", "127.0.0.1"),
         port=int(os.environ.get("PORT", "3100")),
         stateless_http=True,
         json_response=True,
+        # FastMCP defaults DNS-rebinding protection ON, allowing only localhost
+        # Hosts. Behind CloudFront → Lambda the Host header is the Function URL
+        # domain (generated, not localhost), so every request would 421 "Invalid
+        # Host header". DNS-rebinding protection guards *local* servers against
+        # malicious browser pages; this is a remote Lambda already gated by
+        # origin-verify + Cognito, so that threat model doesn't apply — disable it.
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
 
     if auth.oauth_enabled():

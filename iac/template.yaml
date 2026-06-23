@@ -94,6 +94,10 @@ Resources:
       ExplicitAuthFlows:
         - ALLOW_REFRESH_TOKEN_AUTH
         - ALLOW_USER_SRP_AUTH
+        # Enables `aws cognito-idp initiate-auth --auth-flow USER_PASSWORD_AUTH`
+        # for CLI token retrieval (testing). The hosted UI / SPA uses the code
+        # flow and doesn't need this; remove it if CLI auth isn't required.
+        - ALLOW_USER_PASSWORD_AUTH
 
   # Dedicated app client for the MCP OAuth connector (Claude.ai). Public client +
   # PKCE (no secret), authorization-code flow, same hosted UI as the SPA. Its
