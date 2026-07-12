@@ -66,22 +66,26 @@ export function deriveShopping(events: EventDocument[]): ShoppingEntry[] {
 }
 
 // ── Timeline ─────────────────────────────────────────────────────────────────
-// A single chronological agenda over everything with a date: events (by
-// start_date) and pending reminders (by fire_at). Each entry knows how to
-// reschedule itself so the UI can drag rows between days.
+// A single agenda over EVERYTHING: events (by start_date), their tasks/items
+// (by scheduled_at/due_at), and reminders (by fire_at). Anything without a date
+// still appears — in an "unscheduled" bucket — so nothing is hidden. Each entry
+// knows which date field it owns, so the UI can drag rows onto a day to (re)set
+// that date.
 
-export type TimelineSource = 'event' | 'reminder';
+export type TimelineSource = 'event' | 'item' | 'reminder';
+export type TimelineDateField = 'start_date' | 'scheduled_at' | 'due_at' | 'fire_at';
 
 export interface TimelineEntry {
   key: string;
   eventId: string;
   source: TimelineSource;
   reminderId: string | null;
-  itemId: string | null; // set when a reminder lives on an event item
+  itemId: string | null; // set for item entries and item-level reminders
+  dateField: TimelineDateField; // the field a reschedule writes to
   title: string;
   eventTitle: string;
   kind: EventDocument['kind'];
-  date: string; // ISO date ("2026-07-14") or datetime ("...T09:00")
+  date: string | null; // ISO date/datetime, or null when unscheduled
   hasTime: boolean;
   status: string;
   tags: string[];
@@ -92,37 +96,66 @@ function isDoneStatus(status: string): boolean {
   return status === 'done' || status === 'cancelled';
 }
 
-/** Everything with a date, flattened and sorted earliest-first. */
+/** Flatten every event, item and reminder into timeline entries. */
 export function deriveTimeline(
   events: EventDocument[],
   opts: { includeDone?: boolean } = {},
 ): TimelineEntry[] {
   const out: TimelineEntry[] = [];
   for (const event of events) {
-    const done = isDoneStatus(event.status);
-    if (event.start_date && (opts.includeDone || !done)) {
+    const eventTitle = event.title || '(untitled)';
+
+    // The event itself.
+    if (opts.includeDone || !isDoneStatus(event.status)) {
       out.push({
         key: `event:${event.id}`,
         eventId: event.id,
         source: 'event',
         reminderId: null,
         itemId: null,
-        title: event.title || '(untitled)',
-        eventTitle: event.title || '(untitled)',
+        dateField: 'start_date',
+        title: eventTitle,
+        eventTitle,
         kind: event.kind,
-        date: event.start_date,
-        hasTime: event.start_date.includes('T'),
+        date: event.start_date ?? null,
+        hasTime: !!event.start_date && event.start_date.includes('T'),
         status: event.status,
         tags: event.tags,
         recurrenceRule: event.recurrence_rule,
       });
     }
 
-    const pushReminder = (
-      rem: EventDocument['reminders'][number],
-      itemId: string | null,
-    ) => {
-      if (!rem.fire_at) return;
+    // Its tasks / items (each may carry its own schedule or due date).
+    for (const item of event.items) {
+      if (!opts.includeDone && isDoneStatus(item.status)) continue;
+      const dateField: TimelineDateField = item.scheduled_at
+        ? 'scheduled_at'
+        : item.due_at
+          ? 'due_at'
+          : item.kind === 'task'
+            ? 'due_at'
+            : 'scheduled_at';
+      const date = item.scheduled_at ?? item.due_at ?? null;
+      out.push({
+        key: `item:${event.id}:${item.id}`,
+        eventId: event.id,
+        source: 'item',
+        reminderId: null,
+        itemId: item.id,
+        dateField,
+        title: item.title || 'Task',
+        eventTitle,
+        kind: event.kind,
+        date,
+        hasTime: !!date && date.includes('T'),
+        status: item.status,
+        tags: item.tags.length ? item.tags : event.tags,
+        recurrenceRule: null,
+      });
+    }
+
+    // Reminders (event-level + item-level).
+    const pushReminder = (rem: EventDocument['reminders'][number], itemId: string | null) => {
       if (!opts.includeDone && rem.status !== 'pending' && rem.status !== 'snoozed') return;
       out.push({
         key: `reminder:${event.id}:${itemId ?? 'event'}:${rem.id}`,
@@ -130,11 +163,12 @@ export function deriveTimeline(
         source: 'reminder',
         reminderId: rem.id,
         itemId,
+        dateField: 'fire_at',
         title: rem.title || 'Reminder',
-        eventTitle: event.title || '(untitled)',
+        eventTitle,
         kind: event.kind,
-        date: rem.fire_at,
-        hasTime: rem.fire_at.includes('T'),
+        date: rem.fire_at ?? null,
+        hasTime: !!rem.fire_at && rem.fire_at.includes('T'),
         status: rem.status,
         tags: event.tags,
         recurrenceRule: rem.recurrence_rule,
@@ -143,17 +177,28 @@ export function deriveTimeline(
     event.reminders.forEach((r) => pushReminder(r, null));
     event.items.forEach((it) => it.reminders.forEach((r) => pushReminder(r, it.id)));
   }
-  out.sort((a, b) => a.date.localeCompare(b.date));
+
+  // Dated entries first (earliest → latest), then unscheduled ones by title.
+  out.sort((a, b) => {
+    if (a.date && b.date) return a.date.localeCompare(b.date);
+    if (a.date) return -1;
+    if (b.date) return 1;
+    return a.title.localeCompare(b.title);
+  });
   return out;
 }
 
-/** The local YYYY-MM-DD an entry falls on. */
-export function timelineDay(entry: TimelineEntry): string {
-  return entry.date.slice(0, 10);
+/** The local YYYY-MM-DD an entry falls on, or null when unscheduled. */
+export function timelineDay(entry: TimelineEntry): string | null {
+  return entry.date ? entry.date.slice(0, 10) : null;
 }
 
-/** Replace the calendar day of an ISO value, keeping any time-of-day intact. */
-function withDay(iso: string, day: string): string {
+/**
+ * Apply `day` to an ISO value. Keeps an existing time-of-day; when there was no
+ * date at all, date-only fields get just the day and timed fields default to 9am.
+ */
+function applyDay(iso: string | null, day: string, dateOnly: boolean): string {
+  if (!iso) return dateOnly ? day : `${day}T09:00:00`;
   return iso.includes('T') ? `${day}T${iso.split('T')[1]}` : day;
 }
 
@@ -167,10 +212,18 @@ export function rescheduleEntry(
   day: string,
 ): UpdateEvent | null {
   if (timelineDay(entry) === day) return null;
-  const nextDate = withDay(entry.date, day);
+  const dateOnly = entry.dateField === 'start_date';
+  const nextDate = applyDay(entry.date, day, dateOnly);
 
   if (entry.source === 'event') {
     return { start_date: nextDate };
+  }
+
+  if (entry.source === 'item') {
+    const items = event.items.map((it) =>
+      it.id === entry.itemId ? { ...it, [entry.dateField]: nextDate } : it,
+    );
+    return { items };
   }
 
   // Reminder: rebuild the array it belongs to with a new fire_at.
@@ -194,12 +247,15 @@ export function rescheduleEntry(
 }
 
 /**
- * The ordered list of day-buckets to render: every day that has an entry, plus
- * a rolling window of upcoming days so there are always empty drop targets.
+ * The ordered list of day-buckets to render for the DATED entries, plus a
+ * rolling window of upcoming days so there are always empty drop targets.
  */
 export function timelineDays(entries: TimelineEntry[], upcomingDays = 14): string[] {
   const set = new Set<string>();
-  entries.forEach((e) => set.add(timelineDay(e)));
+  entries.forEach((e) => {
+    const day = timelineDay(e);
+    if (day) set.add(day);
+  });
   const base = new Date();
   base.setHours(0, 0, 0, 0);
   for (let i = 0; i < upcomingDays; i++) {

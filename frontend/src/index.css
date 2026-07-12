@@ -2176,3 +2176,24 @@ body {
 .tl-context {
   color: var(--muted);
 }
+
+.tl-card.item {
+  border-left-color: var(--muted);
+}
+
+.tl-card.item .tl-time {
+  color: var(--muted);
+}
+
+/* Unscheduled bucket sits below the dated agenda. */
+.tl-unscheduled {
+  margin-top: 0.5rem;
+  border-top: 1px dashed var(--border-strong);
+  padding-top: 0.6rem;
+}
+
+.tl-day-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-style: italic;
+}

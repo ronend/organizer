@@ -44,15 +44,19 @@ export default function TimelineView({
     );
   }, [events, query]);
 
-  const days = useMemo(() => timelineDays(entries), [entries]);
+  const dated = useMemo(() => entries.filter((e) => e.date), [entries]);
+  const undated = useMemo(() => entries.filter((e) => !e.date), [entries]);
+
+  const days = useMemo(() => timelineDays(dated), [dated]);
   const byDay = useMemo(() => {
     const map = new Map<string, TimelineEntry[]>();
-    for (const e of entries) {
+    for (const e of dated) {
       const key = timelineDay(e);
+      if (!key) continue;
       (map.get(key) ?? map.set(key, []).get(key)!).push(e);
     }
     return map;
-  }, [entries]);
+  }, [dated]);
 
   function drop(day: string) {
     if (dragging) onReschedule(dragging.eventId, dragging, day);
@@ -60,8 +64,67 @@ export default function TimelineView({
     setOverDay(null);
   }
 
-  if (entries.length === 0 && !query) {
-    return <p className="empty">Nothing scheduled yet. Add an event with a date to see it here.</p>;
+  function renderCard(entry: TimelineEntry) {
+    const meta = EVENT_KIND_META[entry.kind];
+    const done = entry.status === 'done' || entry.status === 'cancelled';
+    const icon =
+      entry.source === 'reminder' ? '🔔' : entry.source === 'item' ? '☑️' : meta.icon;
+    const showContext = entry.source !== 'event';
+    return (
+      <li
+        key={entry.key}
+        className={
+          'tl-card' +
+          (entry.source === 'reminder' ? ' reminder' : '') +
+          (entry.source === 'item' ? ' item' : '') +
+          (dragging?.key === entry.key ? ' dragging' : '') +
+          (entry.eventId === selectedId ? ' selected' : '') +
+          (done ? ' done' : '')
+        }
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = 'move';
+          setDragging(entry);
+        }}
+        onDragEnd={() => {
+          setDragging(null);
+          setOverDay(null);
+        }}
+        onClick={() => onOpenEvent(entry.eventId)}
+      >
+        <span className="tl-grip" aria-hidden>
+          ⠿
+        </span>
+        <span className="tl-time">
+          {entry.date ? (entry.hasTime ? formatTime(entry.date) : 'All day') : 'No date'}
+        </span>
+        <span className="tl-body">
+          <span className="tl-title">
+            <span className="tl-icon">{icon}</span>
+            {entry.title}
+          </span>
+          <span className="tl-sub">
+            {showContext && <span className="tl-context">{entry.eventTitle}</span>}
+            {entry.tags.map((t) => (
+              <span key={t} className="badge tag">
+                {labelize(t)}
+              </span>
+            ))}
+            {entry.recurrenceRule && (
+              <span className="badge routine">{describeRRule(entry.recurrenceRule)}</span>
+            )}
+          </span>
+        </span>
+      </li>
+    );
+  }
+
+  if (entries.length === 0) {
+    return (
+      <p className="empty">
+        {query ? 'Nothing matches your search.' : 'Nothing here yet. Add an event to get started.'}
+      </p>
+    );
   }
 
   return (
@@ -72,9 +135,7 @@ export default function TimelineView({
         return (
           <section
             key={day}
-            className={
-              'tl-day' + (overDay === day ? ' over' : '') + (past ? ' past' : '')
-            }
+            className={'tl-day' + (overDay === day ? ' over' : '') + (past ? ' past' : '')}
             onDragOver={(e) => {
               if (!dragging) return;
               e.preventDefault();
@@ -96,68 +157,22 @@ export default function TimelineView({
             {rows.length === 0 ? (
               <p className="tl-empty">Drop here to schedule</p>
             ) : (
-              <ul className="tl-list">
-                {rows.map((entry) => {
-                  const meta = EVENT_KIND_META[entry.kind];
-                  const done = entry.status === 'done' || entry.status === 'cancelled';
-                  return (
-                    <li
-                      key={entry.key}
-                      className={
-                        'tl-card' +
-                        (entry.source === 'reminder' ? ' reminder' : '') +
-                        (dragging?.key === entry.key ? ' dragging' : '') +
-                        (entry.eventId === selectedId ? ' selected' : '') +
-                        (done ? ' done' : '')
-                      }
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.effectAllowed = 'move';
-                        setDragging(entry);
-                      }}
-                      onDragEnd={() => {
-                        setDragging(null);
-                        setOverDay(null);
-                      }}
-                      onClick={() => onOpenEvent(entry.eventId)}
-                    >
-                      <span className="tl-grip" aria-hidden>
-                        ⠿
-                      </span>
-                      <span className="tl-time">
-                        {entry.hasTime ? formatTime(entry.date) : 'All day'}
-                      </span>
-                      <span className="tl-body">
-                        <span className="tl-title">
-                          <span className="tl-icon">
-                            {entry.source === 'reminder' ? '🔔' : meta.icon}
-                          </span>
-                          {entry.title}
-                        </span>
-                        <span className="tl-sub">
-                          {entry.source === 'reminder' && (
-                            <span className="tl-context">{entry.eventTitle}</span>
-                          )}
-                          {entry.tags.map((t) => (
-                            <span key={t} className="badge tag">
-                              {labelize(t)}
-                            </span>
-                          ))}
-                          {entry.recurrenceRule && (
-                            <span className="badge routine">
-                              {describeRRule(entry.recurrenceRule)}
-                            </span>
-                          )}
-                        </span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+              <ul className="tl-list">{rows.map(renderCard)}</ul>
             )}
           </section>
         );
       })}
+
+      {undated.length > 0 && (
+        <section className="tl-day tl-unscheduled">
+          <div className="tl-day-head">
+            <span className="tl-day-name">Unscheduled</span>
+            <span className="tl-day-count">{undated.length}</span>
+            <span className="tl-day-hint">drag onto a day to schedule</span>
+          </div>
+          <ul className="tl-list">{undated.map(renderCard)}</ul>
+        </section>
+      )}
     </div>
   );
 }
