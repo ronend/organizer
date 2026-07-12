@@ -2,16 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { useEvents } from '../hooks/useEvents';
 import { useAuth } from '../auth/useAuth';
 import type { EventKind, NewEvent } from '../types/organizer';
-import { labelize } from '../types/organizer';
 import { installRipple } from '../lib/ripple';
 import { useTheme } from '../lib/theme';
-import { deriveReminders, deriveShopping } from '../lib/derive';
+import { deriveReminders, deriveShopping, deriveTimeline, rescheduleEntry } from '../lib/derive';
+import type { TimelineEntry } from '../lib/derive';
 import FilterTabs, {
+  FIXED_TABS,
+  TAB_META,
   itemsForTab,
   tabLabel,
   isViewTab,
-  SPECIAL_TABS,
-  VIEW_TABS,
   type Tab,
 } from './FilterTabs';
 import EventList from './EventList';
@@ -19,6 +19,7 @@ import EventDetail from './EventDetail';
 import KindPicker from './KindPicker';
 import RemindersView from './RemindersView';
 import ShoppingView from './ShoppingView';
+import TimelineView from './TimelineView';
 
 type Selection =
   | { mode: 'none' }
@@ -38,9 +39,10 @@ export default function EventApp() {
   const { logout } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
 
-  const [activeTab, setActiveTab] = useState<Tab>('today');
+  const [activeTab, setActiveTab] = useState<Tab>('timeline');
   const [selection, setSelection] = useState<Selection>({ mode: 'none' });
   const [showDone, setShowDone] = useState(false);
+  const [query, setQuery] = useState('');
 
   useEffect(() => installRipple(), []);
 
@@ -52,7 +54,19 @@ export default function EventApp() {
     [events, showDone],
   );
 
-  const visibleItems = useMemo(() => itemsForTab(sourceItems, activeTab), [sourceItems, activeTab]);
+  const q = query.trim().toLowerCase();
+  const searchedItems = useMemo(() => {
+    if (!q) return sourceItems;
+    return sourceItems.filter(
+      (e) =>
+        e.title.toLowerCase().includes(q) || e.tags.some((t) => t.toLowerCase().includes(q)),
+    );
+  }, [sourceItems, q]);
+
+  const visibleItems = useMemo(
+    () => itemsForTab(searchedItems, activeTab),
+    [searchedItems, activeTab],
+  );
 
   const tags = useMemo(() => {
     const set = new Set<string>();
@@ -62,6 +76,18 @@ export default function EventApp() {
 
   const reminderCount = useMemo(() => deriveReminders(events, { status: 'pending' }).length, [events]);
   const shoppingCount = useMemo(() => deriveShopping(events).length, [events]);
+  const timelineCount = useMemo(() => deriveTimeline(sourceItems).length, [sourceItems]);
+
+  const counts = useMemo(() => {
+    const c = {} as Record<Tab, number>;
+    for (const tab of FIXED_TABS) {
+      if (tab === 'timeline') c[tab] = timelineCount;
+      else if (tab === 'reminders') c[tab] = reminderCount;
+      else if (tab === 'shopping') c[tab] = shoppingCount;
+      else c[tab] = itemsForTab(searchedItems, tab).length;
+    }
+    return c;
+  }, [searchedItems, timelineCount, reminderCount, shoppingCount]);
 
   const selectedItem =
     selection.mode === 'edit' ? events.find((e) => e.id === selection.id) ?? null : null;
@@ -71,7 +97,7 @@ export default function EventApp() {
       await updateEvent(selection.id, data);
     } else {
       const created = await addEvent(data);
-      setActiveTab(KIND_FOR_TAB[created.kind] ?? 'today');
+      setActiveTab(KIND_FOR_TAB[created.kind] ?? 'timeline');
       setSelection({ mode: 'edit', id: created.id });
     }
   }
@@ -109,23 +135,12 @@ export default function EventApp() {
     await updateEvent(eventId, { checklists });
   }
 
-  async function handleDeleteTag(tag: string) {
-    const affected = events.filter((e) => e.tags.includes(tag));
-    const ok = window.confirm(
-      `Delete tag "${labelize(tag)}"? It will be removed from ${affected.length} event${
-        affected.length === 1 ? '' : 's'
-      }.`,
-    );
-    if (!ok) return;
-    await Promise.all(
-      affected.map((e) => updateEvent(e.id, { tags: e.tags.filter((t) => t !== tag) })),
-    );
-    if (activeTab === tag) setActiveTab('today');
+  async function handleReschedule(eventId: string, entry: TimelineEntry, day: string) {
+    const event = events.find((e) => e.id === eventId);
+    if (!event) return;
+    const update = rescheduleEntry(event, entry, day);
+    if (update) await updateEvent(eventId, update);
   }
-
-  const isSpecial = (SPECIAL_TABS as readonly string[]).includes(activeTab) ||
-    (VIEW_TABS as readonly string[]).includes(activeTab);
-  const defaultTags = !isSpecial ? [activeTab] : [];
 
   const detailKey =
     selection.mode === 'edit'
@@ -137,124 +152,153 @@ export default function EventApp() {
   const viewTab = isViewTab(activeTab);
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-dot" />
-          <h1 className="display">Organizer</h1>
+    <div className="shell">
+      <aside className="sidebar">
+        <div className="side-brand" title="Organizer">
+          <span className="brand-mark">▾</span>
         </div>
-        <div className="header-actions">
-          <button className="btn btn-primary ripple" onClick={() => setSelection({ mode: 'pick' })}>
-            + New Event
-          </button>
+        <nav className="side-nav">
+          {FIXED_TABS.map((tab) => (
+            <button
+              key={tab}
+              className={tab === activeTab ? 'side-btn active' : 'side-btn'}
+              onClick={() => setActiveTab(tab)}
+              title={TAB_META[tab].label}
+              aria-label={TAB_META[tab].label}
+            >
+              <span aria-hidden>{TAB_META[tab].icon}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="side-bottom">
           <button
-            className="btn btn-ghost ripple icon-btn"
+            className="side-btn"
             onClick={toggleTheme}
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             aria-label="Toggle theme"
           >
-            {theme === 'dark' ? '☀️' : '🌙'}
+            <span aria-hidden>{theme === 'dark' ? '☀️' : '🌙'}</span>
           </button>
-          <button className="btn btn-ghost ripple" onClick={logout}>
-            Log out
+          <button className="side-btn" onClick={logout} title="Log out" aria-label="Log out">
+            <span aria-hidden>⎋</span>
           </button>
+          <span className="side-avatar" aria-hidden>
+            🧑
+          </span>
         </div>
-      </header>
+      </aside>
 
-      <div className="bento">
-        <div className="card card-tabs">
-          <FilterTabs
-            items={sourceItems}
-            tags={tags}
-            reminderCount={reminderCount}
-            shoppingCount={shoppingCount}
-            activeTab={activeTab}
-            onSelectTab={(tab) => setActiveTab(tab)}
-            onSelectItem={(id, tab) => {
-              setActiveTab(tab);
-              setSelection({ mode: 'edit', id });
-            }}
-            onDeleteTag={handleDeleteTag}
-          />
-        </div>
-
-        <section className="card card-list">
-          <div className="card-head">
-            <h2 className="display">{tabLabel(activeTab)}</h2>
-            <div className="card-head-right">
-              {!viewTab && (
-                <label className="switch" title="Show or hide completed events">
-                  <input
-                    type="checkbox"
-                    checked={showDone}
-                    onChange={(e) => setShowDone(e.target.checked)}
-                  />
-                  <span className="switch-track">
-                    <span className="switch-thumb" />
-                  </span>
-                  <span className="switch-label">Show completed</span>
-                </label>
-              )}
-              <span className="card-head-count">
-                {viewTab
-                  ? activeTab === 'reminders'
-                    ? reminderCount
-                    : shoppingCount
-                  : visibleItems.length}
+      <main className="main">
+        <header className="pagehead">
+          <div className="pagehead-titles">
+            <h1 className="display">{tabLabel(activeTab)}</h1>
+            <p className="pagehead-sub">Plan &amp; track everything</p>
+          </div>
+          <div className="pagehead-tools">
+            <label className="searchbox">
+              <span className="searchbox-icon" aria-hidden>
+                🔍
               </span>
-            </div>
-          </div>
-          <div className="card-body">
-            {loading && <p className="muted">Loading…</p>}
-            {error && <p className="error">{error}</p>}
-            {!loading && !error && activeTab === 'reminders' && (
-              <RemindersView events={events} onOpenEvent={(id) => setSelection({ mode: 'edit', id })} />
-            )}
-            {!loading && !error && activeTab === 'shopping' && (
-              <ShoppingView
-                events={events}
-                onOpenEvent={(id) => setSelection({ mode: 'edit', id })}
-                onTogglePurchased={handleTogglePurchased}
+              <input
+                type="search"
+                placeholder="Search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search events"
               />
-            )}
-            {!loading && !error && !viewTab && (
-              <EventList
-                items={visibleItems}
-                selectedId={selection.mode === 'edit' ? selection.id : null}
-                onSelect={(id) => setSelection({ mode: 'edit', id })}
-                onToggleDone={handleToggleDone}
-              />
-            )}
+            </label>
+            <button className="btn btn-primary ripple" onClick={() => setSelection({ mode: 'pick' })}>
+              + New Event
+            </button>
           </div>
-        </section>
+        </header>
 
-        <section className="card card-detail">
-          <div className="card-body">
-            {selection.mode === 'none' ? (
-              <div className="placeholder">
-                <p className="display">Nothing selected</p>
-                <p className="muted">Pick an event on the left, or add a new one.</p>
+        <div className="tabbar">
+          <FilterTabs activeTab={activeTab} counts={counts} onSelectTab={setActiveTab} />
+        </div>
+
+        <div className={viewTab ? 'workspace view' : 'workspace'}>
+          <section className="card card-list">
+            <div className="card-head">
+              <h2 className="display">{tabLabel(activeTab)}</h2>
+              <div className="card-head-right">
+                {!viewTab && (
+                  <label className="switch" title="Show or hide completed events">
+                    <input
+                      type="checkbox"
+                      checked={showDone}
+                      onChange={(e) => setShowDone(e.target.checked)}
+                    />
+                    <span className="switch-track">
+                      <span className="switch-thumb" />
+                    </span>
+                    <span className="switch-label">Show completed</span>
+                  </label>
+                )}
+                <span className="card-head-count">{counts[activeTab] ?? 0}</span>
               </div>
-            ) : selection.mode === 'pick' ? (
-              <KindPicker
-                onPick={(kind) => setSelection({ mode: 'add', kind })}
-                onClose={() => setSelection({ mode: 'none' })}
-              />
-            ) : (
-              <EventDetail
-                key={detailKey}
-                item={selectedItem}
-                addKind={selection.mode === 'add' ? selection.kind : 'list'}
-                knownTags={tags}
-                defaultTags={defaultTags}
-                onSave={handleSave}
-                onDelete={selection.mode === 'edit' ? handleDelete : undefined}
-                onClose={() => setSelection({ mode: 'none' })}
-              />
-            )}
-          </div>
-        </section>
-      </div>
+            </div>
+            <div className="card-body">
+              {loading && <p className="muted">Loading…</p>}
+              {error && <p className="error">{error}</p>}
+              {!loading && !error && activeTab === 'timeline' && (
+                <TimelineView
+                  events={sourceItems}
+                  query={query}
+                  selectedId={selection.mode === 'edit' ? selection.id : null}
+                  onOpenEvent={(id) => setSelection({ mode: 'edit', id })}
+                  onReschedule={handleReschedule}
+                />
+              )}
+              {!loading && !error && activeTab === 'reminders' && (
+                <RemindersView events={events} onOpenEvent={(id) => setSelection({ mode: 'edit', id })} />
+              )}
+              {!loading && !error && activeTab === 'shopping' && (
+                <ShoppingView
+                  events={events}
+                  onOpenEvent={(id) => setSelection({ mode: 'edit', id })}
+                  onTogglePurchased={handleTogglePurchased}
+                />
+              )}
+              {!loading && !error && !viewTab && (
+                <EventList
+                  items={visibleItems}
+                  selectedId={selection.mode === 'edit' ? selection.id : null}
+                  onSelect={(id) => setSelection({ mode: 'edit', id })}
+                  onToggleDone={handleToggleDone}
+                />
+              )}
+            </div>
+          </section>
+
+          <section className="card card-detail">
+            <div className="card-body">
+              {selection.mode === 'none' ? (
+                <div className="placeholder">
+                  <p className="display">Nothing selected</p>
+                  <p className="muted">Pick an event on the left, or add a new one.</p>
+                </div>
+              ) : selection.mode === 'pick' ? (
+                <KindPicker
+                  onPick={(kind) => setSelection({ mode: 'add', kind })}
+                  onClose={() => setSelection({ mode: 'none' })}
+                />
+              ) : (
+                <EventDetail
+                  key={detailKey}
+                  item={selectedItem}
+                  addKind={selection.mode === 'add' ? selection.kind : 'list'}
+                  knownTags={tags}
+                  defaultTags={[]}
+                  onSave={handleSave}
+                  onDelete={selection.mode === 'edit' ? handleDelete : undefined}
+                  onClose={() => setSelection({ mode: 'none' })}
+                />
+              )}
+            </div>
+          </section>
+        </div>
+      </main>
     </div>
   );
 }

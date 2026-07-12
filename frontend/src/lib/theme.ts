@@ -10,7 +10,7 @@ export function getTheme(): Theme {
   if (attr === 'light' || attr === 'dark') return attr;
   const stored = localStorage.getItem(KEY);
   if (stored === 'light' || stored === 'dark') return stored;
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  return 'light';
 }
 
 export function applyTheme(theme: Theme): void {

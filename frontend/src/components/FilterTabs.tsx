@@ -1,114 +1,78 @@
 import type { EventDocument } from '../types/organizer';
-import { labelize } from '../types/organizer';
 import { compareByStart, isOverdue, isToday } from '../lib/dates';
 
 // Event-card tabs (filter the events list).
 export const KIND_TABS = ['container', 'occurrence', 'habit', 'list'] as const;
-export const SPECIAL_TABS = ['today', ...KIND_TABS] as const;
-// Derived-view tabs (render their own views, not event cards).
-export const VIEW_TABS = ['reminders', 'shopping'] as const;
+// Tabs whose contents are event cards.
+export const LIST_TABS = ['today', ...KIND_TABS] as const;
+// Tabs that render their own view instead of the event-card list.
+export const VIEW_TABS = ['timeline', 'reminders', 'shopping'] as const;
+// The full, fixed set — order is the display order. Tags are NOT tabs.
+export const FIXED_TABS = [
+  'timeline',
+  'today',
+  'container',
+  'occurrence',
+  'habit',
+  'list',
+  'reminders',
+  'shopping',
+] as const;
 
-export type Tab = string;
+export type Tab = (typeof FIXED_TABS)[number];
 
-const TAB_LABELS: Record<string, string> = {
-  today: 'Today',
-  container: 'Trips / Projects',
-  occurrence: 'Appointments',
-  habit: 'Habits',
-  list: 'Lists',
-  reminders: 'Reminders',
-  shopping: 'Shopping',
+export const TAB_META: Record<Tab, { label: string; icon: string }> = {
+  timeline: { label: 'Timeline', icon: '🗓️' },
+  today: { label: 'Today', icon: '📌' },
+  container: { label: 'Trips / Projects', icon: '🧳' },
+  occurrence: { label: 'Appointments', icon: '📅' },
+  habit: { label: 'Habits', icon: '🔄' },
+  list: { label: 'Lists', icon: '✅' },
+  reminders: { label: 'Reminders', icon: '🔔' },
+  shopping: { label: 'Shopping', icon: '🛒' },
 };
 
 export function isViewTab(tab: Tab): boolean {
   return (VIEW_TABS as readonly string[]).includes(tab);
 }
 
-/** Events belonging to a (non-view) tab. */
+/** Events belonging to a (list) tab. View tabs render their own data. */
 export function itemsForTab(items: EventDocument[], tab: Tab): EventDocument[] {
   let filtered: EventDocument[];
   if (tab === 'today') filtered = items.filter((i) => isToday(i) || isOverdue(i));
   else if ((KIND_TABS as readonly string[]).includes(tab)) filtered = items.filter((i) => i.kind === tab);
-  else if (isViewTab(tab)) filtered = [];
-  else filtered = items.filter((i) => i.tags.includes(tab));
+  else filtered = [];
   return [...filtered].sort(compareByStart);
 }
 
 export function tabLabel(tab: Tab): string {
-  return TAB_LABELS[tab] ?? labelize(tab);
+  return TAB_META[tab]?.label ?? tab;
 }
 
 interface Props {
-  items: EventDocument[];
-  tags: string[];
-  reminderCount: number;
-  shoppingCount: number;
   activeTab: Tab;
+  counts: Record<Tab, number>;
   onSelectTab: (tab: Tab) => void;
-  onSelectItem: (id: string, tab: Tab) => void;
-  onDeleteTag: (tag: string) => void;
 }
 
-export default function FilterTabs({
-  items,
-  tags,
-  reminderCount,
-  shoppingCount,
-  activeTab,
-  onSelectTab,
-  onSelectItem,
-  onDeleteTag,
-}: Props) {
-  const viewCounts: Record<string, number> = { reminders: reminderCount, shopping: shoppingCount };
-  const tabs: Tab[] = [...SPECIAL_TABS, ...VIEW_TABS, ...tags];
-
+export default function FilterTabs({ activeTab, counts, onSelectTab }: Props) {
   return (
-    <nav className="tabs">
-      {tabs.map((tab) => {
-        const view = isViewTab(tab);
-        const tabItems = view ? [] : itemsForTab(items, tab);
-        const isTag = !(SPECIAL_TABS as readonly string[]).includes(tab) && !view;
-        const count = view ? viewCounts[tab] ?? 0 : tabItems.length;
-        const showDropdown = !view && (tabItems.length > 0 || isTag);
-        return (
-          <div key={tab} className="tab-wrap">
-            <button
-              className={tab === activeTab ? 'tab ripple active' : 'tab ripple'}
-              onClick={() => onSelectTab(tab)}
-            >
-              {tabLabel(tab)}
-              <span className="tab-count">{count}</span>
-            </button>
-            {showDropdown && (
-              <ul className="tab-dropdown">
-                {tabItems.map((item) => (
-                  <li key={item.id}>
-                    <button className="tab-dropdown-item" onClick={() => onSelectItem(item.id, tab)}>
-                      <span
-                        className={
-                          item.status === 'done' || item.status === 'cancelled'
-                            ? 'dd-title done'
-                            : 'dd-title'
-                        }
-                      >
-                        {item.title || '(untitled)'}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-                {tabItems.length === 0 && <li className="dd-empty">No events</li>}
-                {isTag && (
-                  <li>
-                    <button className="tab-dropdown-item delete" onClick={() => onDeleteTag(tab)}>
-                      🗑 Delete tag
-                    </button>
-                  </li>
-                )}
-              </ul>
-            )}
-          </div>
-        );
-      })}
+    <nav className="tabs" role="tablist">
+      {FIXED_TABS.map((tab) => (
+        <button
+          key={tab}
+          role="tab"
+          aria-selected={tab === activeTab}
+          className={tab === activeTab ? 'tab ripple active' : 'tab ripple'}
+          onClick={() => onSelectTab(tab)}
+        >
+          <span className="tab-icon" aria-hidden>
+            {TAB_META[tab].icon}
+          </span>
+          {TAB_META[tab].label}
+          <span className="tab-count">{counts[tab] ?? 0}</span>
+        </button>
+      ))}
     </nav>
   );
 }

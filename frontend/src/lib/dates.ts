@@ -79,6 +79,28 @@ export function formatRange(a: string | null | undefined, b: string | null | und
   return x || y || 'No dates';
 }
 
+/** Just the time part of an ISO value, e.g. "9:00 AM" (empty if date-only). */
+export function formatTime(iso: string | null | undefined): string {
+  const d = parseIso(iso);
+  if (!d || !iso || !iso.includes('T')) return '';
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+/** Heading for a day bucket: "Today", "Tomorrow", or "Mon, Jul 14". */
+export function formatDayHeading(day: string): string {
+  const d = parseIso(day);
+  if (!d) return day;
+  const key = toDateStr(d);
+  if (key === todayStr()) return 'Today';
+  if (key === tomorrowStr()) return 'Tomorrow';
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+/** True when a YYYY-MM-DD is before today (a past day). */
+export function isPastDay(day: string): boolean {
+  return day < todayStr();
+}
+
 /** Convert a YYYY-MM-DD (+ optional HH:MM) into an ISO datetime string. */
 export function combineDateTime(date: string, time: string): string {
   if (!date) return '';
