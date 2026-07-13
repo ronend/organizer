@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { EventDocument } from '../types/organizer';
-import { EVENT_KIND_META, labelize } from '../types/organizer';
+import { labelize } from '../types/organizer';
 import {
   deriveTimeline,
   timelineDay,
@@ -9,6 +9,7 @@ import {
 } from '../lib/derive';
 import { formatDayHeading, formatTime, isPastDay } from '../lib/dates';
 import { describeRRule } from '../lib/recurrence';
+import Icon, { KIND_ICON, type IconName } from './Icon';
 
 interface Props {
   events: EventDocument[];
@@ -31,6 +32,9 @@ export default function TimelineView({
 }: Props) {
   const [dragging, setDragging] = useState<TimelineEntry | null>(null);
   const [overDay, setOverDay] = useState<string | null>(null);
+  // A synchronous mirror of `dragging`: drop/dragover fire faster than React
+  // commits state, so we read the ref to avoid a stale null.
+  const draggingRef = useRef<TimelineEntry | null>(null);
 
   const entries = useMemo(() => {
     const all = deriveTimeline(events);
@@ -59,16 +63,21 @@ export default function TimelineView({
   }, [dated]);
 
   function drop(day: string) {
-    if (dragging) onReschedule(dragging.eventId, dragging, day);
+    const entry = draggingRef.current;
+    if (entry) onReschedule(entry.eventId, entry, day);
+    draggingRef.current = null;
     setDragging(null);
     setOverDay(null);
   }
 
   function renderCard(entry: TimelineEntry) {
-    const meta = EVENT_KIND_META[entry.kind];
     const done = entry.status === 'done' || entry.status === 'cancelled';
-    const icon =
-      entry.source === 'reminder' ? '🔔' : entry.source === 'item' ? '☑️' : meta.icon;
+    const iconName: IconName =
+      entry.source === 'reminder'
+        ? 'bell'
+        : entry.source === 'item'
+          ? 'check-circle'
+          : KIND_ICON[entry.kind];
     const showContext = entry.source !== 'event';
     return (
       <li
@@ -84,23 +93,29 @@ export default function TimelineView({
         draggable
         onDragStart={(e) => {
           e.dataTransfer.effectAllowed = 'move';
+          // Some browsers won't start a drag unless data is set.
+          e.dataTransfer.setData('text/plain', entry.key);
+          draggingRef.current = entry;
           setDragging(entry);
         }}
         onDragEnd={() => {
+          draggingRef.current = null;
           setDragging(null);
           setOverDay(null);
         }}
         onClick={() => onOpenEvent(entry.eventId)}
       >
         <span className="tl-grip" aria-hidden>
-          ⠿
+          <Icon name="grip" size={16} />
         </span>
         <span className="tl-time">
           {entry.date ? (entry.hasTime ? formatTime(entry.date) : 'All day') : 'No date'}
         </span>
         <span className="tl-body">
           <span className="tl-title">
-            <span className="tl-icon">{icon}</span>
+            <span className="tl-icon">
+              <Icon name={iconName} size={16} />
+            </span>
             {entry.title}
           </span>
           <span className="tl-sub">
@@ -136,10 +151,17 @@ export default function TimelineView({
           <section
             key={day}
             className={'tl-day' + (overDay === day ? ' over' : '') + (past ? ' past' : '')}
-            onDragOver={(e) => {
-              if (!dragging) return;
+            onDragEnter={(e) => {
+              if (!draggingRef.current) return;
               e.preventDefault();
               setOverDay(day);
+            }}
+            onDragOver={(e) => {
+              if (!draggingRef.current) return;
+              // Must run on every dragover or the browser rejects the drop.
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              if (overDay !== day) setOverDay(day);
             }}
             onDragLeave={(e) => {
               if (e.currentTarget === e.target) setOverDay(null);

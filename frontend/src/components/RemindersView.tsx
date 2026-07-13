@@ -2,6 +2,7 @@ import type { EventDocument } from '../types/organizer';
 import { deriveReminders } from '../lib/derive';
 import { formatDate } from '../lib/dates';
 import { describeRRule } from '../lib/recurrence';
+import Icon from './Icon';
 
 interface Props {
   events: EventDocument[];
@@ -18,7 +19,9 @@ export default function RemindersView({ events, onOpenEvent }: Props) {
         <li key={`${r.event_id}-${r.id}`} className="reminder-list-row" onClick={() => onOpenEvent(r.event_id)}>
           <span className="reminder-fire">{formatDate(r.fire_at)}</span>
           <span className="reminder-body">
-            <span className="reminder-list-title">🔔 {r.title || '(untitled)'}</span>
+            <span className="reminder-list-title">
+              <Icon name="bell" size={15} /> {r.title || '(untitled)'}
+            </span>
             <span className="reminder-list-sub">
               {r.event_title}
               {r.recurrence_rule ? ` · ${describeRRule(r.recurrence_rule)}` : ''}

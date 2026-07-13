@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { EventDocument } from '../types/organizer';
-import { EVENT_KIND_META, labelize } from '../types/organizer';
+import { labelize } from '../types/organizer';
 import { formatDate, formatRange, dateUrgency } from '../lib/dates';
 import { describeRRule } from '../lib/recurrence';
+import Icon, { KIND_ICON } from './Icon';
 
 interface Props {
   items: EventDocument[]; // already filtered + sorted
@@ -63,7 +64,6 @@ export default function EventList({ items, selectedId, onSelect, onToggleDone }:
   return (
     <ul className="item-list" ref={listRef}>
       {items.map((event, i) => {
-        const meta = EVENT_KIND_META[event.kind];
         const urgency = dateUrgency(event);
         const itemCount = event.items.length;
         const reminderCount =
@@ -96,7 +96,9 @@ export default function EventList({ items, selectedId, onSelect, onToggleDone }:
             />
             <div className="item-main">
               <span className="item-title">
-                <span className="entry-icon">{meta.icon}</span>
+                <span className="entry-icon">
+                  <Icon name={KIND_ICON[event.kind]} size={16} />
+                </span>
                 {event.title || '(untitled)'}
               </span>
               <span className="item-meta">
@@ -111,17 +113,17 @@ export default function EventList({ items, selectedId, onSelect, onToggleDone }:
                 )}
                 {itemCount > 0 && (
                   <span className="badge contact" title="Items">
-                    📋 {itemCount}
+                    <Icon name="list" size={12} /> {itemCount}
                   </span>
                 )}
                 {reminderCount > 0 && (
                   <span className="badge reminder" title="Reminders">
-                    🔔 {reminderCount}
+                    <Icon name="bell" size={12} /> {reminderCount}
                   </span>
                 )}
                 {checklistItems > 0 && (
                   <span className="badge contact" title="Checklist items">
-                    ✔️ {checklistItems}
+                    <Icon name="check" size={12} /> {checklistItems}
                   </span>
                 )}
                 <span className={`item-due ${urgency}`}>{dateLabel}</span>

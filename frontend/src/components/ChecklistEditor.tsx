@@ -1,5 +1,6 @@
 import type { ChecklistInstance, ChecklistItem } from '../types/organizer';
 import { newLocalId } from '../lib/localId';
+import Icon from './Icon';
 
 interface Props {
   value: ChecklistInstance[];
@@ -79,7 +80,7 @@ export default function ChecklistEditor({ value, onChange }: Props) {
                   checked={ci.needs_purchase}
                   onChange={(e) => patchItem(cl.id, ci.id, { needs_purchase: e.target.checked })}
                 />
-                🛒
+                <Icon name="cart" size={15} />
               </label>
               <label className="mini-toggle" title="Purchased">
                 <input
@@ -87,7 +88,7 @@ export default function ChecklistEditor({ value, onChange }: Props) {
                   checked={ci.purchased}
                   onChange={(e) => patchItem(cl.id, ci.id, { purchased: e.target.checked })}
                 />
-                ✅
+                <Icon name="check" size={15} />
               </label>
               <button
                 type="button"

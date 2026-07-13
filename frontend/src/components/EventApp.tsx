@@ -16,6 +16,7 @@ import FilterTabs, {
 } from './FilterTabs';
 import EventList from './EventList';
 import EventDetail from './EventDetail';
+import Icon from './Icon';
 import KindPicker from './KindPicker';
 import RemindersView from './RemindersView';
 import ShoppingView from './ShoppingView';
@@ -155,7 +156,7 @@ export default function EventApp() {
     <div className="shell">
       <aside className="sidebar">
         <div className="side-brand" title="Organizer">
-          <span className="brand-mark">▾</span>
+          <Icon name="logo" size={24} />
         </div>
         <nav className="side-nav">
           {FIXED_TABS.map((tab) => (
@@ -166,7 +167,7 @@ export default function EventApp() {
               title={TAB_META[tab].label}
               aria-label={TAB_META[tab].label}
             >
-              <span aria-hidden>{TAB_META[tab].icon}</span>
+              <Icon name={TAB_META[tab].icon} size={20} />
             </button>
           ))}
         </nav>
@@ -177,13 +178,13 @@ export default function EventApp() {
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             aria-label="Toggle theme"
           >
-            <span aria-hidden>{theme === 'dark' ? '☀️' : '🌙'}</span>
+            <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={20} />
           </button>
           <button className="side-btn" onClick={logout} title="Log out" aria-label="Log out">
-            <span aria-hidden>⎋</span>
+            <Icon name="logout" size={20} />
           </button>
           <span className="side-avatar" aria-hidden>
-            🧑
+            <Icon name="user" size={18} />
           </span>
         </div>
       </aside>
@@ -196,8 +197,8 @@ export default function EventApp() {
           </div>
           <div className="pagehead-tools">
             <label className="searchbox">
-              <span className="searchbox-icon" aria-hidden>
-                🔍
+              <span className="searchbox-icon">
+                <Icon name="search" size={16} />
               </span>
               <input
                 type="search"
@@ -207,8 +208,12 @@ export default function EventApp() {
                 aria-label="Search events"
               />
             </label>
-            <button className="btn btn-primary ripple" onClick={() => setSelection({ mode: 'pick' })}>
-              + New Event
+            <button
+              className="btn btn-primary ripple with-icon"
+              onClick={() => setSelection({ mode: 'pick' })}
+            >
+              <Icon name="plus" size={16} />
+              New Event
             </button>
           </div>
         </header>

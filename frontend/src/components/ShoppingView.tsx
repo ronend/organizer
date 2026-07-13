@@ -1,5 +1,6 @@
 import type { EventDocument } from '../types/organizer';
 import { deriveShopping } from '../lib/derive';
+import Icon from './Icon';
 
 interface Props {
   events: EventDocument[];
@@ -22,7 +23,9 @@ export default function ShoppingView({ events, onOpenEvent, onTogglePurchased }:
             onChange={(e) => onTogglePurchased(row.event_id, row.checklist_id, row.id, e.target.checked)}
           />
           <span className="shopping-body">
-            <span className="shopping-label">🛒 {row.label || '(unnamed)'}</span>
+            <span className="shopping-label">
+              <Icon name="cart" size={15} /> {row.label || '(unnamed)'}
+            </span>
             <button className="shopping-context" onClick={() => onOpenEvent(row.event_id)}>
               {row.event_title} · {row.checklist_name}
             </button>

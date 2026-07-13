@@ -1,5 +1,6 @@
 import type { EventKind } from '../types/organizer';
 import { EVENT_KINDS, EVENT_KIND_META } from '../types/organizer';
+import Icon, { KIND_ICON } from './Icon';
 
 interface Props {
   onPick: (kind: EventKind) => void;
@@ -11,8 +12,8 @@ export default function KindPicker({ onPick, onClose }: Props) {
     <div className="detail">
       <div className="detail-header">
         <h2 className="display">New Event</h2>
-        <button type="button" className="btn btn-ghost ripple" onClick={onClose}>
-          ✕ Close
+        <button type="button" className="btn btn-ghost ripple with-icon" onClick={onClose}>
+          <Icon name="x" size={14} /> Close
         </button>
       </div>
       <p className="muted">Pick the kind of event. (Kind drives behavior; you set a free-form subtype next.)</p>
@@ -27,7 +28,9 @@ export default function KindPicker({ onPick, onClose }: Props) {
               title={`New ${meta.label}`}
               onClick={() => onPick(kind)}
             >
-              <span className="type-card-icon">{meta.icon}</span>
+              <span className="type-card-icon">
+                <Icon name={KIND_ICON[kind]} size={28} />
+              </span>
               <span className="type-card-title">{meta.label}</span>
               <span className="type-card-blurb">{meta.blurb}</span>
             </button>

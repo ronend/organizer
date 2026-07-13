@@ -10,6 +10,7 @@ import ChecklistEditor from './ChecklistEditor';
 import AttachmentEditor from './AttachmentEditor';
 import AttrsEditor from './AttrsEditor';
 import DateTimeField from './DateTimeField';
+import Icon, { KIND_ICON } from './Icon';
 import type { EventFormProps } from './EventDetail';
 
 const EVENT_STATUS = ['planned', 'active', 'done', 'cancelled'];
@@ -36,8 +37,8 @@ function Section({
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="field">
-      <button type="button" className="section-toggle" onClick={() => setOpen((v) => !v)}>
-        {open ? '▾' : '▸'} {title}
+      <button type="button" className="section-toggle with-icon" onClick={() => setOpen((v) => !v)}>
+        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} /> {title}
         {count ? ` (${count})` : ''}
       </button>
       {open && <div className="section-body">{children}</div>}
@@ -129,10 +130,13 @@ export default function EventForm({
     <form className="detail" onSubmit={handleSubmit}>
       <div className="detail-header">
         <h2 className="display">
-          <span className="type-emoji">{meta.icon}</span> {item ? `Edit ${meta.label}` : `New ${meta.label}`}
+          <span className="type-emoji">
+            <Icon name={KIND_ICON[kind]} size={18} />
+          </span>{' '}
+          {item ? `Edit ${meta.label}` : `New ${meta.label}`}
         </h2>
-        <button type="button" className="btn btn-ghost ripple" onClick={close}>
-          ✕ Close
+        <button type="button" className="btn btn-ghost ripple with-icon" onClick={close}>
+          <Icon name="x" size={14} /> Close
         </button>
       </div>
 

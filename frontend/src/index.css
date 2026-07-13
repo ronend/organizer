@@ -2197,3 +2197,66 @@ body {
   color: var(--muted);
   font-style: italic;
 }
+
+/* ====================== Icons (inline SVG) ====================== */
+/* Wrappers that pair an icon with text: center them on one line. */
+.btn.with-icon,
+.section-toggle,
+.badge,
+.reminder-list-title,
+.shopping-label,
+.mini-toggle,
+.tab-icon,
+.tl-icon,
+.entry-icon,
+.searchbox-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Icon-only buttons/handles: center the glyph in the box. */
+.side-btn,
+.side-brand,
+.side-avatar,
+.move-btn,
+.prereq-del,
+.tl-grip,
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* SVGs shouldn't add descender space or shrink in flex rows. */
+.app svg,
+.shell svg {
+  flex: none;
+}
+
+.type-emoji {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: -0.18em;
+}
+
+.type-card-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.item-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.entry-icon {
+  color: var(--accent);
+  margin: 0;
+}
+
+.tl-card.item .tl-icon,
+.badge.contact {
+  color: var(--muted);
+}

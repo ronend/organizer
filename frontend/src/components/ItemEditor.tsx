@@ -5,6 +5,7 @@ import { newLocalId } from '../lib/localId';
 import AttrsEditor from './AttrsEditor';
 import ReminderEditor from './ReminderEditor';
 import DateTimeField from './DateTimeField';
+import Icon, { ITEM_ICON } from './Icon';
 
 interface Props {
   value: Item[];
@@ -88,9 +89,11 @@ function ItemCard({
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
         >
-          ⠿
+          <Icon name="grip" size={16} />
         </span>
-        <span className="type-emoji">{ITEM_KIND_META[item.kind].icon}</span>
+        <span className="type-emoji">
+          <Icon name={ITEM_ICON[item.kind]} size={16} />
+        </span>
         <input
           className="item-card-title"
           placeholder="Item title"
@@ -106,7 +109,7 @@ function ItemCard({
             title="Move up"
             onClick={() => onMove(-1)}
           >
-            ↑
+            <Icon name="arrow-up" size={14} />
           </button>
           <button
             type="button"
@@ -116,14 +119,14 @@ function ItemCard({
             title="Move down"
             onClick={() => onMove(1)}
           >
-            ↓
+            <Icon name="arrow-down" size={14} />
           </button>
         </span>
         <button type="button" className="section-toggle" onClick={() => setOpen((v) => !v)}>
-          {open ? '▾' : '▸'}
+          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
         </button>
         <button type="button" className="prereq-del" aria-label="Remove item" onClick={onRemove}>
-          ✕
+          <Icon name="x" size={14} />
         </button>
       </div>
 

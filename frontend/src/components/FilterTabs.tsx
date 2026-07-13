@@ -1,5 +1,6 @@
 import type { EventDocument } from '../types/organizer';
 import { compareByStart, isOverdue, isToday } from '../lib/dates';
+import Icon, { type IconName } from './Icon';
 
 // Event-card tabs (filter the events list).
 export const KIND_TABS = ['container', 'occurrence', 'habit', 'list'] as const;
@@ -21,15 +22,15 @@ export const FIXED_TABS = [
 
 export type Tab = (typeof FIXED_TABS)[number];
 
-export const TAB_META: Record<Tab, { label: string; icon: string }> = {
-  timeline: { label: 'Timeline', icon: '🗓️' },
-  today: { label: 'Today', icon: '📌' },
-  container: { label: 'Trips / Projects', icon: '🧳' },
-  occurrence: { label: 'Appointments', icon: '📅' },
-  habit: { label: 'Habits', icon: '🔄' },
-  list: { label: 'Lists', icon: '✅' },
-  reminders: { label: 'Reminders', icon: '🔔' },
-  shopping: { label: 'Shopping', icon: '🛒' },
+export const TAB_META: Record<Tab, { label: string; icon: IconName }> = {
+  timeline: { label: 'Timeline', icon: 'timeline' },
+  today: { label: 'Today', icon: 'today' },
+  container: { label: 'Trips / Projects', icon: 'briefcase' },
+  occurrence: { label: 'Appointments', icon: 'calendar' },
+  habit: { label: 'Habits', icon: 'repeat' },
+  list: { label: 'Lists', icon: 'list-checks' },
+  reminders: { label: 'Reminders', icon: 'bell' },
+  shopping: { label: 'Shopping', icon: 'cart' },
 };
 
 export function isViewTab(tab: Tab): boolean {
@@ -66,8 +67,8 @@ export default function FilterTabs({ activeTab, counts, onSelectTab }: Props) {
           className={tab === activeTab ? 'tab ripple active' : 'tab ripple'}
           onClick={() => onSelectTab(tab)}
         >
-          <span className="tab-icon" aria-hidden>
-            {TAB_META[tab].icon}
+          <span className="tab-icon">
+            <Icon name={TAB_META[tab].icon} size={16} />
           </span>
           {TAB_META[tab].label}
           <span className="tab-count">{counts[tab] ?? 0}</span>
