@@ -9,15 +9,15 @@ directly. The Organizer API expects:
     this header itself, so it is OPTIONAL when TODO_API_URL is the CloudFront URL)
 
 Auth is **per-request, pass-through**: the caller's Cognito access token (sent to
-this MCP server) is forwarded to the API, so events stay owned by the real user.
+this MCP server) is forwarded to the API, so items stay owned by the real user.
   - HTTP transport: the token is read from the incoming request's Authorization
     header via the MCP request context (see `token_from_context`).
   - stdio transport: there is no incoming HTTP request, so the token falls back
     to the TODO_API_KEY environment variable.
 
-Types below mirror the webapp's event model (snake_case) — see
-backend/src/routes/events.py and frontend/src/types/organizer.ts, which both
-follow data-structure.md.
+Types below mirror the webapp's flat entity model (snake_case) — see
+backend/src/routes/items.py, frontend/src/types/organizer.ts, and
+entity-model-proposal.md.
 """
 
 from __future__ import annotations
@@ -26,88 +26,13 @@ import os
 from typing import Any, Literal, Optional
 
 import httpx
-from pydantic import BaseModel, Field
 
 BASE_URL = os.environ.get("TODO_API_URL", "http://localhost:8000").rstrip("/")
 # Only needed when hitting the Lambda Function URL directly (bypassing CloudFront).
 ORIGIN_SECRET = os.environ.get("TODO_ORIGIN_SECRET", "")
 
-EventKind = Literal["container", "occurrence", "habit", "list"]
-ItemKind = Literal["task", "reservation", "entry", "checklist_item"]
-
-
-# ── Domain models (mirror the webapp; used as typed tool inputs) ──────────────
-
-
-class Reminder(BaseModel):
-    id: Optional[str] = None
-    title: str = ""
-    status: str = "pending"
-    fire_at: str = ""
-    offset_rule: Optional[str] = None  # "-30d", "-2h", "+1d", "0"
-    recurrence_rule: Optional[str] = None  # RFC 5545 RRULE
-    notes: Optional[str] = None
-    url: Optional[str] = None
-    login_hint: Optional[str] = None
-    attrs: dict[str, Any] = Field(default_factory=dict)
-
-
-class Item(BaseModel):
-    id: Optional[str] = None
-    kind: ItemKind = "task"
-    subtype: str = ""
-    tags: list[str] = Field(default_factory=list)
-    title: str = ""
-    status: str = "todo"
-    scheduled_at: Optional[str] = None
-    due_at: Optional[str] = None
-    sort_order: int = 0
-    confirmation_ref: Optional[str] = None
-    cost: Optional[float] = None
-    currency: Optional[str] = None
-    address: Optional[str] = None
-    phone: Optional[str] = None
-    url: Optional[str] = None
-    login_hint: Optional[str] = None
-    prereq_ids: list[str] = Field(default_factory=list)
-    attrs: dict[str, Any] = Field(default_factory=dict)
-    reminders: list[Reminder] = Field(default_factory=list)
-
-
-class ChecklistItem(BaseModel):
-    id: Optional[str] = None
-    label: str = ""
-    checked: bool = False
-    needs_purchase: bool = False
-    purchased: bool = False
-    notes: Optional[str] = None
-    sort_order: int = 0
-
-
-class ChecklistInstance(BaseModel):
-    id: Optional[str] = None
-    template_id: Optional[str] = None
-    name: str = ""
-    items: list[ChecklistItem] = Field(default_factory=list)
-
-
-class Attachment(BaseModel):
-    id: Optional[str] = None
-    label: str = ""
-    item_id: Optional[str] = None
-    mime_type: Optional[str] = None
-    url: Optional[str] = None
-    storage_key: Optional[str] = None
-
-
-class TemplateItem(BaseModel):
-    id: Optional[str] = None
-    label: str = ""
-    category: Optional[str] = None
-    needs_purchase: bool = False
-    sort_order: int = 0
-    default_reminder_offset: Optional[str] = None
-    notes: Optional[str] = None
+EntityType = Literal["todo", "appointment", "habit", "routine", "reservation", "event", "story"]
+ReservationSubtype = Literal["hotel", "flight", "tour", "activity", "restaurant"]
 
 
 # ── Token resolution (per-request pass-through) ───────────────────────────────
@@ -175,79 +100,48 @@ async def _request(method: str, path: str, token: str, json: Any = None) -> Any:
     return resp.json()
 
 
-# ── Events ─────────────────────────────────────────────────────────────────────
+# ── Items ─────────────────────────────────────────────────────────────────────
 #
-# GET /api/events returns ALL of a user's event documents. We add thin
-# client-side conveniences (filtering, tag derivation) on top. Every function
-# takes the caller's `token`.
+# GET /api/items returns ALL of a user's entities. Every function takes the
+# caller's `token`.
 
 
-async def list_events(
-    token: str,
-    kind: Optional[EventKind] = None,
-    tag: Optional[str] = None,
-    status: Optional[str] = None,
-) -> list[dict]:
-    """GET /api/events, optionally filtered client-side by kind/tag/status."""
-    events: list[dict] = await _request("GET", "/api/events", token)
-    if kind is None and tag is None and status is None:
-        return events
-    needle = tag.strip().lower() if tag else None
-    result = []
-    for e in events:
-        if kind is not None and e.get("kind") != kind:
-            continue
-        if status is not None and e.get("status") != status:
-            continue
-        if needle is not None and needle not in (e.get("tags") or []):
-            continue
-        result.append(e)
-    return result
+async def list_items(token: str, type: Optional[EntityType] = None) -> list[dict]:
+    """GET /api/items, optionally filtered by type (server-side)."""
+    qs = f"?type={type}" if type else ""
+    return await _request("GET", f"/api/items{qs}", token)
 
 
-async def get_event(token: str, event_id: str) -> dict:
-    """GET /api/events/{id} — full event document (404 if missing)."""
-    return await _request("GET", f"/api/events/{event_id}", token)
+async def get_item(token: str, item_id: str) -> dict:
+    """GET /api/items/{id} — full entity (404 if missing)."""
+    return await _request("GET", f"/api/items/{item_id}", token)
 
 
-async def create_event(token: str, body: dict) -> dict:
-    """POST /api/events — returns the created event (201)."""
-    return await _request("POST", "/api/events", token, json=body)
+async def create_item(token: str, body: dict) -> dict:
+    """POST /api/items — returns the created entity (201)."""
+    return await _request("POST", "/api/items", token, json=body)
 
 
-async def update_event(token: str, event_id: str, body: dict) -> dict:
-    """PUT /api/events/{id} — returns the updated event (404 if missing)."""
-    return await _request("PUT", f"/api/events/{event_id}", token, json=body)
+async def update_item(token: str, item_id: str, body: dict) -> dict:
+    """PUT /api/items/{id} — partial update, returns the updated entity."""
+    return await _request("PUT", f"/api/items/{item_id}", token, json=body)
 
 
-async def complete_event(token: str, event_id: str) -> dict:
-    """POST /api/events/{id}/complete — mark done; if it recurs, spawn the next
-    occurrence. Returns {"completed": <event>, "next": <event|None>}."""
-    return await _request("POST", f"/api/events/{event_id}/complete", token)
+async def delete_item(token: str, item_id: str) -> None:
+    """DELETE /api/items/{id} — 204 No Content."""
+    await _request("DELETE", f"/api/items/{item_id}", token)
 
 
-async def delete_event(token: str, event_id: str) -> None:
-    """DELETE /api/events/{id} — 204 No Content."""
-    await _request("DELETE", f"/api/events/{event_id}", token)
+async def log_habit(token: str, item_id: str, date: str, completed: bool) -> dict:
+    """POST /api/items/{id}/log — record a habit occurrence for a date."""
+    return await _request(
+        "POST", f"/api/items/{item_id}/log", token, json={"date": date, "completed": completed}
+    )
 
 
-# ── Templates ────────────────────────────────────────────────────────────────
-
-
-async def list_templates(token: str) -> list[dict]:
-    return await _request("GET", "/api/templates", token)
-
-
-async def create_template(token: str, body: dict) -> dict:
-    return await _request("POST", "/api/templates", token, json=body)
-
-
-async def update_template(token: str, template_id: str, body: dict) -> dict:
-    return await _request("PUT", f"/api/templates/{template_id}", token, json=body)
-
-
-async def delete_template(token: str, template_id: str) -> None:
-    await _request("DELETE", f"/api/templates/{template_id}", token)
+async def story_timeline(token: str, item_id: str) -> dict:
+    """GET /api/items/{id}/timeline — a story's reservations/events, chronological."""
+    return await _request("GET", f"/api/items/{item_id}/timeline", token)
 
 
 # ── Derived views ──────────────────────────────────────────────────────────────
@@ -256,7 +150,7 @@ async def delete_template(token: str, template_id: str) -> None:
 async def upcoming_reminders(
     token: str, before: Optional[str] = None, status: Optional[str] = "pending"
 ) -> list[dict]:
-    """GET /api/reminders/upcoming — the flat reminders_index, ordered by fire_at."""
+    """GET /api/reminders/upcoming — the flat reminder index, ordered by fire_at."""
     params = []
     if before:
         params.append(f"before={before}")
@@ -264,21 +158,3 @@ async def upcoming_reminders(
         params.append(f"status={status}")
     qs = ("?" + "&".join(params)) if params else ""
     return await _request("GET", f"/api/reminders/upcoming{qs}", token)
-
-
-async def shopping_list(token: str) -> list[dict]:
-    """GET /api/views/shopping — checklist items that need purchasing."""
-    return await _request("GET", "/api/views/shopping", token)
-
-
-async def list_tags(token: str) -> list[dict]:
-    """Derived: distinct tags across all events, with counts."""
-    events: list[dict] = await _request("GET", "/api/events", token)
-    counts: dict[str, int] = {}
-    for e in events:
-        for t in e.get("tags") or []:
-            counts[t] = counts.get(t, 0) + 1
-    return [
-        {"tag": tag, "count": count}
-        for tag, count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
-    ]

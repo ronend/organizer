@@ -42,7 +42,7 @@ Cognito, persisted in DynamoDB.
   same-origin → no CORS configuration anywhere.
 - The Lambda Function URL is `AuthType: NONE`; access control is the FastAPI
   `origin_verify` middleware (checks the `x-origin-verify` header CloudFront
-  injects) plus Cognito JWT verification on `/api/organizers`.
+  injects) plus Cognito JWT verification on `/api/items`.
 
 ## Project layout
 

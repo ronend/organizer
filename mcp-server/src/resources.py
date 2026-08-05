@@ -1,6 +1,6 @@
 """Resource registrations — addressable, read-only views Claude can pull in
-proactively. The browsable axes mirror the webapp: all events, the distinct
-tags in use, and the upcoming reminders projection.
+proactively. The browsable axes mirror the webapp: all items and the upcoming
+reminders projection.
 
 Resource read functions are called with no arguments (FastMCP does not inject
 Context into resources), so they obtain the caller's token via mcp.get_context(),
@@ -19,29 +19,19 @@ from .client import token_from_context
 
 def register_resources(mcp: FastMCP) -> None:
     @mcp.resource(
-        "organizer://events",
-        name="all-events",
-        description="Every event document (container/occurrence/habit/list) for the user",
+        "organizer://items",
+        name="all-items",
+        description="Every entity (todo/appointment/habit/routine/reservation/event/story) for the user",
         mime_type="application/json",
     )
-    async def all_events() -> str:
+    async def all_items() -> str:
         token = token_from_context(mcp.get_context())
-        return json.dumps(await client.list_events(token), indent=2, default=str)
-
-    @mcp.resource(
-        "organizer://tags",
-        name="all-tags",
-        description="All distinct free-form tags in use and how many events carry each",
-        mime_type="application/json",
-    )
-    async def all_tags() -> str:
-        token = token_from_context(mcp.get_context())
-        return json.dumps(await client.list_tags(token), indent=2, default=str)
+        return json.dumps(await client.list_items(token), indent=2, default=str)
 
     @mcp.resource(
         "organizer://reminders/upcoming",
         name="upcoming-reminders",
-        description="Pending reminders across all events, ordered by fire_at (what fires next)",
+        description="Pending reminders across all items, ordered by fire_at (what fires next)",
         mime_type="application/json",
     )
     async def upcoming_reminders() -> str:

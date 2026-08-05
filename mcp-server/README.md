@@ -1,12 +1,12 @@
 # Organizer MCP Server
 
 A standalone [Model Context Protocol](https://modelcontextprotocol.io) server that
-wraps the Organizer webapp's REST API (`/api/organizers`). It lets Claude — via
+wraps the Organizer webapp's REST API (`/api/items`). It lets Claude — via
 Claude Code, Claude.ai connectors, or the Claude API — read and manage organizer
-entries directly, with no proxy and no hand-written tool definitions.
+items directly, with no proxy and no hand-written tool definitions.
 
 **Auth is per-user pass-through.** The caller's Cognito access token flows through
-the MCP server to the Organizer API, so entries stay owned by the real user — the
+the MCP server to the Organizer API, so items stay owned by the real user — the
 MCP server never holds shared credentials. Over HTTP the token comes from the
 request; over stdio it comes from `TODO_API_KEY`.
 
@@ -14,25 +14,28 @@ request; over stdio it comes from `TODO_API_KEY`.
 
 **Tools**
 
-| Tool                  | API call                                  | Purpose |
-|-----------------------|-------------------------------------------|---------|
-| `list_entries`        | `GET /api/organizers` (+ client filter)   | All entries, optionally filtered by type/tag/done |
-| `get_entry`           | `GET /api/organizers` → find by id        | One entry (no single-GET route exists) |
-| `list_tags`           | derived from `GET /api/organizers`        | Distinct tags + counts (tags replace lists/projects) |
-| `create_entry`        | `POST /api/organizers`                    | Create a task / trip / recurring entry |
-| `update_entry`        | `PUT /api/organizers/{id}`                | Partial update of any field |
-| `complete_recurring`  | `POST /api/organizers/{id}/complete`      | Complete an occurrence and spawn the next |
-| `delete_entry`        | `DELETE /api/organizers/{id}`             | Permanent delete |
+| Tool                  | API call                              | Purpose |
+|-----------------------|---------------------------------------|---------|
+| `list_items`          | `GET /api/items` (opt. `?type=`)      | All items, optionally filtered by type |
+| `get_item`            | `GET /api/items/{id}`                 | One item of any type |
+| `create_item`         | `POST /api/items`                     | Create an item of any of the seven types |
+| `update_item`         | `PUT /api/items/{id}`                 | Partial update (type is immutable) |
+| `log_habit`           | `POST /api/items/{id}/log`            | Record a habit occurrence for a date |
+| `get_story_timeline`  | `GET /api/items/{id}/timeline`        | A story's reservations/events, chronological |
+| `upcoming_reminders`  | `GET /api/reminders/upcoming`         | What fires next, ordered by fire_at |
+| `delete_item`         | `DELETE /api/items/{id}`              | Permanent delete |
 
 **Resources**
 
-- `organizer://entries` — all entries as JSON
-- `organizer://tags` — distinct tags with counts
+- `organizer://items` — all items as JSON
+- `organizer://reminders/upcoming` — pending reminders, ordered by fire_at
 
-> **Data model note:** entries have a `type` (`task` \| `trip` \| `recurring`),
-> a required `title` and `dueDate` (`YYYY-MM-DD`), a `dueTime`, a `done` boolean,
-> and free-form `tags`. There is **no** `status`/`priority`/`list` concept — this
-> server is aligned to the webapp's actual schema, not the generic todo template.
+> **Data model note:** the webapp uses a flat discriminated union tagged by
+> `type` — one of `todo`, `appointment`, `habit`, `routine`, `reservation`,
+> `event`, `story` — each with its own required fields (see
+> [entity-model-proposal.md](../entity-model-proposal.md)). There is no
+> `kind`/`tags`/`checklist` concept; this server is aligned to the webapp's
+> actual schema.
 
 Implemented in Python with the [`mcp`](https://pypi.org/project/mcp/) SDK
 (FastMCP) — matching the webapp's Python/FastAPI backend.
@@ -184,11 +187,11 @@ see [src/auth.py](src/auth.py) / [src/server.py](src/server.py)); CloudFront rou
 Try these prompts once connected:
 
 ```
-List all my entries
-Show me all recurring entries
-Create a task called "Review MCP implementation" due 2026-06-20 with tag work
-Mark entry <id> as done
-Complete the recurring entry <id>
+List all my items
+Show me all my reservations
+Create a todo called "Review MCP implementation" due 2026-06-20T17:00:00
+Mark item <id> as completed
+What reminders fire next?
 ```
 
 ## Architecture
@@ -211,8 +214,8 @@ mcp-server/
     asgi.py        gated Streamable HTTP app (origin-verify + Cognito)
     server.py      builds the FastMCP instance (stateless+JSON), registers tools/resources
     auth.py        Cognito access-token verification (mirrors the backend)
-    tools.py       list/get/create/update/complete/delete entries, list tags
-    resources.py   organizer://entries, organizer://tags
+    tools.py       list/get/create/update/delete items, log_habit, story timeline, reminders
+    resources.py   organizer://items, organizer://reminders/upcoming
     client.py      typed REST wrapper, per-request token pass-through (the only privileged file)
   requirements.txt
   .env.example
