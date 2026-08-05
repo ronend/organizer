@@ -285,19 +285,35 @@ def _read_rows_from_dynamo(table, user_id: str) -> dict:
         row.pop("SK", None)
         return row
 
-    events, templates, others = [], [], []
+    # Only the old-model prefixes are migrated/removed. Any ITEM# rows that
+    # already exist (e.g. created through the new UI) are LEFT UNTOUCHED so a
+    # migration never destroys new data.
+    OLD_PREFIXES = ("EVENT#", "TMPL#", "REMIDX#")
+    events, templates, to_delete, preserved = [], [], [], 0
     for row in items:
         sk = row.get("SK", "")
         if sk.startswith("EVENT#"):
             events.append(strip(row))
+            to_delete.append(row)
         elif sk.startswith("TMPL#"):
             templates.append(strip(row))
+            to_delete.append(row)
+        elif sk.startswith("REMIDX#"):
+            to_delete.append(row)  # old index — rebuilt from the new entities
+        elif sk.startswith(tuple(p for p in OLD_PREFIXES)):
+            to_delete.append(row)
         else:
-            others.append(row)  # REMIDX# and anything else — dropped/rewritten
-    return {"events": events, "templates": templates, "others": others, "raw": items}
+            preserved += 1  # ITEM# and anything else — keep as-is
+    return {
+        "events": events,
+        "templates": templates,
+        "to_delete": to_delete,
+        "preserved": preserved,
+        "raw": items,
+    }
 
 
-def _write_to_dynamo(table, user_id: str, entities: list[dict], old_raw: list[dict]) -> None:
+def _write_to_dynamo(table, user_id: str, entities: list[dict], to_delete: list[dict]) -> None:
     from decimal import Decimal
 
     def numify(v):
@@ -312,8 +328,9 @@ def _write_to_dynamo(table, user_id: str, entities: list[dict], old_raw: list[di
         return v
 
     with table.batch_writer() as bw:
-        # Remove every old row for this user (events, templates, old index).
-        for row in old_raw:
+        # Remove only old-model rows (events, templates, old index). ITEM# rows
+        # are preserved.
+        for row in to_delete:
             bw.delete_item(Key={"userId": user_id, "SK": row["SK"]})
         # Write the new entities + their reminder-index projection.
         for entity in entities:
@@ -360,16 +377,21 @@ def main() -> None:
 
     result = transform(rows["events"], rows["templates"])
     print("\n".join(result["report"]))
+    if rows["preserved"]:
+        print(f"  {rows['preserved']} existing ITEM#/other row(s) will be preserved as-is")
 
     if args.dry_run:
-        print("\n(dry-run — nothing written)")
+        print(f"\n(dry-run — nothing written; would remove {len(rows['to_delete'])} old rows)")
         return
 
     if not args.backup:
         ap.error("refusing to write without --backup (pass --backup <file> to proceed)")
 
-    _write_to_dynamo(table, args.user_id, result["entities"], rows["raw"])
-    print(f"Wrote {len(result['entities'])} entities for user {args.user_id}; removed {len(rows['raw'])} old rows.")
+    _write_to_dynamo(table, args.user_id, result["entities"], rows["to_delete"])
+    print(
+        f"Wrote {len(result['entities'])} entities for user {args.user_id}; "
+        f"removed {len(rows['to_delete'])} old rows; preserved {rows['preserved']}."
+    )
 
 
 if __name__ == "__main__":
