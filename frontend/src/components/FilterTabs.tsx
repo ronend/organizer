@@ -1,49 +1,47 @@
-import type { EventDocument } from '../types/organizer';
-import { compareByStart, isOverdue, isToday } from '../lib/dates';
-import Icon, { type IconName } from './Icon';
+import type { Entity, EntityType } from '../types/organizer';
+import Icon, { TYPE_ICON, type IconName } from './Icon';
 
-// Event-card tabs (filter the events list).
-export const KIND_TABS = ['container', 'occurrence', 'habit', 'list'] as const;
-// Tabs whose contents are event cards.
-export const LIST_TABS = ['today', ...KIND_TABS] as const;
-// Tabs that render their own view instead of the event-card list.
-export const VIEW_TABS = ['timeline', 'reminders', 'shopping'] as const;
-// The full, fixed set — order is the display order. Tags are NOT tabs.
-export const FIXED_TABS = [
-  'timeline',
-  'today',
-  'container',
-  'occurrence',
+// One tab per entity type, plus a unified "all" agenda and the reminders view.
+export const TYPE_TABS: EntityType[] = [
+  'todo',
+  'appointment',
+  'reservation',
+  'event',
+  'routine',
   'habit',
-  'list',
-  'reminders',
-  'shopping',
-] as const;
+  'story',
+];
+export const VIEW_TABS = ['reminders'] as const;
+export const FIXED_TABS = ['all', ...TYPE_TABS, ...VIEW_TABS] as const;
 
 export type Tab = (typeof FIXED_TABS)[number];
 
 export const TAB_META: Record<Tab, { label: string; icon: IconName }> = {
-  timeline: { label: 'Timeline', icon: 'timeline' },
-  today: { label: 'Today', icon: 'today' },
-  container: { label: 'Trips / Projects', icon: 'briefcase' },
-  occurrence: { label: 'Appointments', icon: 'calendar' },
-  habit: { label: 'Habits', icon: 'repeat' },
-  list: { label: 'Lists', icon: 'list-checks' },
+  all: { label: 'All items', icon: 'timeline' },
+  todo: { label: 'Todos', icon: TYPE_ICON.todo },
+  appointment: { label: 'Appointments', icon: TYPE_ICON.appointment },
+  reservation: { label: 'Reservations', icon: TYPE_ICON.reservation },
+  event: { label: 'Events', icon: TYPE_ICON.event },
+  routine: { label: 'Routines', icon: TYPE_ICON.routine },
+  habit: { label: 'Habits', icon: TYPE_ICON.habit },
+  story: { label: 'Stories', icon: TYPE_ICON.story },
   reminders: { label: 'Reminders', icon: 'bell' },
-  shopping: { label: 'Shopping', icon: 'cart' },
 };
 
 export function isViewTab(tab: Tab): boolean {
   return (VIEW_TABS as readonly string[]).includes(tab);
 }
 
-/** Events belonging to a (list) tab. View tabs render their own data. */
-export function itemsForTab(items: EventDocument[], tab: Tab): EventDocument[] {
-  let filtered: EventDocument[];
-  if (tab === 'today') filtered = items.filter((i) => isToday(i) || isOverdue(i));
-  else if ((KIND_TABS as readonly string[]).includes(tab)) filtered = items.filter((i) => i.kind === tab);
-  else filtered = [];
-  return [...filtered].sort(compareByStart);
+export function isTypeTab(tab: Tab): tab is EntityType {
+  return (TYPE_TABS as readonly string[]).includes(tab);
+}
+
+/** Entities belonging to a tab. "all" shows everything; view tabs render their
+ * own data (empty here). */
+export function itemsForTab(items: Entity[], tab: Tab): Entity[] {
+  if (tab === 'all') return items;
+  if (isTypeTab(tab)) return items.filter((e) => e.type === tab);
+  return [];
 }
 
 export function tabLabel(tab: Tab): string {

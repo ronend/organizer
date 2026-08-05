@@ -1,12 +1,4 @@
-import type {
-  EventDocument,
-  NewEvent,
-  UpdateEvent,
-  Template,
-  NewTemplate,
-  ReminderIndexEntry,
-  ShoppingEntry,
-} from '../types/organizer';
+import type { Entity, EntityType, NewEntity, EntityUpdate } from '../types/organizer';
 
 const BASE_URL = '/api';
 
@@ -25,7 +17,6 @@ export function configureApiClient(getter: () => string | null, unauthorized: ()
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = tokenGetter();
   if (!token) {
-    // No valid token — bounce to login and stop.
     onUnauthorized();
     throw new Error('Not authenticated');
   }
@@ -44,72 +35,68 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new Error('Unauthorized');
   }
   if (!res.ok) {
-    throw new Error(`Request failed: ${res.status}`);
+    // Surface the server's validation detail when present.
+    let detail = '';
+    try {
+      const body = await res.json();
+      detail = typeof body?.detail === 'string' ? body.detail : JSON.stringify(body?.detail ?? '');
+    } catch {
+      /* non-JSON body */
+    }
+    throw new Error(detail || `Request failed: ${res.status}`);
   }
-  // DELETE may return an empty body.
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
-// ── Events ─────────────────────────────────────────────────────────────────
+// ── Items ──────────────────────────────────────────────────────────────────────
 
-export function getEvents(): Promise<EventDocument[]> {
-  return request<EventDocument[]>('/events');
+export function getItems(type?: EntityType): Promise<Entity[]> {
+  const qs = type ? `?type=${encodeURIComponent(type)}` : '';
+  return request<Entity[]>(`/items${qs}`);
 }
 
-export function createEvent(data: NewEvent): Promise<EventDocument> {
-  return request<EventDocument>('/events', {
+export function createItem(data: NewEntity): Promise<Entity> {
+  return request<Entity>('/items', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function updateItem(id: string, updates: EntityUpdate): Promise<Entity> {
+  return request<Entity>(`/items/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
+}
+
+export function deleteItem(id: string): Promise<void> {
+  return request<void>(`/items/${id}`, { method: 'DELETE' });
+}
+
+/** Record a habit occurrence for a date. Returns the updated habit. */
+export function logHabit(id: string, date: string, completed: boolean): Promise<Entity> {
+  return request<Entity>(`/items/${id}/log`, {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify({ date, completed }),
   });
 }
 
-export function updateEvent(id: string, updates: UpdateEvent): Promise<EventDocument> {
-  return request<EventDocument>(`/events/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(updates),
-  });
+// ── Derived views (also available server-side for MCP/programmatic use) ────────
+
+export interface ReminderIndexRow {
+  id: string;
+  source_id: string;
+  source_type: EntityType;
+  title: string;
+  fire_at: string;
+  status: string;
 }
 
-export function deleteEvent(id: string): Promise<void> {
-  return request<void>(`/events/${id}`, { method: 'DELETE' });
-}
-
-/** Mark done; if the event recurs, the backend spawns the next occurrence. */
-export function completeEvent(
-  id: string,
-): Promise<{ completed: EventDocument; next: EventDocument | null }> {
-  return request(`/events/${id}/complete`, { method: 'POST' });
-}
-
-// ── Templates ────────────────────────────────────────────────────────────────
-
-export function getTemplates(): Promise<Template[]> {
-  return request<Template[]>('/templates');
-}
-
-export function createTemplate(data: NewTemplate): Promise<Template> {
-  return request<Template>('/templates', { method: 'POST', body: JSON.stringify(data) });
-}
-
-export function updateTemplate(id: string, updates: Partial<NewTemplate>): Promise<Template> {
-  return request<Template>(`/templates/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(updates),
-  });
-}
-
-export function deleteTemplate(id: string): Promise<void> {
-  return request<void>(`/templates/${id}`, { method: 'DELETE' });
-}
-
-// ── Derived views ────────────────────────────────────────────────────────────
-
-export function getUpcomingReminders(before?: string): Promise<ReminderIndexEntry[]> {
+export function getUpcomingReminders(before?: string): Promise<ReminderIndexRow[]> {
   const qs = before ? `?before=${encodeURIComponent(before)}` : '';
-  return request<ReminderIndexEntry[]>(`/reminders/upcoming${qs}`);
+  return request<ReminderIndexRow[]>(`/reminders/upcoming${qs}`);
 }
 
-export function getShoppingList(): Promise<ShoppingEntry[]> {
-  return request<ShoppingEntry[]>('/views/shopping');
+export interface StoryTimeline {
+  story: Entity;
+  timeline: Entity[];
+}
+
+export function getStoryTimeline(id: string): Promise<StoryTimeline> {
+  return request<StoryTimeline>(`/items/${id}/timeline`);
 }

@@ -1,221 +1,159 @@
-// Domain types mirroring backend/src/routes/events.py and data-structure.md.
-// Field names are snake_case to match the API payloads exactly (no remapping).
+// Domain types for the flat 7-type entity model. Mirrors the backend Pydantic
+// union in backend/src/routes/items.py exactly (snake_case field names — no
+// remapping between API payloads and the client).
 
-// `kind` drives behavior (rendering, reminder/recurrence logic).
-export const EVENT_KINDS = ['container', 'occurrence', 'habit', 'list'] as const;
-export type EventKind = (typeof EVENT_KINDS)[number];
+export const ENTITY_TYPES = [
+  'todo',
+  'appointment',
+  'habit',
+  'routine',
+  'reservation',
+  'event',
+  'story',
+] as const;
+export type EntityType = (typeof ENTITY_TYPES)[number];
 
-// `kind` on an item.
-export const ITEM_KINDS = ['task', 'reservation', 'entry', 'checklist_item'] as const;
-export type ItemKind = (typeof ITEM_KINDS)[number];
+export const RESERVATION_SUBTYPES = ['hotel', 'flight', 'tour', 'activity', 'restaurant'] as const;
+export type ReservationSubtype = (typeof RESERVATION_SUBTYPES)[number];
 
-// Tags are free-form, user-defined labels.
-export type Tag = string;
+export const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+export type Weekday = (typeof WEEKDAYS)[number];
 
-// `attrs` is an open extension bag — arbitrary key/value pairs.
-export type Attrs = Record<string, unknown>;
+// ── Sub-schemas ──────────────────────────────────────────────────────────────
 
-/** A reminder, embedded on an event or on a specific item. */
-export interface Reminder {
+export interface ContactDetails {
+  name?: string;
+  phone?: string;
+  email?: string;
+}
+
+export type RecurrenceRule =
+  | { freq: 'daily'; interval?: number }
+  | { freq: 'weekly'; interval?: number; days: Weekday[] }
+  | { freq: 'every_n_days'; n: number }
+  | { freq: 'monthly'; interval?: number; day_of_month: number };
+
+export type ReminderTime =
+  | { kind: 'offset'; offset: string } // relative to due_at, e.g. "-2h", "-1d"
+  | { kind: 'absolute'; at: string }; // absolute ISO datetime
+
+// ── Base + the seven entities ────────────────────────────────────────────────
+
+interface BaseEntity {
   id: string;
+  type: EntityType;
   title: string;
-  status: string; // "pending" | "snoozed" | "done" | "skipped"
-  fire_at: string; // ISO 8601 datetime — computed absolute time
-  offset_rule: string | null; // relative rule, e.g. "-30d", "-2h", "+1d", "0"
-  recurrence_rule: string | null; // RFC 5545 RRULE for repeating reminders
-  notes: string | null;
-  url: string | null;
-  login_hint: string | null;
-  attrs: Attrs;
-}
-
-/** An item embedded in an event (task / reservation / entry / checklist_item). */
-export interface Item {
-  id: string;
-  kind: ItemKind;
-  subtype: string;
-  tags: Tag[];
-  title: string;
-  status: string; // "todo" | "confirmed" | "done" | "cancelled" — extensible
-  scheduled_at: string | null; // ISO 8601 datetime — when this item happens
-  due_at: string | null; // ISO 8601 datetime — when a task is due
-  sort_order: number;
-  // Reservation fields:
-  confirmation_ref: string | null;
-  cost: number | null;
-  currency: string | null;
-  address: string | null;
-  phone: string | null;
-  url: string | null;
-  login_hint: string | null;
-  // Task fields:
-  prereq_ids: string[];
-  attrs: Attrs;
-  reminders: Reminder[];
-}
-
-export interface ChecklistItem {
-  id: string;
-  label: string;
-  checked: boolean;
-  needs_purchase: boolean;
-  purchased: boolean;
-  notes: string | null;
-  sort_order: number;
-}
-
-export interface ChecklistInstance {
-  id: string;
-  template_id: string | null;
-  name: string;
-  items: ChecklistItem[];
-}
-
-export interface Attachment {
-  id: string;
-  label: string;
-  item_id: string | null; // null → belongs to the event; else to a specific item
-  mime_type: string | null;
-  url: string | null;
-  storage_key: string | null;
-}
-
-/** The top-level entity. Everything about an event lives in this one document. */
-export interface EventDocument {
-  id: string;
-  parent_id: string | null;
-  kind: EventKind;
-  subtype: string;
-  tags: Tag[];
-  title: string;
-  status: string; // "planned" | "active" | "done" | "cancelled" — extensible
-  start_date: string | null; // ISO 8601 date "2026-07-14"
-  end_date: string | null;
-  recurrence_rule: string | null; // RFC 5545 RRULE
-  attrs: Attrs;
-  items: Item[];
-  reminders: Reminder[]; // event-level reminders
-  checklists: ChecklistInstance[];
-  attachments: Attachment[];
   created_at: string;
   updated_at: string;
 }
 
-// ── Templates ──────────────────────────────────────────────────────────────
-
-export interface TemplateItem {
-  id: string;
-  label: string;
-  category: string | null;
-  needs_purchase: boolean;
-  sort_order: number;
-  default_reminder_offset: string | null;
-  notes: string | null;
+export interface Todo extends BaseEntity {
+  type: 'todo';
+  due_at: string;
+  completed: boolean;
 }
 
-export interface Template {
-  id: string;
-  name: string;
-  applies_to_subtype: string | null;
-  auto_apply: boolean;
-  description: string | null;
-  tags: Tag[];
-  items: TemplateItem[];
-  created_at: string;
-  updated_at: string;
+export interface Appointment extends BaseEntity {
+  type: 'appointment';
+  date_time: string;
+  location: string | null;
+  contact: ContactDetails;
+  things_to_bring: string[];
+  completed: boolean;
 }
 
-// ── Derived views ────────────────────────────────────────────────────────────
-
-/** A flat reminders_index row (what fires next). */
-export interface ReminderIndexEntry {
-  id: string;
-  event_id: string;
-  item_id: string | null;
-  title: string;
-  fire_at: string;
-  recurrence_rule: string | null;
-  status: string;
+export interface Habit extends BaseEntity {
+  type: 'habit';
+  recurrence: RecurrenceRule;
+  completion_log: Record<string, boolean>;
 }
 
-/** A row of the derived shopping list. */
-export interface ShoppingEntry extends ChecklistItem {
-  event_id: string;
-  event_title: string;
-  checklist_id: string;
-  checklist_name: string;
+export interface Routine extends BaseEntity {
+  type: 'routine';
+  due_at: string;
+  reminders: ReminderTime[];
+  completed: boolean;
 }
+
+export interface Reservation extends BaseEntity {
+  type: 'reservation';
+  subtype: ReservationSubtype;
+  date_time: string;
+  location: string | null;
+  details: string | Record<string, unknown> | null;
+  reservation_number: string | null;
+}
+
+export interface EventEntity extends BaseEntity {
+  type: 'event';
+  start_at: string;
+  end_at: string;
+  details: string | null;
+}
+
+export interface Story extends BaseEntity {
+  type: 'story';
+  item_refs: string[]; // ordered ids of reservation/event entities only
+}
+
+export type Entity = Todo | Appointment | Habit | Routine | Reservation | EventEntity | Story;
 
 // ── Create/update payloads ────────────────────────────────────────────────────
 
-/** Fields the client sends when creating an event. Server fills ids + timestamps
- * + reminder fire_at. Subdocument ids may be omitted on create. */
-export type NewEvent = {
-  kind: EventKind;
-  subtype?: string;
-  tags?: Tag[];
-  title: string;
-  status?: string;
-  parent_id?: string | null;
-  start_date?: string | null;
-  end_date?: string | null;
-  recurrence_rule?: string | null;
-  attrs?: Attrs;
-  items?: Partial<Item>[];
-  reminders?: Partial<Reminder>[];
-  checklists?: Partial<ChecklistInstance>[];
-  attachments?: Partial<Attachment>[];
-};
+// Distributive Omit so each union member keeps its own shape.
+type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
 
-export type UpdateEvent = Partial<NewEvent>;
+/** What a form submits: a full, valid entity minus the server-owned fields. */
+export type NewEntity = DistributiveOmit<Entity, 'id' | 'created_at' | 'updated_at'>;
 
-export type NewTemplate = {
-  name: string;
-  applies_to_subtype?: string | null;
-  auto_apply?: boolean;
-  description?: string | null;
-  tags?: Tag[];
-  items?: Partial<TemplateItem>[];
-};
+/** A partial update sent to PUT (server re-validates the merged document). */
+export type EntityUpdate = Record<string, unknown>;
 
-// ── Display helpers ────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-/** Normalize a free-form tag label (lowercase, trimmed, capped). */
-export function normalizeTag(raw: string): string {
-  return raw.trim().toLowerCase().slice(0, 40);
+/** The date field an entity is sorted/displayed by, or null when it has none. */
+export function entityDate(e: Entity): string | null {
+  switch (e.type) {
+    case 'todo':
+    case 'routine':
+      return e.due_at;
+    case 'appointment':
+    case 'reservation':
+      return e.date_time;
+    case 'event':
+      return e.start_at;
+    case 'habit':
+    case 'story':
+      return null;
+  }
 }
 
-/** Title-case a tag/tab label for display. */
+/** True for the types that carry a `completed` flag. */
+export function isCompletable(e: Entity): e is Todo | Appointment | Routine {
+  return e.type === 'todo' || e.type === 'appointment' || e.type === 'routine';
+}
+
+export function isCompleted(e: Entity): boolean {
+  return isCompletable(e) && e.completed;
+}
+
+/** Title-case a short label for display. */
 export function labelize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export const EVENT_KIND_META: Record<EventKind, { icon: string; label: string; blurb: string }> = {
-  container: {
-    icon: '🧳',
-    label: 'Trip / Project',
-    blurb: 'A trip, project, or life area with a date span. Holds items and reminders.',
-  },
-  occurrence: {
-    icon: '📅',
+export const ENTITY_META: Record<EntityType, { label: string; blurb: string }> = {
+  todo: { label: 'Todo', blurb: 'A single task with a due date and time.' },
+  appointment: {
     label: 'Appointment',
-    blurb: 'A single appointment or deadline that may recur (dentist, inspection).',
+    blurb: 'A dated meeting with a location, contact, and things to bring.',
   },
-  habit: {
-    icon: '🔄',
-    label: 'Habit',
-    blurb: 'A lightweight recurring entry driven by reminders (medication, payments).',
+  habit: { label: 'Habit', blurb: 'A recurring practice with no fixed end — tracked by a completion log.' },
+  routine: { label: 'Routine', blurb: 'A dated task that can carry several scheduled reminders.' },
+  reservation: {
+    label: 'Reservation',
+    blurb: 'A booking — hotel, flight, tour, activity, or restaurant — with a confirmation number.',
   },
-  list: {
-    icon: '✅',
-    label: 'List',
-    blurb: 'No dates — check-off items and checklists (groceries, shopping).',
-  },
-};
-
-export const ITEM_KIND_META: Record<ItemKind, { icon: string; label: string }> = {
-  task: { icon: '☑️', label: 'Task' },
-  reservation: { icon: '🎟️', label: 'Reservation' },
-  entry: { icon: '📝', label: 'Entry' },
-  checklist_item: { icon: '✔️', label: 'Checklist item' },
+  event: { label: 'Event', blurb: 'Something with a start and end time.' },
+  story: { label: 'Story', blurb: 'An ordered collection of reservations and events on a timeline.' },
 };

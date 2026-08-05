@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import type { EventKind, ItemKind } from '../types/organizer';
+import type { EntityType } from '../types/organizer';
 
 // A small, modern line-icon set (Lucide/Feather style). Every glyph is drawn on
 // a 24×24 grid, strokes `currentColor`, and scales crisply — so icons inherit
@@ -30,6 +30,9 @@ export type IconName =
   | 'check'
   | 'x'
   | 'list'
+  | 'clock'
+  | 'calendar-range'
+  | 'layers'
   | 'arrow-up'
   | 'arrow-down';
 
@@ -175,6 +178,26 @@ const ICONS: Record<IconName, ReactNode> = {
       <line x1="9" y1="17" x2="15" y2="17" />
     </>
   ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 15.5 14" />
+    </>
+  ),
+  'calendar-range': (
+    <>
+      <rect x="3" y="4.5" width="18" height="16" rx="2.2" />
+      <line x1="3" y1="9.5" x2="21" y2="9.5" />
+      <line x1="7" y1="13.5" x2="13" y2="13.5" />
+      <line x1="7" y1="17" x2="17" y2="17" />
+    </>
+  ),
+  layers: (
+    <>
+      <polygon points="12 3 21 8 12 13 3 8 12 3" />
+      <polyline points="3 13 12 18 21 13" />
+    </>
+  ),
   'chevron-down': <polyline points="6 9 12 15 18 9" />,
   'chevron-right': <polyline points="9 6 15 12 9 18" />,
   check: <polyline points="20 6 9 17 4 12" />,
@@ -208,20 +231,15 @@ const ICONS: Record<IconName, ReactNode> = {
   ),
 };
 
-/** Icon name to use for each event kind. */
-export const KIND_ICON: Record<EventKind, IconName> = {
-  container: 'briefcase',
-  occurrence: 'calendar',
+/** Icon name to use for each entity type. */
+export const TYPE_ICON: Record<EntityType, IconName> = {
+  todo: 'check-circle',
+  appointment: 'calendar',
   habit: 'repeat',
-  list: 'list-checks',
-};
-
-/** Icon name to use for each embedded item kind. */
-export const ITEM_ICON: Record<ItemKind, IconName> = {
-  task: 'check-circle',
+  routine: 'clock',
   reservation: 'ticket',
-  entry: 'file-text',
-  checklist_item: 'check',
+  event: 'calendar-range',
+  story: 'layers',
 };
 
 interface Props {

@@ -1,4 +1,5 @@
-import type { EventDocument } from '../types/organizer';
+// Date/time helpers operating on ISO strings (the entity model stores ISO
+// date-times everywhere). No coupling to any entity shape.
 
 /** Local YYYY-MM-DD for a given date (defaults to now). */
 export function toDateStr(d: Date = new Date()): string {
@@ -26,36 +27,30 @@ export function parseIso(value: string | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-/** The date an event is "about" — its start_date (used for sorting/Today). */
-export function eventEpoch(event: Pick<EventDocument, 'start_date'>): number {
-  const d = parseIso(event.start_date ?? null);
+/** Epoch ms for a date string; +Infinity when absent (so undated sorts last). */
+export function epoch(iso: string | null | undefined): number {
+  const d = parseIso(iso ?? null);
   return d ? d.getTime() : Number.POSITIVE_INFINITY;
 }
 
-/** Sort comparator: earliest start first, undated last. */
-export function compareByStart(a: EventDocument, b: EventDocument): number {
-  return eventEpoch(a) - eventEpoch(b);
+/** Past and not done. Undated is never overdue. */
+export function isOverdue(iso: string | null | undefined, done = false): boolean {
+  const d = parseIso(iso ?? null);
+  return !!d && !done && d.getTime() < Date.now();
 }
 
-function isDoneStatus(status: string): boolean {
-  return status === 'done' || status === 'cancelled';
+export function isToday(iso: string | null | undefined): boolean {
+  return !!iso && iso.slice(0, 10) === todayStr();
 }
 
-/** Past its start date and not done. (Events without a date are never overdue.) */
-export function isOverdue(event: EventDocument): boolean {
-  const d = parseIso(event.start_date ?? null);
-  return !!d && !isDoneStatus(event.status) && d.getTime() < Date.now();
-}
-
-export function isToday(event: EventDocument): boolean {
-  return !!event.start_date && event.start_date.slice(0, 10) === todayStr();
-}
-
-/** Urgency bucket for date styling: red overdue, amber today, muted future. */
-export function dateUrgency(event: EventDocument): 'overdue' | 'today' | 'future' | 'none' {
-  if (!event.start_date) return 'none';
-  if (isOverdue(event)) return 'overdue';
-  if (isToday(event)) return 'today';
+/** Urgency bucket for date styling. */
+export function urgency(
+  iso: string | null | undefined,
+  done = false,
+): 'overdue' | 'today' | 'future' | 'none' {
+  if (!iso) return 'none';
+  if (isOverdue(iso, done)) return 'overdue';
+  if (isToday(iso)) return 'today';
   return 'future';
 }
 
@@ -71,7 +66,7 @@ export function formatDate(iso: string | null | undefined): string {
   });
 }
 
-/** "Jul 14 – Jul 21" date span (either bound may be missing). */
+/** "Jul 14 – Jul 21" span (either bound may be missing). */
 export function formatRange(a: string | null | undefined, b: string | null | undefined): string {
   const x = formatDate(a);
   const y = formatDate(b);
@@ -96,20 +91,47 @@ export function formatDayHeading(day: string): string {
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-/** True when a YYYY-MM-DD is before today (a past day). */
-export function isPastDay(day: string): boolean {
-  return day < todayStr();
+/** The local YYYY-MM-DD an ISO value falls on, or null. */
+export function dayOf(iso: string | null | undefined): string | null {
+  return iso ? iso.slice(0, 10) : null;
 }
 
-/** Convert a YYYY-MM-DD (+ optional HH:MM) into an ISO datetime string. */
+/**
+ * Apply a relative offset ("-2h", "-1d", "-30m", "+1d", "0") to an ISO datetime.
+ * Mirrors backend/src/recurrence.resolve_offset. Returns null if unparseable.
+ */
+const OFFSET_RE = /^([+-]?)(\d+)\s*([smhdw])$/i;
+const UNIT_MS: Record<string, number> = {
+  s: 1000,
+  m: 60_000,
+  h: 3_600_000,
+  d: 86_400_000,
+  w: 604_800_000,
+};
+
+export function applyOffset(baseIso: string | null | undefined, offset: string): string | null {
+  const base = parseIso(baseIso ?? null);
+  if (!base) return null;
+  const rule = (offset || '').trim().toLowerCase();
+  if (rule === '0' || rule === '+0' || rule === '-0' || rule === '') return isoOf(base);
+  const m = OFFSET_RE.exec(rule);
+  if (!m) return null;
+  const [, sign, num, unit] = m;
+  const delta = Number(num) * UNIT_MS[unit];
+  return isoOf(new Date(base.getTime() + (sign === '-' ? -delta : delta)));
+}
+
+/** Combine a YYYY-MM-DD (+ optional HH:MM) into an ISO datetime string. */
 export function combineDateTime(date: string, time: string): string {
   if (!date) return '';
   return time ? `${date}T${time}:00` : `${date}T00:00:00`;
 }
 
-/** Split an ISO datetime back into { date, time } for form inputs. */
-export function splitDateTime(iso: string | null | undefined): { date: string; time: string } {
-  if (!iso) return { date: '', time: '' };
-  const [date, rest] = iso.split('T');
-  return { date: date ?? '', time: rest ? rest.slice(0, 5) : '' };
+/** ISO string without milliseconds, matching the server's format. */
+export function isoOf(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
 }

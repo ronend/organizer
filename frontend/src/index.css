@@ -2260,3 +2260,96 @@ body {
 .badge.contact {
   color: var(--muted);
 }
+
+/* ============================================================
+   Entity model (flat 7-type) — additions
+   ============================================================ */
+
+/* Inline "Completed" toggle inside forms. */
+.switch-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.4rem 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Chips row used by the string-list editor (things to bring, weekdays). */
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+/* Weekday / removable chips reuse .badge.tag but need interactivity. */
+button.badge.tag {
+  border: none;
+  cursor: pointer;
+  text-transform: none;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+button.badge.tag.active {
+  opacity: 1;
+}
+.badge.tag .chip-x {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.3rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.badge.tag .chip-x:hover {
+  opacity: 1;
+}
+
+/* ---- Story timeline view ---- */
+.story-timeline {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+.timeline-rail {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0 0 0 0.5rem;
+  border-left: 2px solid var(--border);
+}
+.timeline-node {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.5rem 0.4rem 0.5rem 1rem;
+  cursor: pointer;
+  border-radius: 10px;
+}
+.timeline-node:hover {
+  background: var(--surface);
+}
+.timeline-dot {
+  position: absolute;
+  left: -0.85rem;
+  top: 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--accent);
+}
+.timeline-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}

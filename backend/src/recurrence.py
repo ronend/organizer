@@ -1,19 +1,23 @@
-"""Recurrence + reminder-offset math for the event model (data-structure.md).
+"""Recurrence + reminder-offset math (see entity-model-proposal.md).
 
-Two concerns:
+Three concerns:
 
-1. ``recurrence_rule`` — an RFC 5545 RRULE string on an event. We support the
-   common subset FREQ=DAILY|WEEKLY|MONTHLY|YEARLY with optional INTERVAL. Used
-   to generate the *next* occurrence document when one is marked done.
+1. Structured habit ``recurrence`` — a small tagged dict
+   ({"freq": "daily"|"weekly"|"every_n_days"|"monthly", ...}). ``next_recurrence``
+   returns the next occurrence strictly after a given date.
 
-2. ``offset_rule`` — a relative reminder rule ("-30d", "-4w", "-2h", "+1d",
-   "0"). Resolved against a parent date (event.start_date or item.scheduled_at)
-   to compute the reminder's absolute ``fire_at``.
+2. ``offset`` reminder rules ("-30d", "-2h", "+1d", "0") on a routine. Resolved
+   against the routine's ``due_at`` to compute an absolute reminder time.
+
+3. Legacy RFC 5545 RRULE parsing — kept only so the migration script can convert
+   old ``recurrence_rule`` strings into the structured habit ``recurrence``.
 """
 
 import re
 from datetime import datetime, timedelta
 from typing import Optional
+
+WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 
 # ── Date parsing helpers ──────────────────────────────────────────────────────
@@ -115,3 +119,79 @@ def next_occurrence(prev: datetime, recurrence_rule: str) -> Optional[datetime]:
     if freq == "YEARLY":
         return _add_months(prev, 12 * interval)
     return None
+
+
+# ── Structured habit recurrence ─────────────────────────────────────────────────
+
+
+def next_recurrence(prev: datetime, rule: dict) -> Optional[datetime]:
+    """Next occurrence strictly after ``prev`` for a structured recurrence rule.
+
+    Supported shapes (see entity-model-proposal.md §4):
+      {"freq": "daily", "interval": N}
+      {"freq": "weekly", "interval": N, "days": ["mon", ...]}
+      {"freq": "every_n_days", "n": N}
+      {"freq": "monthly", "interval": N, "day_of_month": D}
+    Returns None if the rule is malformed/unsupported.
+    """
+    if not isinstance(rule, dict):
+        return None
+    freq = rule.get("freq")
+
+    if freq == "daily":
+        interval = max(1, int(rule.get("interval", 1) or 1))
+        return prev + timedelta(days=interval)
+
+    if freq == "every_n_days":
+        n = max(1, int(rule.get("n", 1) or 1))
+        return prev + timedelta(days=n)
+
+    if freq == "weekly":
+        days = [d for d in (rule.get("days") or []) if d in WEEKDAYS]
+        if not days:
+            return None
+        wanted = {WEEKDAYS.index(d) for d in days}
+        # Walk forward day by day to the next matching weekday.
+        for step in range(1, 8):
+            cand = prev + timedelta(days=step)
+            if cand.weekday() in wanted:
+                return cand
+        return None
+
+    if freq == "monthly":
+        interval = max(1, int(rule.get("interval", 1) or 1))
+        dom = int(rule.get("day_of_month", prev.day) or prev.day)
+        nxt = _add_months(prev, interval)
+        day = min(max(1, dom), _days_in_month(nxt.year, nxt.month))
+        return nxt.replace(day=day)
+
+    return None
+
+
+def rrule_to_recurrence(rrule: Optional[str], start: Optional[datetime]) -> dict:
+    """Best-effort convert a legacy RRULE string into a structured recurrence.
+
+    Used by the migration only. Falls back to a daily rule so a habit always has
+    a valid recurrence rather than being dropped.
+    """
+    parts = _parse_rrule(rrule) if rrule else {}
+    freq = parts.get("FREQ")
+    try:
+        interval = max(1, int(parts.get("INTERVAL", "1")))
+    except ValueError:
+        interval = 1
+
+    if freq == "WEEKLY":
+        byday = parts.get("BYDAY", "")
+        code_map = {"MO": "mon", "TU": "tue", "WE": "wed", "TH": "thu", "FR": "fri", "SA": "sat", "SU": "sun"}
+        days = [code_map[c] for c in re.findall(r"MO|TU|WE|TH|FR|SA|SU", byday)]
+        if not days and start is not None:
+            days = [WEEKDAYS[start.weekday()]]
+        return {"freq": "weekly", "interval": interval, "days": days or ["mon"]}
+    if freq == "MONTHLY":
+        dom = start.day if start is not None else 1
+        return {"freq": "monthly", "interval": interval, "day_of_month": dom}
+    if freq == "DAILY" and interval > 1:
+        return {"freq": "every_n_days", "n": interval}
+    # DAILY (interval 1), YEARLY, or anything unrecognized → daily.
+    return {"freq": "daily", "interval": 1}

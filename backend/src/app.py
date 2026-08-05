@@ -1,4 +1,4 @@
-"""FastAPI application. Mirrors the previous Express setup:
+"""FastAPI application.
 
 - JSON in/out (FastAPI default)
 - NO CORS — the frontend and API share the same CloudFront domain
@@ -13,9 +13,8 @@ from fastapi import FastAPI
 
 from src.middleware.origin_verify import origin_verify
 from src.routes.auth import router as auth_router
-from src.routes.events import router as events_router
-from src.routes.templates import router as templates_router
-from src.routes.views import reminders_router, views_router
+from src.routes.items import router as items_router
+from src.routes.views import reminders_router
 
 app = FastAPI(title="Organizer API")
 
@@ -27,7 +26,5 @@ app.middleware("http")(origin_verify)
 app.include_router(auth_router)
 
 # Data routes — the auth dependency is declared on each router itself.
-app.include_router(events_router)
-app.include_router(templates_router)
+app.include_router(items_router)
 app.include_router(reminders_router)
-app.include_router(views_router)

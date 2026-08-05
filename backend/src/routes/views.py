@@ -1,9 +1,11 @@
-"""Read-only derived views over the event model (see data-structure.md).
+"""Read-only derived views over the entity model (see entity-model-proposal.md).
 
-- ``GET /api/reminders/upcoming`` — query the flat reminders_index, ordered by
-  fire_at. Optional ``before`` (ISO datetime) and ``status`` filters.
-- ``GET /api/views/shopping`` — checklist items across all events that need
-  purchasing and aren't yet purchased.
+- ``GET /api/reminders/upcoming`` — query the flat reminder index, ordered by
+  fire_at. Optional ``before`` (ISO datetime) and ``status`` filters. This is the
+  notification substrate: routine reminders plus a single trigger per dated item.
+
+(The old shopping view was retired with checklists; story timelines live on the
+items router at ``GET /api/items/{id}/timeline``.)
 """
 
 from typing import Optional
@@ -14,7 +16,6 @@ from src.db import dynamo
 from src.middleware.auth import require_auth
 
 reminders_router = APIRouter(prefix="/api/reminders")
-views_router = APIRouter(prefix="/api/views")
 
 
 @reminders_router.get("/upcoming")
@@ -27,8 +28,3 @@ def upcoming_reminders(
     # An empty status query ("?status=") means "any status".
     st = status or None
     return dynamo.upcoming_reminders(user["sub"], before_iso=before, status=st, limit=limit)
-
-
-@views_router.get("/shopping")
-def shopping_list(user: dict = Depends(require_auth)):
-    return dynamo.shopping_list(user["sub"])

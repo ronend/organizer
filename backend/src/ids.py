@@ -1,55 +1,23 @@
-"""ID generation matching data-structure.md.
+"""ID generation for the flat entity model (see entity-model-proposal.md).
 
-| Entity             | Format            | Example          |
-|--------------------|-------------------|------------------|
-| Event              | evt_ + nanoid(8)  | evt_abc12345     |
-| Item               | itm_ + nanoid(6)  | itm_a1b2c3       |
-| Reminder           | rem_ + nanoid(6)  | rem_x9y8z7       |
-| Checklist instance | cl_  + nanoid(6)  | cl_p1q2r3        |
-| Checklist item     | cli_ + nanoid(6)  | cli_m4n5o6       |
-| Attachment         | att_ + nanoid(6)  | att_d7e8f9       |
-| Template           | tmpl_ + slug      | tmpl_backpacking |
+Every top-level entity is one document with a type-prefixed id:
 
-IDs inside embedded arrays must be globally unique (not just within their
-parent) so the reminders_index sync is unambiguous.
+    <type>_<nanoid(6)>   e.g. todo_a1b2c3, story_x9y8z7, reservation_m4n5o6
+
+The prefix is derived from the discriminator (`type`) so an id is self-describing
+and collisions across types are impossible even before the random suffix.
 """
 
-import re
 import secrets
 
 _ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz"
 
 
-def nanoid(size: int) -> str:
+def nanoid(size: int = 6) -> str:
     return "".join(secrets.choice(_ALPHABET) for _ in range(size))
 
 
-def event_id() -> str:
-    return f"evt_{nanoid(8)}"
-
-
-def item_id() -> str:
-    return f"itm_{nanoid(6)}"
-
-
-def reminder_id() -> str:
-    return f"rem_{nanoid(6)}"
-
-
-def checklist_id() -> str:
-    return f"cl_{nanoid(6)}"
-
-
-def checklist_item_id() -> str:
-    return f"cli_{nanoid(6)}"
-
-
-def attachment_id() -> str:
-    return f"att_{nanoid(6)}"
-
-
-def template_id(name: str) -> str:
-    """tmpl_ + slugified name, with a short random suffix to avoid collisions."""
-    slug = re.sub(r"[^a-z0-9]+", "_", (name or "").strip().lower()).strip("_")
-    slug = slug[:40] or "template"
-    return f"tmpl_{slug}_{nanoid(4)}"
+def entity_id(entity_type: str) -> str:
+    """`<type>_<nanoid(6)>`. `entity_type` is the discriminator, e.g. "reservation"."""
+    prefix = (entity_type or "item").strip().lower() or "item"
+    return f"{prefix}_{nanoid(6)}"
