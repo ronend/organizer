@@ -1,34 +1,83 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { useAuth } from './auth/useAuth';
-import { configureApiClient } from './api/client';
 import AuthCallback from './auth/AuthCallback';
-import ItemApp from './components/ItemApp';
-import './index.css';
+import { configureApiClient, MOCK } from './api/client';
+import { ToastProvider } from './store/Toast';
+import { StoreProvider, useStore } from './store/Store';
+import { UIProvider } from './store/UI';
+import { Shell } from './components/Shell';
+import Home from './pages/Home';
+import Agenda from './pages/Agenda';
+import Trips from './pages/Trips';
+import TripPage from './pages/TripPage';
+import Routines from './pages/Routines';
+import PersonPage from './pages/PersonPage';
+import CarPage from './pages/CarPage';
+import Contacts from './pages/Contacts';
+import './styles.css';
 
-/** Wires the non-React api client to the auth context, then guards routes. */
+/** Wires the api client to auth and redirects to Cognito when signed out. */
 function Protected({ children }: { children: React.ReactNode }) {
   const { getAccessToken, login } = useAuth();
-
-  // Wire the api client SYNCHRONOUSLY during render — not in an effect. Child
-  // effects (useItems' first fetch) run before parent effects, so an
-  // effect here would leave the token getter unset on the initial request.
-  configureApiClient(getAccessToken, login);
-
-  const token = getAccessToken();
-  if (!token) {
-    // Not authenticated → kick off the Cognito hosted UI login.
-    login();
-    return <p style={{ padding: '2rem' }}>Redirecting to sign in…</p>;
+  if (MOCK) {
+    configureApiClient(() => 'mock', () => {});
+    return <>{children}</>;
   }
-
+  // Wire synchronously during render: child effects (the first fetch) run
+  // before parent effects.
+  configureApiClient(getAccessToken, login);
+  if (!getAccessToken()) {
+    login();
+    return <p className="boot">Redirecting to sign in…</p>;
+  }
   return <>{children}</>;
+}
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
+function Pages() {
+  const { ready, loadError, reload } = useStore();
+  if (!ready) return <p className="boot">Loading…</p>;
+  if (loadError)
+    return (
+      <div className="boot">
+        <p>{loadError}</p>
+        <button type="button" className="btn secondary" onClick={reload}>
+          Try again
+        </button>
+      </div>
+    );
+  return (
+    <Shell>
+      <ScrollToTop />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/agenda" element={<Agenda />} />
+        <Route path="/trips" element={<Trips />} />
+        <Route path="/trips/:id" element={<TripPage />} />
+        <Route path="/routines" element={<Routines />} />
+        <Route path="/people/:id" element={<PersonPage page="overview" />} />
+        <Route path="/people/:id/health" element={<PersonPage page="health" />} />
+        <Route path="/people/:id/identity" element={<PersonPage page="identity" />} />
+        <Route path="/cars/:id" element={<CarPage page="overview" />} />
+        <Route path="/cars/:id/documents" element={<CarPage page="documents" />} />
+        <Route path="/contacts" element={<Contacts />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Shell>
+  );
 }
 
 function AppRoutes() {
   const location = useLocation();
-
-  // /callback is the only unprotected route.
   if (location.pathname === '/callback') {
     return (
       <Routes>
@@ -36,19 +85,16 @@ function AppRoutes() {
       </Routes>
     );
   }
-
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          <Protected>
-            <ItemApp />
-          </Protected>
-        }
-      />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <Protected>
+      <ToastProvider>
+        <StoreProvider>
+          <UIProvider>
+            <Pages />
+          </UIProvider>
+        </StoreProvider>
+      </ToastProvider>
+    </Protected>
   );
 }
 

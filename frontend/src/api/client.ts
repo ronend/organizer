@@ -1,11 +1,15 @@
-import type { Entity, EntityType, NewEntity, EntityUpdate } from '../types/organizer';
+/**
+ * All calls to /api/*. Same origin via CloudFront — no CORS. Every request
+ * carries the Cognito access token; a 401 clears it and sends the user to login.
+ *
+ * With VITE_LOCAL_MOCK=1 (npm run dev:mock) the calls are served by an
+ * in-browser mock backed by localStorage instead (no AWS, no login).
+ */
+import type { ChangeSet, CooState, FileRef } from '../types/coo';
 
 const BASE_URL = '/api';
+export const MOCK = import.meta.env.VITE_LOCAL_MOCK === '1';
 
-/**
- * The AuthContext wires these in at app startup so this module (which is not a
- * React component) can read the current token and trigger login/logout.
- */
 let tokenGetter: () => string | null = () => null;
 let onUnauthorized: () => void = () => {};
 
@@ -20,7 +24,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     onUnauthorized();
     throw new Error('Not authenticated');
   }
-
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
@@ -29,13 +32,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...(init.headers ?? {}),
     },
   });
-
   if (res.status === 401) {
     onUnauthorized();
     throw new Error('Unauthorized');
   }
   if (!res.ok) {
-    // Surface the server's validation detail when present.
     let detail = '';
     try {
       const body = await res.json();
@@ -49,54 +50,63 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-// ── Items ──────────────────────────────────────────────────────────────────────
-
-export function getItems(type?: EntityType): Promise<Entity[]> {
-  const qs = type ? `?type=${encodeURIComponent(type)}` : '';
-  return request<Entity[]>(`/items${qs}`);
+async function mock() {
+  return import('./mock');
 }
 
-export function createItem(data: NewEntity): Promise<Entity> {
-  return request<Entity>('/items', { method: 'POST', body: JSON.stringify(data) });
+export async function fetchState(): Promise<CooState> {
+  if (MOCK) return (await mock()).mockState();
+  return request<CooState>('/state');
 }
 
-export function updateItem(id: string, updates: EntityUpdate): Promise<Entity> {
-  return request<Entity>(`/items/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
+export async function sendBatch(changes: ChangeSet): Promise<void> {
+  if (changes.put.length === 0 && changes.delete.length === 0) return;
+  if (MOCK) return (await mock()).mockBatch(changes);
+  // The API caps a batch at 500 operations; split larger change sets.
+  const ops = [
+    ...changes.put.map((e) => ({ put: e })),
+    ...changes.delete.map((d) => ({ del: d })),
+  ];
+  for (let i = 0; i < ops.length; i += 400) {
+    const chunk = ops.slice(i, i + 400);
+    await request('/batch', {
+      method: 'POST',
+      body: JSON.stringify({
+        put: chunk.flatMap((o) => ('put' in o ? [o.put] : [])),
+        delete: chunk.flatMap((o) => ('del' in o ? [o.del] : [])),
+      }),
+    });
+  }
 }
 
-export function deleteItem(id: string): Promise<void> {
-  return request<void>(`/items/${id}`, { method: 'DELETE' });
-}
-
-/** Record a habit occurrence for a date. Returns the updated habit. */
-export function logHabit(id: string, date: string, completed: boolean): Promise<Entity> {
-  return request<Entity>(`/items/${id}/log`, {
-    method: 'POST',
-    body: JSON.stringify({ date, completed }),
+/** Uploads a file to the user's private S3 prefix and returns its reference. */
+export async function uploadFile(file: Blob, name: string): Promise<FileRef> {
+  const contentType = file.type || 'application/octet-stream';
+  if (MOCK) return (await mock()).mockUpload(file, name, contentType);
+  const { file: ref, uploadUrl } = await request<{ file: FileRef; uploadUrl: string }>(
+    '/files/upload-url',
+    { method: 'POST', body: JSON.stringify({ name, contentType, size: file.size }) },
+  );
+  const res = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: file,
   });
+  if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+  return ref;
 }
 
-// ── Derived views (also available server-side for MCP/programmatic use) ────────
-
-export interface ReminderIndexRow {
-  id: string;
-  source_id: string;
-  source_type: EntityType;
-  title: string;
-  fire_at: string;
-  status: string;
-}
-
-export function getUpcomingReminders(before?: string): Promise<ReminderIndexRow[]> {
-  const qs = before ? `?before=${encodeURIComponent(before)}` : '';
-  return request<ReminderIndexRow[]>(`/reminders/upcoming${qs}`);
-}
-
-export interface StoryTimeline {
-  story: Entity;
-  timeline: Entity[];
-}
-
-export function getStoryTimeline(id: string): Promise<StoryTimeline> {
-  return request<StoryTimeline>(`/items/${id}/timeline`);
+/** Short-lived download URLs for file keys. */
+export async function fileUrls(keys: string[]): Promise<Record<string, string>> {
+  if (keys.length === 0) return {};
+  if (MOCK) return (await mock()).mockUrls(keys);
+  const out: Record<string, string> = {};
+  for (let i = 0; i < keys.length; i += 100) {
+    const { urls } = await request<{ urls: Record<string, string> }>('/files/urls', {
+      method: 'POST',
+      body: JSON.stringify({ keys: keys.slice(i, i + 100) }),
+    });
+    Object.assign(out, urls);
+  }
+  return out;
 }

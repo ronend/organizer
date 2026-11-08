@@ -61,7 +61,7 @@ export default function AuthCallback() {
 
   return (
     <div style={{ padding: '2rem', textAlign: 'center' }}>
-      <div className="spinner" aria-label="Signing in" />
+      <div className="spinner" role="progressbar" aria-label="Signing in" />
       <p>Signing you in…</p>
     </div>
   );

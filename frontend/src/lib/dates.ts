@@ -1,137 +1,140 @@
-// Date/time helpers operating on ISO strings (the entity model stores ISO
-// date-times everywhere). No coupling to any entity shape.
+/** Calendar-day helpers. ISODate = 'YYYY-MM-DD' in local time; no time zones. */
+import type { ISODate, LocalDateTime } from '../types/coo';
 
-/** Local YYYY-MM-DD for a given date (defaults to now). */
-export function toDateStr(d: Date = new Date()): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS_LONG = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+export function toISO(d: Date): ISODate {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-export function todayStr(): string {
-  return toDateStr();
+export function parseISO(s: ISODate): Date {
+  const [y, m, d] = s.slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, d);
 }
 
-export function tomorrowStr(): string {
+export function today(): ISODate {
+  return toISO(new Date());
+}
+
+export function addDays(s: ISODate, n: number): ISODate {
+  const d = parseISO(s);
+  d.setDate(d.getDate() + n);
+  return toISO(d);
+}
+
+/** Adds calendar months, clamping to the month's last day (Jan 31 + 1m = Feb 28). */
+export function addMonths(s: ISODate, n: number): ISODate {
+  const d = parseISO(s);
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + n);
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, last));
+  return toISO(d);
+}
+
+/** Whole days from a to b (b - a). */
+export function diffDays(a: ISODate, b: ISODate): number {
+  const ms = parseISO(b).getTime() - parseISO(a).getTime();
+  return Math.round(ms / 86_400_000);
+}
+
+export function daysFromToday(s: ISODate): number {
+  return diffDays(today(), s);
+}
+
+export function weekday(s: ISODate): string {
+  return DAYS[parseISO(s).getDay()];
+}
+
+/** "Nov 8, 2026" (year dropped when `compact` and it is this year). */
+export function fmtDate(s: ISODate | null | undefined, compact = false): string {
+  if (!s) return '';
+  const d = parseISO(s);
+  const base = `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  if (compact && d.getFullYear() === new Date().getFullYear()) return base;
+  return `${base}, ${d.getFullYear()}`;
+}
+
+/** "Fri, Dec 4" */
+export function fmtDayHeading(s: ISODate): string {
+  const d = parseISO(s);
+  return `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
+/** "Sunday, November 8" */
+export function fmtLongToday(): string {
   const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return toDateStr(d);
+  return `${DAYS_LONG[d.getDay()]}, ${MONTHS_LONG[d.getMonth()]} ${d.getDate()}`;
 }
 
-/** Parse an ISO date ("2026-07-14") or datetime, as local time. Null if empty. */
-export function parseIso(value: string | null | undefined): Date | null {
-  if (!value) return null;
-  const hasTime = value.includes('T');
-  const d = new Date(hasTime ? value : `${value}T00:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
+/** Due label for agenda rows. */
+export function dueLabel(s: ISODate | null): { text: string; overdue: boolean } {
+  if (!s) return { text: 'No date', overdue: false };
+  const n = daysFromToday(s);
+  if (n < 0) return { text: `${-n} ${-n === 1 ? 'day' : 'days'} overdue`, overdue: true };
+  if (n === 0) return { text: 'Today', overdue: false };
+  if (n === 1) return { text: 'Tomorrow', overdue: false };
+  if (n <= 6) return { text: `${weekday(s)}, ${fmtDate(s, true)}`, overdue: false };
+  return { text: fmtDate(s, true), overdue: false };
 }
 
-/** Epoch ms for a date string; +Infinity when absent (so undated sorts last). */
-export function epoch(iso: string | null | undefined): number {
-  const d = parseIso(iso ?? null);
-  return d ? d.getTime() : Number.POSITIVE_INFINITY;
+/** "Today", "Tomorrow", "Wed, Nov 11" or "Nov 24" — no overdue wording. */
+export function relativeDay(s: ISODate): string {
+  const n = daysFromToday(s);
+  if (n === 0) return 'Today';
+  if (n === 1) return 'Tomorrow';
+  if (n === -1) return 'Yesterday';
+  if (n > 1 && n <= 6) return `${weekday(s)}, ${fmtDate(s, true)}`;
+  return fmtDate(s, true);
 }
 
-/** Past and not done. Undated is never overdue. */
-export function isOverdue(iso: string | null | undefined, done = false): boolean {
-  const d = parseIso(iso ?? null);
-  return !!d && !done && d.getTime() < Date.now();
+export function fmtRange(a: ISODate, b: ISODate, compact = true): string {
+  return `${fmtDate(a, compact)} – ${fmtDate(b, compact)}`;
 }
 
-export function isToday(iso: string | null | undefined): boolean {
-  return !!iso && iso.slice(0, 10) === todayStr();
+export function datePart(dt: LocalDateTime): ISODate {
+  return dt.slice(0, 10);
 }
 
-/** Urgency bucket for date styling. */
-export function urgency(
-  iso: string | null | undefined,
-  done = false,
-): 'overdue' | 'today' | 'future' | 'none' {
-  if (!iso) return 'none';
-  if (isOverdue(iso, done)) return 'overdue';
-  if (isToday(iso)) return 'today';
-  return 'future';
+export function timePart(dt: LocalDateTime): string {
+  return dt.slice(11, 16);
 }
 
-/** Human-friendly date, e.g. "Jul 14" or "Jul 14, 9:00 AM" if a time is present. */
-export function formatDate(iso: string | null | undefined): string {
-  const d = parseIso(iso);
-  if (!d) return '';
-  const hasTime = !!iso && iso.includes('T');
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    ...(hasTime ? { hour: 'numeric', minute: '2-digit' } : {}),
-  });
+export function fmtDateTime(dt: LocalDateTime): string {
+  return `${fmtDayHeading(datePart(dt))}, ${timePart(dt)}`;
 }
 
-/** "Jul 14 – Jul 21" span (either bound may be missing). */
-export function formatRange(a: string | null | undefined, b: string | null | undefined): string {
-  const x = formatDate(a);
-  const y = formatDate(b);
-  if (x && y) return `${x} – ${y}`;
-  return x || y || 'No dates';
+export function age(birthYear: number | null): number | null {
+  if (!birthYear) return null;
+  return new Date().getFullYear() - birthYear;
 }
 
-/** Just the time part of an ISO value, e.g. "9:00 AM" (empty if date-only). */
-export function formatTime(iso: string | null | undefined): string {
-  const d = parseIso(iso);
-  if (!d || !iso || !iso.includes('T')) return '';
-  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+export function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning.';
+  if (h < 18) return 'Good afternoon.';
+  return 'Good evening.';
 }
 
-/** Heading for a day bucket: "Today", "Tomorrow", or "Mon, Jul 14". */
-export function formatDayHeading(day: string): string {
-  const d = parseIso(day);
-  if (!d) return day;
-  const key = toDateStr(d);
-  if (key === todayStr()) return 'Today';
-  if (key === tomorrowStr()) return 'Tomorrow';
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+export function nowStamp(): string {
+  return new Date().toISOString();
 }
 
-/** The local YYYY-MM-DD an ISO value falls on, or null. */
-export function dayOf(iso: string | null | undefined): string | null {
-  return iso ? iso.slice(0, 10) : null;
+export function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
 }
 
-/**
- * Apply a relative offset ("-2h", "-1d", "-30m", "+1d", "0") to an ISO datetime.
- * Mirrors backend/src/recurrence.resolve_offset. Returns null if unparseable.
- */
-const OFFSET_RE = /^([+-]?)(\d+)\s*([smhdw])$/i;
-const UNIT_MS: Record<string, number> = {
-  s: 1000,
-  m: 60_000,
-  h: 3_600_000,
-  d: 86_400_000,
-  w: 604_800_000,
-};
-
-export function applyOffset(baseIso: string | null | undefined, offset: string): string | null {
-  const base = parseIso(baseIso ?? null);
-  if (!base) return null;
-  const rule = (offset || '').trim().toLowerCase();
-  if (rule === '0' || rule === '+0' || rule === '-0' || rule === '') return isoOf(base);
-  const m = OFFSET_RE.exec(rule);
-  if (!m) return null;
-  const [, sign, num, unit] = m;
-  const delta = Number(num) * UNIT_MS[unit];
-  return isoOf(new Date(base.getTime() + (sign === '-' ? -delta : delta)));
-}
-
-/** Combine a YYYY-MM-DD (+ optional HH:MM) into an ISO datetime string. */
-export function combineDateTime(date: string, time: string): string {
-  if (!date) return '';
-  return time ? `${date}T${time}:00` : `${date}T00:00:00`;
-}
-
-/** ISO string without milliseconds, matching the server's format. */
-export function isoOf(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  );
+export function inDays(n: number): string {
+  if (n === 0) return 'today';
+  if (n === 1) return 'tomorrow';
+  return `in ${n} days`;
 }
