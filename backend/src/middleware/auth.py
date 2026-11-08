@@ -1,6 +1,6 @@
 """Cognito JWT verification, exposed as a FastAPI dependency.
 
-Used on the data routers (events, templates, reminders, views). Verifies the
+Used on the data routers (state, batch, files). Verifies the
 bearer token's signature against
 the User Pool's JWKS, checks it is an *access* token issued by this pool, and
 returns the decoded claims. Route handlers read `user["sub"]` as the userId.

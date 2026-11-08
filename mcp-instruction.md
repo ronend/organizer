@@ -1,5 +1,17 @@
 # Implement an MCP Server for the Todo Webapp
 
+> **Historical scaffold prompt — superseded.** This was the original brief for
+> the MCP server (written for a TypeScript/Express "todo" app). The implemented server
+> is Python/FastMCP, named `coo`, and wraps the coo API (`GET /api/state`,
+> `POST /api/batch`). Its tools are `get_agenda`, `list_people_and_cars`,
+> `list_routines`, `list_trips`, `get_trip`, `add_task`, `complete_task` and
+> `reschedule_task`, and its env vars are `COO_API_URL` / `COO_API_KEY` /
+> `COO_ORIGIN_SECRET` (formerly `TODO_*`; the env var names below have been
+> updated). The tool names and code samples below describe the old design. For
+> the current behavior see [mcp-server/README.md](mcp-server/README.md); for the
+> deployed infrastructure see [iac/template.yaml](iac/template.yaml) (AWS resource
+> names keep the legacy "organizer" prefix on purpose).
+
 ## Goal
 
 Add a Model Context Protocol (MCP) server to the todo webapp so Claude (via Claude.ai connectors, Claude Code, or the Claude API) can read and manage tasks directly — without a proxy or hand-written tool definitions.
@@ -19,7 +31,7 @@ A standalone MCP server process (TypeScript) that:
 
 - You already know the webapp's full REST API surface (routes, request/response shapes, auth mechanism).
 - The webapp is a Node.js/TypeScript project, or the MCP server can live alongside it as a sibling package.
-- Auth is via an API key or Bearer token stored in an environment variable (`TODO_API_KEY`).
+- Auth is via an API key or Bearer token stored in an environment variable (`COO_API_KEY`).
 
 ---
 
@@ -67,8 +79,8 @@ Create a typed wrapper around the webapp REST API. This is the **only** file tha
 
 ```typescript
 // src/client.ts
-const BASE_URL = process.env.TODO_API_URL ?? 'http://localhost:3000';
-const API_KEY  = process.env.TODO_API_KEY ?? '';
+const BASE_URL = process.env.COO_API_URL ?? 'http://localhost:3000';
+const API_KEY  = process.env.COO_API_KEY ?? '';
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -396,10 +408,10 @@ Create `.env.example` at `mcp-server/`:
 
 ```
 # URL of the todo webapp API
-TODO_API_URL=http://localhost:3000
+COO_API_URL=http://localhost:3000
 
 # API key the MCP server uses to authenticate with the webapp
-TODO_API_KEY=your-webapp-api-key-here
+COO_API_KEY=your-webapp-api-key-here
 
 # Transport: "stdio" for Claude Code, "http" for Claude.ai / Claude API
 MCP_TRANSPORT=stdio
@@ -428,8 +440,8 @@ Or with environment variables:
 
 ```bash
 claude mcp add --transport stdio todo-mcp \
-  -e TODO_API_URL=http://localhost:3000 \
-  -e TODO_API_KEY=your-key \
+  -e COO_API_URL=http://localhost:3000 \
+  -e COO_API_KEY=your-key \
   -- tsx /path/to/mcp-server/src/index.ts
 ```
 

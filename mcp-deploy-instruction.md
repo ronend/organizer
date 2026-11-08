@@ -1,5 +1,17 @@
 # Deploy MCP Server to AWS Lambda + CloudFront
 
+> **Historical scaffold prompt — superseded.** This was the original brief for
+> the MCP server (written for a TypeScript/serverless-http "todo" app). The implemented server
+> is Python/FastMCP, named `coo`, and wraps the coo API (`GET /api/state`,
+> `POST /api/batch`). Its tools are `get_agenda`, `list_people_and_cars`,
+> `list_routines`, `list_trips`, `get_trip`, `add_task`, `complete_task` and
+> `reschedule_task`, and its env vars are `COO_API_URL` / `COO_API_KEY` /
+> `COO_ORIGIN_SECRET` (formerly `TODO_*`; the env var names below have been
+> updated). The tool names and code samples below describe the old design. For
+> the current behavior see [mcp-server/README.md](mcp-server/README.md); for the
+> deployed infrastructure see [iac/template.yaml](iac/template.yaml) (AWS resource
+> names keep the legacy "organizer" prefix on purpose).
+
 ## Context
 
 The todo webapp already runs on:
@@ -138,8 +150,8 @@ Use the AWS CLI or console:
 
 Environment variables to set on the function:
 ```
-TODO_API_URL        = <the existing Lambda Function URL or internal API base>
-TODO_API_KEY        = <webapp API key — see Step 4 for how to inject this safely>
+COO_API_URL        = <the existing Lambda Function URL or internal API base>
+COO_API_KEY        = <webapp API key — see Step 4 for how to inject this safely>
 MCP_SERVER_SECRET   = <random string — Claude.ai will send this as Bearer token>
 AWS_LAMBDA_FUNCTION_NAME is set automatically by Lambda — used to detect Lambda context
 ```
@@ -163,11 +175,11 @@ Add the following secrets to the GitHub repository (Settings → Secrets and var
 | Secret name | Value |
 |---|---|
 | `MCP_LAMBDA_FUNCTION_NAME` | The Lambda function name you created |
-| `TODO_API_KEY` | The webapp API key the MCP server uses to call the todo API |
+| `COO_API_KEY` | The webapp API key the MCP server uses to call the todo API |
 | `MCP_SERVER_SECRET` | The Bearer token Claude.ai will send to authenticate with the MCP endpoint |
 | `CLOUDFRONT_DISTRIBUTION_ID` | If not already present from the existing workflow |
 
-`TODO_API_KEY` and `MCP_SERVER_SECRET` are injected into the Lambda environment by the deploy step (Step 5), so they never appear in the repo or build logs.
+`COO_API_KEY` and `MCP_SERVER_SECRET` are injected into the Lambda environment by the deploy step (Step 5), so they never appear in the repo or build logs.
 
 ---
 
@@ -211,15 +223,15 @@ This produces `mcp-server.zip` at the repo root.
     aws lambda update-function-configuration \
       --function-name ${{ secrets.MCP_LAMBDA_FUNCTION_NAME }} \
       --environment "Variables={
-        TODO_API_URL=${{ vars.TODO_API_URL }},
-        TODO_API_KEY=${{ secrets.TODO_API_KEY }},
+        COO_API_URL=${{ vars.COO_API_URL }},
+        COO_API_KEY=${{ secrets.COO_API_KEY }},
         MCP_SERVER_SECRET=${{ secrets.MCP_SERVER_SECRET }}
       }"
 ```
 
 Use `aws lambda wait function-updated` between `update-function-code` and `update-function-configuration` — Lambda rejects configuration updates while a code update is still propagating.
 
-`TODO_API_URL` is non-secret and can be a GitHub Actions variable (`vars.TODO_API_URL`) rather than a secret.
+`COO_API_URL` is non-secret and can be a GitHub Actions variable (`vars.COO_API_URL`) rather than a secret.
 
 ### Step 5d — Invalidate CloudFront cache (optional)
 Only needed if CloudFront caches `/mcp` responses. Since you will configure the cache behavior with `CachingDisabled` (Step 6), this step can be skipped. Add it anyway as a safety net:
@@ -269,7 +281,7 @@ curl -X POST https://<your-cloudfront-domain>/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
 
-Expected response: a JSON-RPC response with a `tools` array listing `list_tasks`, `get_task`, `create_task`, `update_task`, `delete_task`, `list_lists`, `create_list`.
+Expected response: a JSON-RPC response with a `tools` array listing `get_agenda`, `list_people_and_cars`, `list_routines`, `list_trips`, `get_trip`, `add_task`, `complete_task`, `reschedule_task`.
 
 ### 7b — Check Lambda logs
 
@@ -305,7 +317,7 @@ Claude.ai / Claude API
         ▼
   Lambda: todo-mcp-server
   (stateless, 256 MB, arm64, 30s timeout)
-        │  Bearer: TODO_API_KEY
+        │  Bearer: COO_API_KEY
         ▼
   Lambda: todo-app-backend  (existing)
         │

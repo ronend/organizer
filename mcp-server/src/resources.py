@@ -1,6 +1,5 @@
 """Resource registrations — addressable, read-only views Claude can pull in
-proactively. The browsable axes mirror the webapp: all items and the upcoming
-reminders projection.
+proactively: the raw household state and the current agenda.
 
 Resource read functions are called with no arguments (FastMCP does not inject
 Context into resources), so they obtain the caller's token via mcp.get_context(),
@@ -13,27 +12,28 @@ import json
 
 from mcp.server.fastmcp import FastMCP
 
-from . import client
+from . import client, logic
 from .client import token_from_context
 
 
 def register_resources(mcp: FastMCP) -> None:
     @mcp.resource(
-        "organizer://items",
-        name="all-items",
-        description="Every entity (todo/appointment/habit/routine/reservation/event/story) for the user",
+        "coo://state",
+        name="state",
+        description="Every coo record (people, cars, contacts, routines, assignments, tasks, documents, trips, reservations)",
         mime_type="application/json",
     )
-    async def all_items() -> str:
+    async def state() -> str:
         token = token_from_context(mcp.get_context())
-        return json.dumps(await client.list_items(token), indent=2, default=str)
+        return json.dumps(await client.get_state(token), indent=2, default=str, ensure_ascii=False)
 
     @mcp.resource(
-        "organizer://reminders/upcoming",
-        name="upcoming-reminders",
-        description="Pending reminders across all items, ordered by fire_at (what fires next)",
+        "coo://agenda",
+        name="agenda",
+        description="Open tasks bucketed into overdue / today / next_7_days / later",
         mime_type="application/json",
     )
-    async def upcoming_reminders() -> str:
+    async def agenda() -> str:
         token = token_from_context(mcp.get_context())
-        return json.dumps(await client.upcoming_reminders(token), indent=2, default=str)
+        state = await client.get_state(token)
+        return json.dumps(logic.agenda(state), indent=2, default=str, ensure_ascii=False)

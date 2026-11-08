@@ -1,6 +1,14 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Serverless Organizer
+Description: coo — household chief of operations
+
+# Naming note: the app was rebranded from "organizer" to "coo", but AWS logical
+# IDs and physical resource names (OrganizerTable, OrganizerFunction, the
+# organizer-users pool, the organizer-${AWS::AccountId} hosted-UI domain, the
+# organizer-frontend bucket, /organizer/origin-secret, the stack name, ...) keep
+# the legacy "organizer" prefix ON PURPOSE. Renaming them would make
+# CloudFormation replace the resources — a new Cognito pool (all users lost), a
+# new table (all data lost) and a new hosted-UI domain. New resources use "coo".
 
 Parameters:
   AppUrl:
@@ -138,7 +146,7 @@ Resources:
       Handler: src.handler.handler
       CodeUri: ../backend/
       FunctionUrlConfig:
-        AuthType: NONE          # Auth is handled in Express middleware
+        AuthType: NONE          # Auth is handled in the FastAPI app (origin-verify + Cognito JWT)
         # AllowOrigins is driven by AppUrl (not a CloudFront ref) to avoid a
         # circular dependency. This CORS config is largely moot anyway: traffic
         # is same-origin via CloudFront, and direct browser access to the
@@ -150,16 +158,23 @@ Resources:
           # handled automatically); only the CloudFront behavior lists it.
           AllowMethods: ['GET','POST','PUT','DELETE']
           AllowHeaders: ['content-type','authorization']
+      Environment:
+        Variables:
+          FILES_BUCKET: !Ref FilesBucket
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref OrganizerTable
+        # Presigned PUT/GET URLs are signed with this function's role, so the
+        # role itself needs object read/write on the files bucket.
+        - S3CrudPolicy:
+            BucketName: !Ref FilesBucket
 
   # --- MCP Server Lambda ---
-  # Wraps the Organizer API as an MCP server (Streamable HTTP, stateless + JSON).
+  # Wraps the coo API as an MCP server (Streamable HTTP, stateless + JSON).
   # Sits behind CloudFront at /mcp. Needs no DynamoDB access — it calls the
-  # Organizer Function URL directly, forwarding the CALLER's Cognito access token
-  # (per-user pass-through) plus the shared origin secret. The endpoint itself is
-  # gated inside the app by origin-verify (x-origin-verify from CloudFront) and by
+  # API Function URL (OrganizerFunction) directly, forwarding the CALLER's
+  # Cognito access token (per-user pass-through) plus the shared origin secret.
+  # The endpoint itself is gated inside the app by origin-verify (x-origin-verify from CloudFront) and by
   # validating the caller's Cognito token (COGNITO_USER_POOL_ID, inherited from
   # Globals; AWS_REGION is provided by Lambda).
   MCPFunction:
@@ -173,11 +188,11 @@ Resources:
         AuthType: NONE         # Auth handled in-app (origin-verify + Cognito)
       Environment:
         Variables:
-          # The MCP server calls the Organizer API at its (internal) Function URL.
-          TODO_API_URL: !GetAtt OrganizerFunctionUrl.FunctionUrl
+          # The MCP server calls the coo API at its (internal) Function URL.
+          COO_API_URL: !GetAtt OrganizerFunctionUrl.FunctionUrl
           # Outbound x-origin-verify so the call clears the API's origin-verify
           # middleware when hitting the Function URL directly (bypassing CloudFront).
-          TODO_ORIGIN_SECRET: !Sub '{{resolve:ssm:/organizer/origin-secret}}'
+          COO_ORIGIN_SECRET: !Sub '{{resolve:ssm:/organizer/origin-secret}}'
 
   # --- DynamoDB ---
   OrganizerTable:
@@ -188,8 +203,9 @@ Resources:
       # without a name collision. The Lambda reads the actual name via
       # `!Ref OrganizerTable` (see DYNAMO_TABLE in Globals), so nothing hardcodes it.
       BillingMode: PAY_PER_REQUEST
-      # Single-table design: PK=userId, SK carries collection prefixes
-      # (EVENT#, REMIDX#, TMPL#) — see backend/src/db/dynamo.py.
+      # Single-table design: PK=userId, SK=COO#<kind>#<id> for coo records.
+      # Legacy ITEM#/REMIDX# rows from the old model are left in place and
+      # ignored — see backend/src/db/dynamo.py and data-structure.md.
       AttributeDefinitions:
         - AttributeName: userId
           AttributeType: S
@@ -200,6 +216,45 @@ Resources:
           KeyType: HASH
         - AttributeName: SK
           KeyType: RANGE
+
+  # --- S3 Bucket for user files (documents, reservation attachments) ---
+  # Private. The browser uploads/downloads directly with presigned URLs issued
+  # by the API (POST /api/files/upload-url, /api/files/urls); objects live under
+  # u/<cognito sub>/. Retained on stack deletion/replacement — it holds user data.
+  FilesBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'coo-files-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      # Versioning deliberately left off (no VersioningConfiguration): every
+      # upload gets a fresh u/<sub>/<uuid>/ key, so objects are never overwritten.
+      LifecycleConfiguration:
+        Rules:
+          - Id: abort-incomplete-multipart
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      # Presigned URLs are used cross-origin (app origin → S3), so the bucket
+      # needs CORS. AppUrl is empty on the very first deploy (see Parameters).
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [GET, PUT, HEAD]
+            AllowedHeaders: ['*']
+            AllowedOrigins: !If
+              - HasAppUrl
+              - [!Ref AppUrl, 'http://localhost:5173']
+              - ['http://localhost:5173']
+            MaxAge: 3000
 
   # --- S3 Bucket for frontend ---
   FrontendBucket:
@@ -354,3 +409,6 @@ Outputs:
     Value: !Sub 'https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com'
   TableName:
     Value: !Ref OrganizerTable
+  FilesBucketName:
+    Description: Private bucket for user files (presigned access only)
+    Value: !Ref FilesBucket

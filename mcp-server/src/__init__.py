@@ -1,1 +1,1 @@
-"""Organizer MCP server package."""
+"""coo MCP server package."""

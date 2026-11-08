@@ -1,6 +1,12 @@
 # Deployment
 
-End-to-end deployment steps, in order.
+End-to-end deployment steps for **coo** (household chief of operations), in order.
+
+> AWS resource names (stack `organizer-app`, `/organizer/origin-secret`, the
+> `organizer-users` pool, `organizer-frontend-<acct>`, ...) keep the legacy
+> "organizer" prefix on purpose — renaming them would replace the Cognito pool
+> (losing users), the table (losing data) and the hosted-UI domain. Only new
+> resources, like the files bucket `coo-files-<acct>`, use the new name.
 
 ## One-time bootstrap (run locally with admin AWS credentials)
 
@@ -70,8 +76,8 @@ sam deploy
 ### 4. Copy outputs, then re-deploy with AppUrl (wires up OAuth)
 
 Read the outputs — `CloudFrontUrl`, `UserPoolId`, `UserPoolClientId`,
-`CognitoDomain`, `TableName`, plus the CloudFront **distribution ID** and the
-**frontend bucket name** (`organizer-frontend-<acct>`):
+`CognitoDomain`, `TableName`, `FilesBucketName`, plus the CloudFront
+**distribution ID** and the **frontend bucket name** (`organizer-frontend-<acct>`):
 
 ```bash
 aws cloudformation describe-stacks --stack-name organizer-app \
@@ -79,13 +85,22 @@ aws cloudformation describe-stacks --stack-name organizer-app \
 ```
 
 Then re-deploy, passing the CloudFront URL so the Lambda `APP_URL`, Cognito
-callback/logout URLs, and Function URL CORS point at the real domain:
+callback/logout URLs, Function URL CORS and the files bucket's CORS point at the
+real domain:
 
 ```bash
 sam deploy --parameter-overrides AppUrl=$(aws cloudformation describe-stacks \
   --stack-name organizer-app \
   --query "Stacks[0].Outputs[?OutputKey=='CloudFrontUrl'].OutputValue" --output text)
 ```
+
+> **Files bucket.** `FilesBucket` (`coo-files-<acct>`) is private and holds
+> user uploads under `u/<cognito sub>/`. The API Lambda gets its name as
+> `FILES_BUCKET` and issues presigned PUT/GET URLs; the browser talks to S3
+> directly, so the bucket's CORS allows `AppUrl` (once set) and
+> `http://localhost:5173`. Until the AppUrl re-deploy, uploads only work from
+> the local dev server. The bucket has `DeletionPolicy: Retain` — deleting the
+> stack leaves it (and the files) behind.
 
 ### 5. Create initial Cognito users (repeat per user)
 
@@ -117,7 +132,7 @@ prod → Environment variables**:
 
 Path-filtered workflows assume the OIDC role and deploy:
 
-- changes under `backend/**` or `iac/**` →
+- changes under `backend/**`, `mcp-server/**` or `iac/**` →
   [deploy-backend.yml](.github/workflows/deploy-backend.yml) runs
   `sam build --use-container && sam deploy`
 - changes under `frontend/**` →

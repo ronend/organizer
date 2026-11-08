@@ -1,8 +1,9 @@
 # Architecture Review & Improvements
 
-This scaffold was built **strictly to the CLAUDE.md spec**. This document
-records the issues found during review so they can be addressed deliberately.
-Items are grouped by severity.
+This scaffold was originally built **strictly to the CLAUDE.md spec** (as
+"organizer") and has since been rebuilt as **coo**. This document records the
+issues found during review so they can be addressed deliberately. Items are
+grouped by severity.
 
 ## 🔴 Correctness bugs (recommend fixing before production)
 
@@ -47,15 +48,24 @@ token securely, and add a refresh path.
 
 ## 🟠 Scalability & performance
 
-### 4. `listOrganizers` has no pagination
-A DynamoDB `Query` returns at most 1 MB per page. A user with a very large
-number of organizers gets a truncated list. Add `LastEvaluatedKey` paging (or accept
-and document the cap).
+### 4. Pagination — ✅ FIXED
+`load_state` (`GET /api/state`) follows `LastEvaluatedKey` across query pages,
+so large households are no longer truncated at DynamoDB's 1 MB page limit. The
+whole state is still returned in one response; if it ever grows past what is
+comfortable to ship on every load, add per-collection or incremental
+(`updatedAt`-based) reads.
 
-### 5. Organizer ordering is undefined
-The sort key is `organizerId` (a UUIDv4), so `listOrganizers` returns organizers in UUID order,
-not by `createdAt`. Use a sortable ID (ULID/KSUID) as the sort key, or sort
-client-side by `createdAt`. ULID also spreads writes better.
+### 5. Ordering — ✅ RESOLVED BY DESIGN
+Records are keyed `COO#<kind>#<id>`, so storage order is meaningless; the
+client sorts (tasks by `date` then the user's manual `order`).
+
+### 5a. Files: size limit and orphans
+The presigned PUT (`POST /api/files/upload-url`) binds `Content-Type` but not
+`Content-Length`, so the 20 MB limit is checked on the declared size only. If
+that matters, switch to a presigned POST with a `content-length-range`
+condition. Objects are also never deleted when a record stops referencing them;
+a periodic sweep (list `u/<sub>/`, diff against the user's FileRefs) or an S3
+lifecycle rule on a "trash" prefix would reclaim space.
 
 ### 6. Cold-start latency
 `PyJWKClient` is instantiated at module scope (good — warm containers reuse

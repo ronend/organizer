@@ -1,41 +1,45 @@
-# Organizer MCP Server
+# coo MCP Server
 
-A standalone [Model Context Protocol](https://modelcontextprotocol.io) server that
-wraps the Organizer webapp's REST API (`/api/items`). It lets Claude — via
-Claude Code, Claude.ai connectors, or the Claude API — read and manage organizer
-items directly, with no proxy and no hand-written tool definitions.
+A standalone [Model Context Protocol](https://modelcontextprotocol.io) server (name
+`coo`) that wraps the coo household app's API (`GET /api/state`, `POST /api/batch`).
+It lets Claude — via Claude Code, Claude.ai connectors, or the Claude API — read
+the household agenda, people, cars, routines and trips, and make small changes to
+tasks.
 
 **Auth is per-user pass-through.** The caller's Cognito access token flows through
-the MCP server to the Organizer API, so items stay owned by the real user — the
+the MCP server to the coo API, so records stay owned by the real user — the
 MCP server never holds shared credentials. Over HTTP the token comes from the
-request; over stdio it comes from `TODO_API_KEY`.
+request; over stdio it comes from `COO_API_KEY`.
 
 ## What it exposes
 
+Every tool reads the whole state with `GET /api/state` and projects it; write
+tools then send the full, modified record with `POST /api/batch` (the API upserts).
+
 **Tools**
 
-| Tool                  | API call                              | Purpose |
-|-----------------------|---------------------------------------|---------|
-| `list_items`          | `GET /api/items` (opt. `?type=`)      | All items, optionally filtered by type |
-| `get_item`            | `GET /api/items/{id}`                 | One item of any type |
-| `create_item`         | `POST /api/items`                     | Create an item of any of the seven types |
-| `update_item`         | `PUT /api/items/{id}`                 | Partial update (type is immutable) |
-| `log_habit`           | `POST /api/items/{id}/log`            | Record a habit occurrence for a date |
-| `get_story_timeline`  | `GET /api/items/{id}/timeline`        | A story's reservations/events, chronological |
-| `upcoming_reminders`  | `GET /api/reminders/upcoming`         | What fires next, ordered by fire_at |
-| `delete_item`         | `DELETE /api/items/{id}`              | Permanent delete |
+| Tool                    | Purpose |
+|-------------------------|---------|
+| `get_agenda(filter?)`   | Open tasks in `overdue` / `today` / `next_7_days` (1–7 days) / `later` (8+ days or no date), sorted by date then manual order. Each row: id, title, date, who (person, car "makeModel (plate)", "Trip: name" or "General"), routine title, `appointment` flag. `filter`: `everything` (default), `general`, or a person / car (name or plate) / trip name. |
+| `list_people_and_cars()`| People and cars with ids |
+| `list_routines()`       | Routines with their assignees (subject name, date, done) |
+| `list_trips()`          | Trips, soonest first, with travelers and reservation counts |
+| `get_trip(name_or_id)`  | One trip with its reservations (sorted by start) and open trip tasks |
+| `add_task(title, date?, who?, notes?)` | New plain task; `date` defaults to today, `who` is a person name, car name/plate, or `general` (default) |
+| `complete_task(task_id)` | Marks a plain task done. Refuses routine steps that need input (`schedule` / `renew` / `pickup`) and trip booking tasks — those are finished in the app |
+| `reschedule_task(task_id, date)` | Moves a task to a new date. Refuses booked appointments |
+
+> `add_task` takes `who` rather than `for` — `for` is a Python keyword, and
+> FastMCP maps tool arguments straight onto the function's parameters.
 
 **Resources**
 
-- `organizer://items` — all items as JSON
-- `organizer://reminders/upcoming` — pending reminders, ordered by fire_at
+- `coo://state` — the full state as JSON
+- `coo://agenda` — the current agenda (same shape as `get_agenda`)
 
-> **Data model note:** the webapp uses a flat discriminated union tagged by
-> `type` — one of `todo`, `appointment`, `habit`, `routine`, `reservation`,
-> `event`, `story` — each with its own required fields (see
-> [entity-model-proposal.md](../entity-model-proposal.md)). There is no
-> `kind`/`tags`/`checklist` concept; this server is aligned to the webapp's
-> actual schema.
+> **Data model:** see [frontend/src/types/coo.ts](../frontend/src/types/coo.ts)
+> (the contract) and [data-structure.md](../data-structure.md) (storage + API).
+> The pure projection/mutation logic lives in [src/logic.py](src/logic.py).
 
 Implemented in Python with the [`mcp`](https://pypi.org/project/mcp/) SDK
 (FastMCP) — matching the webapp's Python/FastAPI backend.
@@ -60,11 +64,11 @@ MCP_TRANSPORT=http .venv/bin/python -m src   # Streamable HTTP
 
 See [.env.example](.env.example). Key points:
 
-- **`TODO_API_URL`** — the Organizer API base URL. Use the **CloudFront URL** (it
-  injects `x-origin-verify`, so leave `TODO_ORIGIN_SECRET` blank) or a Lambda
-  Function URL directly (then set `TODO_ORIGIN_SECRET`). *In the deployed Lambda,
-  SAM sets this to the Organizer Function URL.*
-- **`TODO_API_KEY`** — a **Cognito access token**, used as the bearer **only over
+- **`COO_API_URL`** — the coo API base URL. Use the **CloudFront URL** (it
+  injects `x-origin-verify`, so leave `COO_ORIGIN_SECRET` blank) or a Lambda
+  Function URL directly (then set `COO_ORIGIN_SECRET`). *In the deployed Lambda,
+  SAM sets this to the API (`OrganizerFunction`) Function URL.*
+- **`COO_API_KEY`** — a **Cognito access token**, used as the bearer **only over
   stdio** (Claude Code). Over HTTP the caller's own token is forwarded instead.
   Tokens expire ~1h.
 - **`ORIGIN_SECRET`** — if set (HTTP), requests must carry a matching
@@ -73,8 +77,14 @@ See [.env.example](.env.example). Key points:
 - **`COGNITO_USER_POOL_ID`** — if set (HTTP), the server validates the caller's
   Cognito access token before any tool runs. *Set by SAM in the deployed Lambda;
   `AWS_REGION` is provided automatically.*
+- **`COO_TIMEZONE`** — IANA zone (e.g. `Asia/Jerusalem`) that decides what
+  "today" is for `get_agenda` / `add_task`. Defaults to UTC. Not set by SAM; add
+  it to `MCPFunction`'s environment if the household isn't on UTC.
 
-#### Getting a Cognito access token (for stdio `TODO_API_KEY`, or to test HTTP)
+> These were previously `TODO_API_URL` / `TODO_API_KEY` / `TODO_ORIGIN_SECRET`;
+> update any existing `.env` or `claude mcp add` registration.
+
+#### Getting a Cognito access token (for stdio `COO_API_KEY`, or to test HTTP)
 
 Any valid access token for a user in the pool works, e.g. via the AWS CLI:
 
@@ -91,9 +101,9 @@ aws cognito-idp initiate-auth \
 ## Connect to Claude Code (stdio)
 
 ```bash
-claude mcp add --transport stdio organizer \
-  -e TODO_API_URL=https://your-cloudfront-domain \
-  -e TODO_API_KEY=your-cognito-access-token \
+claude mcp add --transport stdio coo \
+  -e COO_API_URL=https://your-cloudfront-domain \
+  -e COO_API_KEY=your-cognito-access-token \
   -e PYTHONPATH=/absolute/path/to/mcp-server \
   -- /absolute/path/to/mcp-server/.venv/bin/python -m src
 ```
@@ -119,13 +129,13 @@ Runtime shape:
   **Mangum** in [src/handler.py](src/handler.py).
 - The endpoint is gated in-app by **origin-verify** (CloudFront's `x-origin-verify`)
   then **Cognito** (the caller's access token is validated) — no separate MCP secret.
-- That same caller token is forwarded to the Organizer API (per-user pass-through).
+- That same caller token is forwarded to the coo API (per-user pass-through).
 
 ```
 Claude.ai / API ──Bearer Cognito token──► CloudFront /mcp ──(+x-origin-verify)──► MCPFunction
                                                                                       │ forwards caller token
                                                                                       ▼
-                                                                          Organizer Function URL (API)
+                                                                          OrganizerFunction URL (coo API)
 ```
 
 Deploy happens via the existing **Deploy Backend** GitHub Action (it now also
@@ -175,7 +185,7 @@ see [src/auth.py](src/auth.py) / [src/server.py](src/server.py)); CloudFront rou
 > **Cognito caveat — no Dynamic Client Registration.** Cognito can't auto-register
 > the client, so supply `MCPUserPoolClientId` to the connector manually. The
 > connector's redirect URI must be listed in the client's callback URLs — set via
-> the `McpOAuthCallbackUrls` template parameter (defaults to Claude.ai's). To make
+> `MCPUserPoolClient.CallbackURLs` in the template (Claude.ai's plus mcp-remote's localhost callback). To make
 > registration fully automatic you'd add a small DCR shim that hands back this
 > fixed client id; not included here.
 >
@@ -187,11 +197,12 @@ see [src/auth.py](src/auth.py) / [src/server.py](src/server.py)); CloudFront rou
 Try these prompts once connected:
 
 ```
-List all my items
-Show me all my reservations
-Create a todo called "Review MCP implementation" due 2026-06-20T17:00:00
-Mark item <id> as completed
-What reminders fire next?
+What's on my agenda this week?
+What's overdue for the Mazda?
+Add a task for Maya to renew her library card next Monday
+Mark "Call the plumber" done
+Move the property-tax task to Friday
+Show me the Lisbon trip
 ```
 
 ## Architecture
@@ -200,7 +211,7 @@ What reminders fire next?
 Claude (Code / .ai / API)
         │  MCP (stdio | Streamable HTTP)
         ▼
-  organizer-mcp-server  ──caller's Bearer token (+x-origin-verify)──►  Organizer API (FastAPI) ─► DynamoDB
+  coo MCP server  ──caller's Bearer token (+x-origin-verify)──►  coo API (FastAPI) ─► DynamoDB
         └── src/client.py is the only file that knows the API URL
 ```
 
@@ -214,9 +225,10 @@ mcp-server/
     asgi.py        gated Streamable HTTP app (origin-verify + Cognito)
     server.py      builds the FastMCP instance (stateless+JSON), registers tools/resources
     auth.py        Cognito access-token verification (mirrors the backend)
-    tools.py       list/get/create/update/delete items, log_habit, story timeline, reminders
-    resources.py   organizer://items, organizer://reminders/upcoming
-    client.py      typed REST wrapper, per-request token pass-through (the only privileged file)
+    tools.py       agenda, people/cars, routines, trips, add/complete/reschedule task
+    logic.py       pure projections + task mutations over a CooState dict (no I/O)
+    resources.py   coo://state, coo://agenda
+    client.py      get_state / batch REST wrapper, per-request token pass-through (the only privileged file)
   requirements.txt
   .env.example
   README.md

@@ -1,8 +1,16 @@
-# Serverless Organizer
+# coo
 
-A full-stack, serverless organizer list on AWS. React SPA + FastAPI-on-Lambda API,
-fronted by a single CloudFront distribution (no CORS), authenticated with
-Cognito, persisted in DynamoDB.
+coo is a household "chief of operations": a secretary for one household that
+tracks what repeats, what expires and what is coming, and brings it all to one
+agenda. It covers people (health and identity documents), cars (insurance,
+inspection, registration, service, glovebox documents), trips (a timeline of
+reservations) and ad-hoc tasks. The UI/UX is specified in
+[coo-ui-ux-spec.md](coo-ui-ux-spec.md); the data model in
+[data-structure.md](data-structure.md).
+
+React SPA + FastAPI-on-Lambda API, fronted by a single CloudFront distribution
+(no CORS for the API), authenticated with Cognito, persisted in DynamoDB, with
+user files in a private S3 bucket.
 
 ## Architecture
 
@@ -11,17 +19,19 @@ Cognito, persisted in DynamoDB.
    ┌──────────┐  login   │   Cognito Hosted UI       │
    │  Browser │─────────▶│   (login / logout)        │
    │  (SPA)   │◀─────────│   redirect ?code=…        │
-   └────┬─────┘  callback└──────────────────────────┘
-        │
-        │ https (single domain)
-        ▼
+   └────┬─┬───┘  callback└──────────────────────────┘
+        │ │
+        │ │ presigned PUT/GET (CORS)        ┌──────────────────┐
+        │ └────────────────────────────────▶│ S3 files bucket   │
+        │ https (single domain)              │ u/<sub>/…         │
+        ▼                                    └──────────────────┘
    ┌─────────────────────────────────────────────────┐
    │                 CloudFront                        │
    │   /*      → S3   (static React assets)            │
-   │   /api/*  → Lambda Function URL                   │
+   │   /api/*  → API Lambda Function URL               │
+   │   /mcp    → MCP Lambda Function URL               │
    │            (+ x-origin-verify custom header)      │
    └───────┬─────────────────────────┬─────────────────┘
-           │                         │
            ▼                         ▼
      ┌──────────┐            ┌─────────────────┐
      │   S3     │            │  Lambda          │
@@ -30,26 +40,43 @@ Cognito, persisted in DynamoDB.
      └──────────┘            └────────┬─────────┘
                                       │  originVerify → auth (JWT)
                                       ▼
-                              ┌────────────────────────┐
-                              │   DynamoDB (single table)│
-                              │   PK userId              │
-                              │   SK  EVENT# / REMIDX# / │
-                              │       TMPL# prefixes     │
-                              └────────────────────────┘
+                              ┌──────────────────────────┐
+                              │ DynamoDB (single table)   │
+                              │ PK userId                 │
+                              │ SK COO#<kind>#<id>        │
+                              └──────────────────────────┘
 ```
 
-- The SPA and the API live behind **one** CloudFront domain, so requests are
-  same-origin → no CORS configuration anywhere.
+- The SPA and the API live behind **one** CloudFront domain, so API requests
+  are same-origin. Only the files bucket has CORS, because the browser talks
+  to S3 directly with short-lived presigned URLs.
 - The Lambda Function URL is `AuthType: NONE`; access control is the FastAPI
   `origin_verify` middleware (checks the `x-origin-verify` header CloudFront
-  injects) plus Cognito JWT verification on `/api/items`.
+  injects) plus Cognito JWT verification on every data route.
+- The API is a thin, validated store: `GET /api/state` returns the whole
+  household, `POST /api/batch` applies a change set. Domain logic (step
+  planning, renewals, status, the Agenda drag rules) lives in the frontend as
+  pure functions in `frontend/src/lib/`, which is what makes generic Undo work.
+
+> **Naming.** The app was rebranded from "organizer" to "coo". AWS resource
+> names and CloudFormation logical IDs (stack `organizer-app`, the
+> `organizer-users` pool, the `organizer-<accountId>` hosted-UI domain,
+> `OrganizerTable`, `/organizer/origin-secret`, …) keep the old prefix on
+> purpose: renaming them would replace the Cognito pool (losing users), the
+> table (losing data) and the login domain. New resources use `coo`.
 
 ## Project layout
 
 ```
 frontend/   React + Vite (TypeScript) SPA
-backend/    FastAPI app run on Lambda via Mangum (Python 3.12)
+  src/types/coo.ts   data model (the contract with the backend)
+  src/lib/           domain logic: templates, ops (mutations), model (status), seed
+  src/pages/         Home, Agenda, Trips, Routines, Person, Car, Contacts
+  src/dialogs/       every modal: tasks, routines, documents, trips, people/cars
+backend/    FastAPI app run on Lambda via Mangum (Python 3.12) + pytest suite
+mcp-server/ MCP server (Claude connector) over the same API
 iac/        AWS SAM template + deploy config
+scripts/    legacy one-off scripts for the pre-coo data model
 .github/    GitHub Actions deploy workflows
 ```
 
@@ -142,7 +169,29 @@ iac/        AWS SAM template + deploy config
 
 ## Local development
 
-Run the SPA locally and proxy `/api/*` to the deployed Lambda:
+**Without AWS (mock mode).** The quickest way to work on the UI. The API is
+served by an in-browser mock that persists to `localStorage`; there is no login.
+On the empty Home screen, use "Load a demo household" for the spec's seed data.
+
+```bash
+cd frontend
+npm install
+npm run dev:mock
+```
+
+**Backend tests** (moto-mocked DynamoDB and S3):
+
+```bash
+python3 -m venv /tmp/coo-venv
+/tmp/coo-venv/bin/pip install -r backend/requirements-dev.txt
+cd backend && /tmp/coo-venv/bin/python -m pytest -q tests
+```
+
+`tests/test_frontend_contract.py` round-trips a household captured from the
+real frontend through the API, so a drift between `frontend/src/types/coo.ts`
+and `backend/src/models.py` fails the build.
+
+**Against the deployed backend.** Run the SPA locally and proxy `/api/*` to the deployed Lambda:
 
 1. Create `frontend/.env` (do **not** commit it):
 
@@ -200,6 +249,10 @@ variables**.
   short-lived (≤1h) credentials per run. IAM permissions are scoped to this
   app's resources; `iam:*` is restricted to `organizer*` roles to prevent
   privilege escalation.
+
+- Files live under `u/<sub>/` in the private files bucket; the API refuses
+  presigned URLs or record references outside the caller's prefix. ID numbers
+  are masked in lists and shown in full only in the full-screen viewer.
 
 ## Reviewing the design
 

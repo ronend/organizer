@@ -1,0 +1,7 @@
+# Local test dependencies (not deployed). boto3 is bundled in the Lambda runtime
+# but needed here for tests.
+-r requirements.txt
+boto3>=1.35
+pytest>=8
+moto[dynamodb,s3]>=5
+httpx>=0.27

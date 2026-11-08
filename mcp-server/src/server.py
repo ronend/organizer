@@ -51,7 +51,7 @@ def build_server() -> FastMCP:
         )
         kwargs["token_verifier"] = auth.CognitoTokenVerifier()
 
-    mcp = FastMCP("organizer-mcp-server", **kwargs)
+    mcp = FastMCP("coo", **kwargs)
     register_tools(mcp)
     register_resources(mcp)
     return mcp

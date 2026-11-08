@@ -23,7 +23,7 @@ def _run_http() -> None:
 
     host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "3100"))
-    print(f"Organizer MCP server listening on http://{host}:{port}/mcp", file=sys.stderr)
+    print(f"coo MCP server listening on http://{host}:{port}/mcp", file=sys.stderr)
     uvicorn.run(build_asgi_app(), host=host, port=port)
 
 
@@ -33,7 +33,7 @@ def main() -> None:
     if transport == "http":
         _run_http()
     else:
-        print("Organizer MCP server running on stdio", file=sys.stderr)
+        print("coo MCP server running on stdio", file=sys.stderr)
         build_server().run(transport="stdio")
 
 

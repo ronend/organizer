@@ -14,7 +14,7 @@ Gating:
     plain token validation in the brief pre-AppUrl deploy state, where discovery
     can't be advertised yet but we still don't want an open endpoint.
 
-The caller's bearer token is forwarded to the Organizer API by the tools
+The caller's bearer token is forwarded to the coo API by the tools
 (per-user pass-through), so no separate MCP secret is needed.
 """
 

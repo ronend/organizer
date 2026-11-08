@@ -1,38 +1,38 @@
-"""The ONLY module that knows the webapp's base URL and builds outbound auth.
+"""The ONLY module that knows the coo API's base URL and builds outbound auth.
 
 Every tool/resource calls through the functions here — they never hit the API
-directly. The Organizer API expects:
+directly. The coo API expects:
 
   - Authorization: Bearer <Cognito access token>   (verified by the API's auth middleware)
   - x-origin-verify: <ORIGIN_SECRET>                (required by the API's origin-verify
     middleware when calling the Lambda Function URL directly; CloudFront injects
-    this header itself, so it is OPTIONAL when TODO_API_URL is the CloudFront URL)
+    this header itself, so it is OPTIONAL when COO_API_URL is the CloudFront URL)
 
 Auth is **per-request, pass-through**: the caller's Cognito access token (sent to
 this MCP server) is forwarded to the API, so items stay owned by the real user.
   - HTTP transport: the token is read from the incoming request's Authorization
     header via the MCP request context (see `token_from_context`).
   - stdio transport: there is no incoming HTTP request, so the token falls back
-    to the TODO_API_KEY environment variable.
+    to the COO_API_KEY environment variable.
 
-Types below mirror the webapp's flat entity model (snake_case) — see
-backend/src/routes/items.py, frontend/src/types/organizer.ts, and
-entity-model-proposal.md.
+The API surface is two endpoints (see data-structure.md):
+  GET  /api/state  → CooState {people, cars, contacts, routines, assignments,
+                               tasks, documents, trips, reservations}
+  POST /api/batch  → {put: Entity[], delete: {kind, id}[]} → {ok, updatedAt}
+Records are camelCase and mirror frontend/src/types/coo.ts exactly; puts are
+FULL records (upserts), so edit a fetched record and send it back whole.
 """
 
 from __future__ import annotations
 
 import os
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 import httpx
 
-BASE_URL = os.environ.get("TODO_API_URL", "http://localhost:8000").rstrip("/")
+BASE_URL = os.environ.get("COO_API_URL", "http://localhost:8000").rstrip("/")
 # Only needed when hitting the Lambda Function URL directly (bypassing CloudFront).
-ORIGIN_SECRET = os.environ.get("TODO_ORIGIN_SECRET", "")
-
-EntityType = Literal["todo", "appointment", "habit", "routine", "reservation", "event", "story"]
-ReservationSubtype = Literal["hotel", "flight", "tour", "activity", "restaurant"]
+ORIGIN_SECRET = os.environ.get("COO_ORIGIN_SECRET", "")
 
 
 # ── Token resolution (per-request pass-through) ───────────────────────────────
@@ -40,7 +40,7 @@ ReservationSubtype = Literal["hotel", "flight", "tour", "activity", "restaurant"
 
 def env_token() -> str:
     """stdio / local fallback token."""
-    return os.environ.get("TODO_API_KEY", "")
+    return os.environ.get("COO_API_KEY", "")
 
 
 def token_from_context(ctx: Any) -> str:
@@ -100,61 +100,20 @@ async def _request(method: str, path: str, token: str, json: Any = None) -> Any:
     return resp.json()
 
 
-# ── Items ─────────────────────────────────────────────────────────────────────
+# ── coo API ───────────────────────────────────────────────────────────────────
 #
-# GET /api/items returns ALL of a user's entities. Every function takes the
-# caller's `token`.
+# Every function takes the caller's `token`.
 
 
-async def list_items(token: str, type: Optional[EntityType] = None) -> list[dict]:
-    """GET /api/items, optionally filtered by type (server-side)."""
-    qs = f"?type={type}" if type else ""
-    return await _request("GET", f"/api/items{qs}", token)
+async def get_state(token: str) -> dict:
+    """GET /api/state — every record for the user, grouped by collection."""
+    return await _request("GET", "/api/state", token)
 
 
-async def get_item(token: str, item_id: str) -> dict:
-    """GET /api/items/{id} — full entity (404 if missing)."""
-    return await _request("GET", f"/api/items/{item_id}", token)
-
-
-async def create_item(token: str, body: dict) -> dict:
-    """POST /api/items — returns the created entity (201)."""
-    return await _request("POST", "/api/items", token, json=body)
-
-
-async def update_item(token: str, item_id: str, body: dict) -> dict:
-    """PUT /api/items/{id} — partial update, returns the updated entity."""
-    return await _request("PUT", f"/api/items/{item_id}", token, json=body)
-
-
-async def delete_item(token: str, item_id: str) -> None:
-    """DELETE /api/items/{id} — 204 No Content."""
-    await _request("DELETE", f"/api/items/{item_id}", token)
-
-
-async def log_habit(token: str, item_id: str, date: str, completed: bool) -> dict:
-    """POST /api/items/{id}/log — record a habit occurrence for a date."""
+async def batch(
+    token: str, put: Optional[list[dict]] = None, delete: Optional[list[dict]] = None
+) -> dict:
+    """POST /api/batch — upsert full records and/or delete {kind, id} refs."""
     return await _request(
-        "POST", f"/api/items/{item_id}/log", token, json={"date": date, "completed": completed}
+        "POST", "/api/batch", token, json={"put": put or [], "delete": delete or []}
     )
-
-
-async def story_timeline(token: str, item_id: str) -> dict:
-    """GET /api/items/{id}/timeline — a story's reservations/events, chronological."""
-    return await _request("GET", f"/api/items/{item_id}/timeline", token)
-
-
-# ── Derived views ──────────────────────────────────────────────────────────────
-
-
-async def upcoming_reminders(
-    token: str, before: Optional[str] = None, status: Optional[str] = "pending"
-) -> list[dict]:
-    """GET /api/reminders/upcoming — the flat reminder index, ordered by fire_at."""
-    params = []
-    if before:
-        params.append(f"before={before}")
-    if status is not None:
-        params.append(f"status={status}")
-    qs = ("?" + "&".join(params)) if params else ""
-    return await _request("GET", f"/api/reminders/upcoming{qs}", token)

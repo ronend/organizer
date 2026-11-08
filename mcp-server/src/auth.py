@@ -13,7 +13,7 @@ Two layers use this:
   - The asgi `_Gate` falls back to plain validation in the brief pre-AppUrl deploy
     state (when discovery can't yet be advertised).
 
-The same caller token validated here is forwarded to the Organizer API by tools
+The same caller token validated here is forwarded to the coo API by tools
 (per-user pass-through).
 
 Config (all from env, set by SAM on Lambda):
