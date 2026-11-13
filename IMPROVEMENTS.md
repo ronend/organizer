@@ -92,6 +92,14 @@ to the distribution.
 Any XSS can exfiltrate the bearer token. The single-domain CloudFront layout
 makes `httpOnly; Secure; SameSite` cookies viable for a production version.
 
+### 9a. Link-preview DNS rebinding
+
+`POST /api/link-preview` checks that a host resolves only to public addresses
+and then fetches it, resolving again inside `requests`. A hostile DNS server
+could answer differently the second time. The Lambda has no VPC, so the blast
+radius is small, but pinning the connection to the checked IP (custom
+transport adapter) would close the gap.
+
 ### 10. Rotate the origin secret
 `ORIGIN_SECRET` is static. It lives in SSM, so schedule periodic rotation
 (update SSM + redeploy / update the CloudFront origin custom header).

@@ -203,7 +203,9 @@ def agenda(state: dict, filter: Optional[str] = None, on: Optional[date] = None)
         if t.get("stepKind") and t["stepKind"] != "plain":
             row["stepKind"] = t["stepKind"]
         if t.get("subtasks"):
-            row["subtasks"] = [{"title": s["title"], "done": s["done"]} for s in t["subtasks"]]
+            row["subtasks"] = [
+                {"title": s["title"], "done": s["done"], "date": s.get("date")} for s in t["subtasks"]
+            ]
 
         if not t.get("date"):
             buckets["later"].append(row)
@@ -372,7 +374,7 @@ def new_task(
         "tripTask": None,
         "docTask": None,
         "subtasks": [
-            {"id": new_id("st"), "title": s.strip()[:300], "done": False}
+            {"id": new_id("st"), "title": s.strip()[:300], "done": False, "date": None}
             for s in (subtasks or [])
             if s and s.strip()
         ][:100],

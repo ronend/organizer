@@ -269,3 +269,12 @@ def test_assignment_overrides(client, sub):
 
     bad = {**legacy, "countFrom": "sometimes"}
     assert client.post("/api/batch", json={"put": [bad], "delete": []}).status_code == 422
+
+
+def test_subtask_dates(client, sub):
+    task = samples(sub)["task"]
+    undated = {**task, "subtasks": [{"id": "st_1", "title": "Old one", "done": False}]}
+    assert client.post("/api/batch", json={"put": [undated], "delete": []}).status_code == 200
+    assert client.get("/api/state").json()["tasks"][0]["subtasks"][0]["date"] is None
+    bad = {**task, "subtasks": [{"id": "st_1", "title": "x", "done": False, "date": "Nov 20"}]}
+    assert client.post("/api/batch", json={"put": [bad], "delete": []}).status_code == 422

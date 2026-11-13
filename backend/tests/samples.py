@@ -96,8 +96,8 @@ def samples(sub: str) -> dict[str, dict]:
             "tripTask": None,
             "docTask": None,
             "subtasks": [
-                {"id": "st_1", "title": "Find two passport photos", "done": True},
-                {"id": "st_2", "title": "Fill in the DS-82 form", "done": False},
+                {"id": "st_1", "title": "Find two passport photos", "done": True, "date": None},
+                {"id": "st_2", "title": "Fill in the DS-82 form", "done": False, "date": "2026-11-20"},
             ],
         },
         "document": {

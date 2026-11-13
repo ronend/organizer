@@ -26,6 +26,8 @@ Id = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")]
 Title = Annotated[str, Field(max_length=300)]
 Short = Annotated[str, Field(max_length=300)]
 Long = Annotated[str, Field(max_length=5000)]
+# Task notes are rich text (sanitized HTML from the editor) or legacy plain text.
+RichText = Annotated[str, Field(max_length=20000)]
 Tiny = Annotated[str, Field(max_length=100)]
 
 SubjectType = Literal["person", "car"]
@@ -120,6 +122,8 @@ class Subtask(_Strict):
     id: Id
     title: Annotated[str, Field(min_length=1, max_length=300)]
     done: bool
+    # Optional due date; missing on sub-tasks saved before dates existed.
+    date: Optional[ISODate] = None
 
 
 class AppointmentInfo(_Strict):
@@ -200,7 +204,7 @@ class Assignment(_Base):
 class Task(_Base):
     kind: Literal["task"]
     title: Title
-    notes: Long
+    notes: RichText
     date: Optional[ISODate]
     order: float
     done: bool

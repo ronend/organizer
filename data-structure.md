@@ -19,7 +19,7 @@ Every record carries a `kind` discriminator, an `id`, `createdAt` and `updatedAt
 | `contact`     | `contacts`     | Doctor, garage, ... grouped `health` / `cars` / `other` |
 | `routine`     | `routines`     | A template, written once: default steps (`plan`), follow-ups, default `repeatMonths` and `countFrom` |
 | `assignment`  | `assignments`  | One routine applied to one person or car: its own `date`, `repeatMonths`, status, supply and history, plus optional overrides `plan` and `countFrom` (`null` = use the routine's) |
-| `task`        | `tasks`        | An agenda item. Optional links: subject (person/car), `assignmentId` (routine step), `tripId` / `reservationId` (trip task), `appointment`, `docTask`. `subtasks` is a checklist of `{id, title, done}` (no dates of their own; missing on older tasks, read as `[]`) |
+| `task`        | `tasks`        | An agenda item. Optional links: subject (person/car), `assignmentId` (routine step), `tripId` / `reservationId` (trip task), `appointment`, `docTask`. `notes` is rich text (HTML from the editor: paragraphs, bold, italic, lists, http/https/mailto links; up to 20,000 characters) or legacy plain text. `subtasks` is a checklist of `{id, title, done, date}` (`date` optional; sub-tasks are not separate agenda rows; missing on older tasks, read as `[]`) |
 | `document`    | `documents`    | A stored document (`docKind` car / health / identity) with optional files |
 | `trip`        | `trips`        | A trip (`start`..`end`, travelers = person ids) |
 | `reservation` | `reservations` | A flight / stay / car / ... belonging to a trip, with optional files |
@@ -151,6 +151,23 @@ directly from S3 with presigned URLs (the bucket's CORS allows the app origin an
 
 Objects are not deleted when a record stops referencing them (no server-side
 garbage collection yet).
+
+### Link titles
+
+#### `POST /api/link-preview`
+
+```jsonc
+// request
+{ "url": "https://www.alltrails.com/trail/…" }
+// response — title is null when it can't be found or the URL is refused
+{ "url": "https://www.alltrails.com/trail/…", "title": "Sintra Ridge Loop | AllTrails" }
+```
+
+Used by the task notes editor to offer replacing a bare URL with the page's
+title. The server fetches the page (the browser can't, because of CORS), so it
+only follows http/https on default ports, refuses hosts that resolve to
+non-public addresses, re-checks every redirect (max 3), reads at most 256 KB of
+HTML and times out quickly. Title order: `og:title`, `twitter:title`, `<title>`.
 
 ### Auth
 
