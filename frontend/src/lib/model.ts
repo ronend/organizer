@@ -23,6 +23,7 @@ import {
   fmtDate,
   fmtRange,
   plural,
+  relativeDay,
   today,
 } from './dates';
 import { repeatText, templateByKey } from './templates';
@@ -268,7 +269,12 @@ export function appointmentNote(s: CooState, t: Task): string {
 export function subtaskProgress(t: Task): string {
   const list = t.subtasks ?? [];
   if (list.length === 0) return '';
-  return `${list.filter((x) => x.done).length} of ${list.length} sub-tasks`;
+  const base = `${list.filter((x) => x.done).length} of ${list.length} sub-tasks`;
+  const open = list.filter((x) => !x.done && x.date).sort((a, b) => (a.date! < b.date! ? -1 : 1));
+  const late = open.filter((x) => x.date! < today()).length;
+  if (late) return `${base}, ${late} overdue`;
+  if (open.length) return `${base}, next ${relativeDay(open[0].date!)}`;
+  return base;
 }
 
 export function taskMeta(s: CooState, t: Task): string {

@@ -172,6 +172,8 @@ export interface Subtask {
   id: string;
   title: string;
   done: boolean;
+  /** Optional due date (missing on older sub-tasks). */
+  date?: ISODate | null;
 }
 
 export interface Task extends Base {

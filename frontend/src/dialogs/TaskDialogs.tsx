@@ -4,7 +4,7 @@ import type { SubjectType, Subtask, Task } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { Dialog, Field, FormActions, IconButton } from '../components/ui';
-import { addDays, fmtDate, today } from '../lib/dates';
+import { addDays, dueLabel, fmtDate, today } from '../lib/dates';
 import {
   allSubjects,
   appointmentNote,
@@ -17,8 +17,8 @@ import {
   taskWho,
 } from '../lib/model';
 import { addTask, deleteTask, newId, updateTask } from '../lib/ops';
-import { primaryLabel, useCompleteTask } from './TaskFlows';
 import { DocFormFor } from './DocDialogs';
+import { RichNotesLazy as RichNotes } from '../components/RichNotesLazy';
 
 /** For select value: '' = General, 'person:<id>' / 'car:<id>'. */
 function parseFor(v: string): { type: SubjectType | null; id: string | null } {
@@ -53,11 +53,13 @@ export function SubtaskList({
   onChange: (next: Subtask[], commit: boolean) => void;
 }) {
   const [draft, setDraft] = useState('');
+  const [draftDate, setDraftDate] = useState('');
   const add = () => {
     const title = draft.trim();
     if (!title) return;
-    onChange([...items, { id: newId('st'), title, done: false }], true);
+    onChange([...items, { id: newId('st'), title, done: false, date: draftDate || null }], true);
     setDraft('');
+    setDraftDate('');
   };
   const done = items.filter((x) => x.done).length;
   return (
@@ -93,6 +95,14 @@ export function SubtaskList({
                   }
                 }}
               />
+              <input
+                type="date"
+                className={`subtask-date ${!x.done && x.date && x.date < today() ? 'overdue' : ''}`}
+                aria-label={`Due date for sub-task ${x.title} (optional)`}
+                title={x.date ? dueLabel(x.date).text : 'No due date'}
+                value={x.date ?? ''}
+                onChange={(e) => onChange(items.map((y, j) => (j === i ? { ...y, date: e.target.value || null } : y)), true)}
+              />
               <IconButton icon="close" size={16} label={`Remove sub-task ${x.title}`} onClick={() => onChange(items.filter((_, j) => j !== i), true)} />
             </li>
           ))}
@@ -110,6 +120,13 @@ export function SubtaskList({
               add();
             }
           }}
+        />
+        <input
+          type="date"
+          className="subtask-date"
+          aria-label="Due date for the new sub-task (optional)"
+          value={draftDate}
+          onChange={(e) => setDraftDate(e.target.value)}
         />
         <button type="button" className="btn secondary small" onClick={add} disabled={!draft.trim()}>
           Add
@@ -210,7 +227,7 @@ export function AddTaskDialog({ initialFor = '' }: { initialFor?: string }) {
         )}
       </Field>
       <SubtaskList items={subtasks} onChange={(next) => setSubtasks(next)} />
-      <Field label="Notes" optional>{(id) => <textarea id={id} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />}</Field>
+      <Field label="Notes" optional>{(id) => <RichNotes id={id} label="Notes" value={notes} onChange={setNotes} />}</Field>
     </Dialog>
   );
 }
@@ -219,7 +236,6 @@ export function TaskDetailDialog({ taskId }: { taskId: string }) {
   const { s, apply } = useStore();
   const { closeDialog, openDialog } = useUI();
   const navigate = useNavigate();
-  const complete = useCompleteTask();
   const task = s.tasks.find((t) => t.id === taskId);
   const [title, setTitle] = useState(task?.title ?? '');
   const [date, setDate] = useState(task?.date ?? '');
@@ -252,19 +268,6 @@ export function TaskDetailDialog({ taskId }: { taskId: string }) {
     const d = addDays(base, days);
     setDate(d);
     apply(updateTask(s, task, { date: d }), { toast: `Snoozed to ${fmtDate(d, true)}`, undo: true });
-  };
-
-  const primary = () => {
-    const cur = { ...task, ...patch() };
-    const changed =
-      cur.date !== task.date ||
-      cur.notes !== task.notes ||
-      cur.title !== task.title ||
-      cur.subjectId !== task.subjectId ||
-      JSON.stringify(cur.subtasks) !== JSON.stringify(task.subtasks ?? []);
-    if (changed) apply(updateTask(s, task, patch()));
-    closeDialog();
-    complete(cur);
   };
 
   return (
@@ -307,11 +310,8 @@ export function TaskDetailDialog({ taskId }: { taskId: string }) {
               Add document
             </button>
           )}
-          <button type="submit" className="btn secondary">
+          <button type="submit" className="btn primary">
             Save
-          </button>
-          <button type="button" className="btn primary" onClick={primary}>
-            {primaryLabel(s, task)}
           </button>
         </>
       }
@@ -356,7 +356,7 @@ export function TaskDetailDialog({ taskId }: { taskId: string }) {
           }
         }}
       />
-      <Field label="Notes" optional>{(id) => <textarea id={id} rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />}</Field>
+      <Field label="Notes" optional>{(id) => <RichNotes id={id} label="Notes" value={notes} onChange={setNotes} />}</Field>
     </Dialog>
   );
 }

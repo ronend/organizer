@@ -175,6 +175,18 @@ const P: Record<string, JSX.Element> = {
       <path d="M7.5 17c.8-2 2.5-3 4.5-3s3.7 1 4.5 3" />
     </>
   ),
+  bold: <path d="M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z" />,
+  italic: <path d="M10 5h8M6 19h8M14 5l-4 14" />,
+  list: (
+    <>
+      <path d="M9 6.5h11M9 12h11M9 17.5h11" />
+      <circle cx="4.5" cy="6.5" r=".9" fill="currentColor" />
+      <circle cx="4.5" cy="12" r=".9" fill="currentColor" />
+      <circle cx="4.5" cy="17.5" r=".9" fill="currentColor" />
+    </>
+  ),
+  'list-ordered': <path d="M10 6.5h10M10 12h10M10 17.5h10M4 5l1.5-1v5M3.5 10.5a1.3 1.3 0 0 1 2.4.6c0 .8-2.4 2-2.4 2.9h2.6M3.5 16h2.2l-1.2 1.4a1.3 1.3 0 1 1-1 2.3" />,
+  external: <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />,
   logout: <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M9.5 16.5 5 12l4.5-4.5M5 12h10" />,
 };
 

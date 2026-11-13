@@ -80,3 +80,18 @@ export async function mockUrls(keys: string[]): Promise<Record<string, string>> 
   }
   return out;
 }
+
+/** The mock can't fetch other sites; it makes up a readable title from the URL. */
+export async function mockLinkTitle(url: string): Promise<string | null> {
+  await delay();
+  try {
+    const u = new URL(url);
+    const slug = u.pathname.split('/').filter(Boolean).pop() ?? '';
+    const words = slug.replace(/\.[a-z]+$/i, '').replace(/[-_]+/g, ' ').trim();
+    const site = u.hostname.replace(/^www\./, '');
+    if (!words) return site;
+    return `${words[0].toUpperCase()}${words.slice(1)} · ${site}`;
+  } catch {
+    return null;
+  }
+}

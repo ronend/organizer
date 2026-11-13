@@ -22,6 +22,7 @@ import { PersonDialog } from '../dialogs/SubjectDialogs';
 import { DocFormFor, IdFlipCard } from '../dialogs/DocDialogs';
 import { RoutineDetailDialog } from '../dialogs/RoutineDetail';
 import { fmtDate, plural } from '../lib/dates';
+import { notesText } from '../lib/richtext';
 import {
   assignmentStatus,
   assignmentsFor,
@@ -113,7 +114,7 @@ function Health({ person }: { person: Person }) {
       .map((d) => ({ date: d.date ?? d.createdAt.slice(0, 10), doc: d }));
     if (episode === 'all') {
       for (const v of visits) {
-        const hay = `${v.title} ${v.notes} ${appointmentNote(s, v)}`.toLowerCase();
+        const hay = `${v.title} ${notesText(v.notes)} ${appointmentNote(s, v)}`.toLowerCase();
         if (q.trim() && !q.toLowerCase().split(/\s+/).every((w) => hay.includes(w))) continue;
         list.push({ date: v.date ?? v.doneAt?.slice(0, 10) ?? '', visit: v });
       }
@@ -203,7 +204,7 @@ function Health({ person }: { person: Person }) {
                         <div className="tl-body">
                           <div className="muted small">{fmtDate(e.date)}</div>
                           <div className="row-title">Visit · {e.visit!.title}</div>
-                          <div className="row-meta">{[appointmentNote(s, e.visit!), e.visit!.notes].filter(Boolean).join(' · ')}</div>
+                          <div className="row-meta">{[appointmentNote(s, e.visit!), notesText(e.visit!.notes)].filter(Boolean).join(' · ')}</div>
                         </div>
                       </div>
                     ),

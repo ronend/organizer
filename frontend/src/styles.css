@@ -2177,3 +2177,175 @@ input[type='file'] {
     grid-column: 1 / -1;
   }
 }
+
+/* ── Rich notes ────────────────────────────────────────────────────────── */
+
+.rich {
+  background: var(--tint);
+  border-radius: var(--r-input);
+  border: 1px solid transparent;
+}
+
+.rich:focus-within {
+  outline: 2px solid var(--accent);
+}
+
+.rich-toolbar {
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px 0;
+}
+
+.tool {
+  width: 32px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.tool:hover {
+  background: var(--tint-hover);
+  color: var(--text);
+}
+
+.tool.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.rich-linkbar,
+.rich-linkinfo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+}
+
+.rich-linkbar input {
+  flex: 1;
+  min-width: 160px;
+  min-height: 34px !important;
+  background: var(--bg) !important;
+}
+
+.rich-linkinfo {
+  border-top: 1px solid var(--hairline);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.rich-editor {
+  min-height: 84px;
+  padding: 6px 12px 10px;
+  outline: none;
+  overflow-wrap: anywhere;
+}
+
+.rich-editor p {
+  margin: 0 0 6px;
+}
+
+.rich-editor p:last-child {
+  margin-bottom: 0;
+}
+
+.rich-editor ul,
+.rich-editor ol {
+  margin: 0 0 6px;
+  padding-left: 22px;
+}
+
+.rich-editor a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rich-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.rich-suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.rich-suggestions li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.rich-suggestion-actions {
+  display: flex;
+  gap: 4px;
+}
+
+@media (pointer: coarse) {
+  .tool {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+.rich-loading {
+  min-height: 124px;
+}
+
+.subtask-date {
+  width: 150px !important;
+  flex: none;
+  min-height: 34px !important;
+  padding: 4px 8px !important;
+  font-size: 13px;
+}
+
+.subtask .subtask-date {
+  background: transparent !important;
+  color: var(--muted);
+}
+
+.subtask .subtask-date.overdue {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+.subtask.done .subtask-date {
+  opacity: 0.6;
+}
+
+@media (max-width: 559.98px) {
+  .subtask {
+    flex-wrap: wrap;
+    padding: 4px 0;
+  }
+  .subtask .subtask-title {
+    flex-basis: calc(100% - 90px);
+  }
+  .subtask > .icon-btn {
+    order: 2;
+  }
+  .subtask .subtask-date {
+    order: 3;
+    margin-left: 28px;
+  }
+  .subtask-add .subtask-date {
+    flex: 1;
+    width: auto !important;
+  }
+}

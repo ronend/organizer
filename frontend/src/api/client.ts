@@ -96,6 +96,16 @@ export async function uploadFile(file: Blob, name: string): Promise<FileRef> {
   return ref;
 }
 
+/** The page title for a link (looked up server-side), or null. */
+export async function linkTitle(url: string): Promise<string | null> {
+  if (MOCK) return (await mock()).mockLinkTitle(url);
+  const { title } = await request<{ url: string; title: string | null }>('/link-preview', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+  return title;
+}
+
 /** Short-lived download URLs for file keys. */
 export async function fileUrls(keys: string[]): Promise<Record<string, string>> {
   if (keys.length === 0) return {};

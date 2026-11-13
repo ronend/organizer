@@ -151,22 +151,7 @@ export function RefillDialog({ assignment, task }: { assignment: Assignment; tas
   );
 }
 
-/** Primary-action label for a task, by kind. */
-export function primaryLabel(s: ReturnType<typeof useStore>['s'], t: Task): string {
-  if (t.done) return 'Reopen';
-  if (t.tripTask === 'book') return 'Mark booked';
-  if (t.stepKind === 'schedule') return 'Schedule appointment';
-  if (t.stepKind === 'pickup') return 'Log refill picked up';
-  if (t.stepKind === 'renew') {
-    const a = assignmentById(s, t.assignmentId);
-    if (!a) return 'Mark done';
-    if (!a.repeatMonths) return 'Mark done';
-    return renewQuestion(routineOf(s, a)!).includes('expiry') ? 'Mark renewed' : 'Mark done and set next date';
-  }
-  return 'Mark done';
-}
-
-/** The checkbox / primary action: dispatches by task kind. */
+/** The task checkbox: dispatches by task kind (book, renew, refill, done). */
 export function useCompleteTask() {
   const { s, apply } = useStore();
   const { openDialog } = useUI();
