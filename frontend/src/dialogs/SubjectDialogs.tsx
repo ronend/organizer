@@ -16,7 +16,6 @@ export function PersonDialog({ person }: { person?: Person }) {
   const toast = useToast();
   const navigate = useNavigate();
   const [name, setName] = useState(person?.name ?? '');
-  const [year, setYear] = useState(person?.birthYear ? String(person.birthYear) : '');
 
   const submit = () => {
     const n = name.trim();
@@ -25,13 +24,12 @@ export function PersonDialog({ person }: { person?: Person }) {
       toast.show({ text: 'Someone with that name already exists' });
       return;
     }
-    const by = year ? Number(year) : null;
     if (person) {
-      apply(putEntity(s, { ...person, name: n, birthYear: by }), { toast: 'Saved' });
+      apply(putEntity(s, { ...person, name: n }), { toast: 'Saved' });
       closeDialog();
       return;
     }
-    const p = makePerson(n, by);
+    const p = makePerson(n, null);
     apply(putEntity(s, p), { toast: `Added ${n}` });
     navigate(subjectPath('person', p.id));
     openDialog(<RoutineFormDialog preselect={{ type: 'person', id: p.id }} area="health" />);
@@ -60,19 +58,6 @@ export function PersonDialog({ person }: { person?: Person }) {
       actions={<FormActions submit={person ? 'Save' : 'Add person'} />}
     >
       <Field label="Name">{(id) => <input id={id} value={name} onChange={(e) => setName(e.target.value)} required />}</Field>
-      <Field label="Birth year" optional hint="Used for the age shown on cards and age-based reminders.">
-        {(id) => (
-          <input
-            id={id}
-            type="number"
-            inputMode="numeric"
-            min={1900}
-            max={new Date().getFullYear()}
-            value={year}
-            onChange={(e) => setYear(e.target.value)}
-          />
-        )}
-      </Field>
     </Dialog>
   );
 }

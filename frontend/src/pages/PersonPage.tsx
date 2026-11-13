@@ -30,7 +30,6 @@ import {
   docsFor,
   indicators,
   maskId,
-  personSub,
   routineOf,
   subjectPath,
   tasksForSubject,
@@ -55,7 +54,6 @@ function Overview({ person }: { person: Person }) {
         <Icon name="person" size={22} />
         <div>
           <div className="subject-name">{person.name}</div>
-          <div className="muted">{personSub(person)}</div>
         </div>
         <button type="button" className="btn ghost small" onClick={() => openDialog(<PersonDialog person={person} />)}>
           Edit
@@ -320,7 +318,7 @@ export default function PersonPage({ page }: { page: 'overview' | 'health' | 'id
   if (!person) return <Navigate to="/" replace />;
   const sub = { type: 'person' as const, entity: person };
   const title = { overview: person.name, health: 'Health', identity: 'Identity' }[page];
-  const eyebrow = page === 'overview' ? personSub(person) : `${person.name} · ${personSub(person)}`;
+  const eyebrow = page === 'overview' ? 'Person' : person.name;
   return (
     <div className="page">
       <SubjectNav sub={sub} page={page} />

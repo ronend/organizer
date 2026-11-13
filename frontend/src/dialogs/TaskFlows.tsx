@@ -7,6 +7,7 @@ import { addDays, fmtDate, today } from '../lib/dates';
 import {
   assignmentById,
   contactsFor,
+  effectivePlan,
   onHandNow,
   renewQuestion,
   routineOf,
@@ -22,7 +23,7 @@ export function AppointmentDialog({ task }: { task: Task }) {
   const { closeDialog } = useUI();
   const a = assignmentById(s, task.assignmentId);
   const r = routineOf(s, a);
-  const prepDefault = r?.plan.find((p) => p.kind === 'schedule')?.prep ?? '';
+  const prepDefault = (r && a ? effectivePlan(r, a) : []).find((p) => p.kind === 'schedule')?.prep ?? '';
   const [date, setDate] = useState(addDays(today(), 7));
   const [time, setTime] = useState('09:00');
   const [providerId, setProviderId] = useState(a?.contactId ?? '');

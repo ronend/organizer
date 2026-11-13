@@ -79,7 +79,7 @@ function Sidebar() {
               <Icon name="person" />
               <span className="side-label">
                 {p.name}
-                <span className="side-sub">{personSub(p)}</span>
+                {personSub(p) && <span className="side-sub">{personSub(p)}</span>}
               </span>
             </Link>
           );
@@ -211,7 +211,7 @@ export function SubjectSwitcher() {
           >
             <Icon name={x.type} size={16} />
             {x.type === 'person' ? x.entity.name : x.entity.makeModel}
-            <span className="muted">{subjectSub(x)}</span>
+            {subjectSub(x) && <span className="muted">{subjectSub(x)}</span>}
           </button>
         );
       })}

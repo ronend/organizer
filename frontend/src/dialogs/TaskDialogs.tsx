@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { SubjectType, Task } from '../types/coo';
+import type { SubjectType, Subtask, Task } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
-import { Dialog, Field, FormActions } from '../components/ui';
+import { Dialog, Field, FormActions, IconButton } from '../components/ui';
 import { addDays, fmtDate, today } from '../lib/dates';
 import {
   allSubjects,
@@ -16,7 +16,7 @@ import {
   taskWhat,
   taskWho,
 } from '../lib/model';
-import { addTask, deleteTask, updateTask } from '../lib/ops';
+import { addTask, deleteTask, newId, updateTask } from '../lib/ops';
 import { primaryLabel, useCompleteTask } from './TaskFlows';
 import { DocFormFor } from './DocDialogs';
 
@@ -34,10 +34,88 @@ function ForSelect({ id, value, onChange }: { id: string; value: string; onChang
       <option value="">General, no one in particular</option>
       {allSubjects(s).map((x) => (
         <option key={x.entity.id} value={`${x.type}:${x.entity.id}`}>
-          {x.type === 'person' ? x.entity.name : x.entity.makeModel} · {subjectSub(x)}
+          {[x.type === 'person' ? x.entity.name : x.entity.makeModel, subjectSub(x)].filter(Boolean).join(' · ')}
         </option>
       ))}
     </select>
+  );
+}
+
+/**
+ * Checklist editor. `commit` is false while a title is being typed (the
+ * caller may defer saving) and true for toggles, adds, removals and blur.
+ */
+export function SubtaskList({
+  items,
+  onChange,
+}: {
+  items: Subtask[];
+  onChange: (next: Subtask[], commit: boolean) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    const title = draft.trim();
+    if (!title) return;
+    onChange([...items, { id: newId('st'), title, done: false }], true);
+    setDraft('');
+  };
+  const done = items.filter((x) => x.done).length;
+  return (
+    <div className="field subtasks">
+      <div className="subtasks-head">
+        <span className="label">Sub-tasks</span>
+        {items.length > 0 && (
+          <span className="muted small">
+            {done} of {items.length} done
+          </span>
+        )}
+      </div>
+      {items.length > 0 && (
+        <ul className="subtask-list">
+          {items.map((x, i) => (
+            <li key={x.id} className={`subtask ${x.done ? 'done' : ''}`}>
+              <input
+                type="checkbox"
+                checked={x.done}
+                aria-label={`${x.done ? 'Reopen' : 'Complete'} sub-task ${x.title}`}
+                onChange={() => onChange(items.map((y, j) => (j === i ? { ...y, done: !y.done } : y)), true)}
+              />
+              <input
+                className="subtask-title"
+                aria-label="Sub-task title"
+                value={x.title}
+                onChange={(e) => onChange(items.map((y, j) => (j === i ? { ...y, title: e.target.value } : y)), false)}
+                onBlur={() => onChange(items.filter((y) => y.title.trim()), true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+              />
+              <IconButton icon="close" size={16} label={`Remove sub-task ${x.title}`} onClick={() => onChange(items.filter((_, j) => j !== i), true)} />
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="inline-add subtask-add">
+        <input
+          aria-label="New sub-task"
+          placeholder="Add a sub-task"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              add();
+            }
+          }}
+        />
+        <button type="button" className="btn secondary small" onClick={add} disabled={!draft.trim()}>
+          Add
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -49,6 +127,7 @@ export function AddTaskDialog({ initialFor = '' }: { initialFor?: string }) {
   const [forV, setForV] = useState(initialFor);
   const [routine, setRoutine] = useState('');
   const [notes, setNotes] = useState('');
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const sub = parseFor(forV);
   const assignments = sub.type && sub.id ? assignmentsFor(s, sub.type, sub.id) : [];
 
@@ -68,6 +147,7 @@ export function AddTaskDialog({ initialFor = '' }: { initialFor?: string }) {
         subjectId: sub.id,
         assignmentId: routine || null,
         notes: notes.trim(),
+        subtasks: subtasks.filter((x) => x.title.trim()),
       }),
       { toast: 'Added to your agenda' },
     );
@@ -129,6 +209,7 @@ export function AddTaskDialog({ initialFor = '' }: { initialFor?: string }) {
           </select>
         )}
       </Field>
+      <SubtaskList items={subtasks} onChange={(next) => setSubtasks(next)} />
       <Field label="Notes" optional>{(id) => <textarea id={id} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />}</Field>
     </Dialog>
   );
@@ -144,13 +225,14 @@ export function TaskDetailDialog({ taskId }: { taskId: string }) {
   const [date, setDate] = useState(task?.date ?? '');
   const [notes, setNotes] = useState(task?.notes ?? '');
   const [forV, setForV] = useState(task?.subjectType ? `${task.subjectType}:${task.subjectId}` : '');
+  const [subtasks, setSubtasks] = useState<Subtask[]>(task?.subtasks ?? []);
   if (!task) return null;
   const adhoc = isAdHoc(task);
   const a = assignmentById(s, task.assignmentId);
   const r = routineOf(s, a);
 
   const patch = (): Partial<Task> => {
-    const p: Partial<Task> = { date: date || null, notes: notes.trim() };
+    const p: Partial<Task> = { date: date || null, notes: notes.trim(), subtasks: subtasks.filter((x) => x.title.trim()) };
     if (adhoc) {
       const sub = parseFor(forV);
       p.title = title.trim() || task.title;
@@ -174,7 +256,12 @@ export function TaskDetailDialog({ taskId }: { taskId: string }) {
 
   const primary = () => {
     const cur = { ...task, ...patch() };
-    const changed = cur.date !== task.date || cur.notes !== task.notes || cur.title !== task.title || cur.subjectId !== task.subjectId;
+    const changed =
+      cur.date !== task.date ||
+      cur.notes !== task.notes ||
+      cur.title !== task.title ||
+      cur.subjectId !== task.subjectId ||
+      JSON.stringify(cur.subtasks) !== JSON.stringify(task.subtasks ?? []);
     if (changed) apply(updateTask(s, task, patch()));
     closeDialog();
     complete(cur);
@@ -258,6 +345,17 @@ export function TaskDetailDialog({ taskId }: { taskId: string }) {
           </button>
         </div>
       )}
+      <SubtaskList
+        items={subtasks}
+        onChange={(next, commit) => {
+          setSubtasks(next);
+          // Toggles, adds and removals save right away; typing waits for blur.
+          const clean = next.filter((x) => x.title.trim());
+          if (commit && JSON.stringify(clean) !== JSON.stringify(task.subtasks ?? [])) {
+            apply(updateTask(s, task, { subtasks: clean }));
+          }
+        }}
+      />
       <Field label="Notes" optional>{(id) => <textarea id={id} rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />}</Field>
     </Dialog>
   );

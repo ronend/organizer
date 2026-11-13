@@ -2007,3 +2007,173 @@ input[type='file'] {
     flex-basis: calc(100% - 12px);
   }
 }
+
+/* ── Sub-tasks ─────────────────────────────────────────────────────────── */
+
+.subtasks-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.subtasks-head .label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.subtask-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.subtask {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.subtask .subtask-title {
+  flex: 1;
+  min-width: 0;
+  background: transparent !important;
+  padding-left: 0 !important;
+}
+
+.subtask.done .subtask-title {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.subtask-add {
+  margin-top: 4px;
+}
+
+/* ── Routine schedules ─────────────────────────────────────────────────── */
+
+.label-like {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.schedule-box {
+  background: var(--tint);
+  border-radius: var(--r-tile);
+  padding: 14px 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.schedule-box input:not([type='checkbox']):not([type='radio']),
+.schedule-box select {
+  background: var(--bg);
+}
+
+.schedule-head,
+.schedule-steps-head,
+.schedule-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.schedule-head .label-like {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.schedule-links {
+  display: flex;
+  gap: 14px;
+}
+
+.schedule-actions {
+  align-items: center;
+}
+
+.plan-summary {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+}
+
+.plan-editor {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.plan-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 190px auto;
+  grid-template-areas: 'title days kind remove';
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.plan-row > :nth-child(1) {
+  grid-area: title;
+}
+.plan-row > :nth-child(2) {
+  grid-area: days;
+}
+.plan-row > :nth-child(3) {
+  grid-area: kind;
+}
+.plan-row > :nth-child(4) {
+  grid-area: remove;
+}
+
+.plan-days {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.plan-days input {
+  width: 76px !important;
+}
+
+.assignee-schedules {
+  display: grid;
+  gap: 8px;
+}
+
+.assignee-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) 170px 170px;
+  gap: 8px;
+  align-items: center;
+}
+
+.assignee-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 559.98px) {
+  .plan-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'title title remove'
+      'days kind kind';
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .assignee-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .assignee-name {
+    grid-column: 1 / -1;
+  }
+}

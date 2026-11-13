@@ -89,7 +89,10 @@ export interface StepPlan {
   docTask: DocTaskSpec | null;
 }
 
-/** A routine is written once; per-subject state lives on Assignment. */
+/**
+ * A routine is a template: default steps and rules, written once. Each
+ * Assignment applies it to one person or car with its own date and schedule.
+ */
 export interface Routine extends Base {
   kind: 'routine';
   area: Area;
@@ -104,9 +107,9 @@ export interface Routine extends Base {
   plan: StepPlan[];
   /** Tasks filed after a cycle completes (offset from the completion date). */
   followUps: StepPlan[];
-  /** Default repeat for new assignees (months), null = doesn't repeat. */
+  /** Default repeat for new assignments (months), null = doesn't repeat. */
   repeatMonths: number | null;
-  /** Base for the next due date: the day it was done, or the previous due date. */
+  /** Default base for the next due date: the day it was done, or the previous due date. */
   countFrom: 'done' | 'due';
   medication: boolean;
 }
@@ -127,7 +130,7 @@ export interface HistoryEntry {
   text: string;
 }
 
-/** One routine assigned to one person or car, with its own date and status. */
+/** One routine assigned to one person or car, with its own date, schedule and status. */
 export interface Assignment extends Base {
   kind: 'assignment';
   routineId: string;
@@ -142,6 +145,13 @@ export interface Assignment extends Base {
   contactId: string | null;
   supply: MedicationSupply | null;
   history: HistoryEntry[];
+  /**
+   * This assignee's own steps, overriding the routine's default plan.
+   * null (or missing on older records) = use the routine's.
+   */
+  plan: StepPlan[] | null;
+  /** Override of the routine's countFrom. null / missing = use the routine's. */
+  countFrom: 'done' | 'due' | null;
 }
 
 // ── Tasks ───────────────────────────────────────────────────────────────────
@@ -156,6 +166,13 @@ export interface AppointmentInfo {
 }
 
 export type TripTaskKind = 'book' | 'checkin';
+
+/** One checklist item inside a task. */
+export interface Subtask {
+  id: string;
+  title: string;
+  done: boolean;
+}
 
 export interface Task extends Base {
   kind: 'task';
@@ -179,6 +196,8 @@ export interface Task extends Base {
   reservationId: string | null;
   tripTask: TripTaskKind | null;
   docTask: DocTaskSpec | null;
+  /** Checklist. May be missing on tasks saved before sub-tasks existed. */
+  subtasks: Subtask[];
 }
 
 // ── Documents ───────────────────────────────────────────────────────────────

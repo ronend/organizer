@@ -17,6 +17,7 @@ import {
   makeRoutine,
   makeTask,
   makeTrip,
+  newId,
   planCycle,
   syncTripTasks,
 } from './ops';
@@ -364,11 +365,12 @@ export async function buildDemo(s: CooState): Promise<ChangeSet> {
   res({ ...base, tripId: boston.id, type: 'stay', title: 'Harborview Inn', start: DT(-60, '15:00'), end: DT(-57, '11:00'), address: '12 Atlantic Ave, Boston', confirmation: 'HVI-4410' });
 
   // ── General tasks ──
-  const g = (title: string, date: string, notes = '') => tx.put(makeTask({ title, date, notes }));
+  const g = (title: string, date: string, notes = '', subtasks: string[] = []) =>
+    tx.put(makeTask({ title, date, notes, subtasks: subtasks.map((t, i) => ({ id: newId('st'), title: t, done: i === 0 })) }));
   g('Pay property tax', T(-3), 'Second installment');
   g('Call the plumber', T(0), 'Kitchen sink drips');
   g('Renew gym membership', T(9));
-  g('Book flights for the holiday', T(16));
+  g('Book flights for the holiday', T(16), '', ['Agree on dates with the grandparents', 'Compare fares', 'Check everyone’s passport dates', 'Book seats together']);
 
   return tx.changes();
 }

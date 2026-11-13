@@ -19,6 +19,7 @@ import type {
   Reservation,
   Routine,
   StepPlan,
+  Subtask,
   SubjectType,
   Task,
   Trip,
@@ -30,7 +31,9 @@ import {
   byDate,
   contactName,
   doneVerb,
+  effectivePlan,
   routineOf,
+  samePlan,
   runOutDate,
   onHandNow,
 } from './model';
@@ -163,6 +166,7 @@ export function makeTask(p: Partial<Task> & { title: string }): Task {
     reservationId: null,
     tripTask: null,
     docTask: null,
+    subtasks: [],
     ...p,
   };
 }
@@ -195,6 +199,8 @@ export function makeAssignment(
     contactId: null,
     supply: null,
     history: [],
+    plan: null,
+    countFrom: null,
     ...p,
   };
 }
@@ -263,7 +269,7 @@ export function medicationSteps(r: Routine, a: Assignment): Task[] {
 /** Tasks for one cycle of a routine ending on `due`. Past dates are clamped to today. */
 export function planCycle(r: Routine, a: Assignment, due: ISODate): Task[] {
   if (r.medication) return medicationSteps(r, a);
-  return [...r.plan]
+  return [...effectivePlan(r, a)]
     .sort((x, y) => x.offsetDays - y.offsetDays)
     .map((p) => stepTask(a, p, clampToday(addDays(due, p.offsetDays))));
 }
@@ -276,7 +282,15 @@ function followUpTasks(r: Routine, a: Assignment, doneOn: ISODate): Task[] {
 
 export function addTask(
   s: CooState,
-  p: { title: string; date: ISODate | null; subjectType: SubjectType | null; subjectId: string | null; assignmentId?: string | null; notes?: string },
+  p: {
+    title: string;
+    date: ISODate | null;
+    subjectType: SubjectType | null;
+    subjectId: string | null;
+    assignmentId?: string | null;
+    notes?: string;
+    subtasks?: Subtask[];
+  },
 ): ChangeSet {
   const tx = new Tx(s);
   tx.put(
@@ -287,6 +301,7 @@ export function addTask(
       subjectId: p.subjectId,
       assignmentId: p.assignmentId ?? null,
       notes: p.notes ?? '',
+      subtasks: p.subtasks ?? [],
     }),
   );
   return tx.changes();
@@ -362,6 +377,14 @@ export function completeCycle(s: CooState, t: Task, nextDate: ISODate | null): C
   const verb = doneVerb(r);
   const entry = { date: doneOn, text: provider ? `${verb} at ${provider}` : verb };
   const next: Assignment = { ...a, history: [entry, ...a.history] };
+  // Planned steps still open from the cycle that just ended are stale now.
+  // Steps the user added by hand are kept.
+  const planned = new Set(effectivePlan(r, a).map((p) => p.title));
+  for (const other of s.tasks) {
+    if (other.assignmentId === a.id && other.id !== t.id && !other.done && !other.appointment && planned.has(other.title)) {
+      tx.del(other);
+    }
+  }
   if (nextDate) {
     next.date = nextDate;
     for (const task of planCycle(r, next, nextDate)) tx.put(task);
@@ -445,6 +468,54 @@ export function setAssignmentDate(s: CooState, a: Assignment, date: ISODate | nu
   return tx.changes();
 }
 
+/**
+ * Replaces the open, not-yet-booked steps that came from `oldPlan` with steps
+ * from the assignment's current effective plan for its current date. Steps
+ * the user added by hand, appointments and steps already done this cycle stay.
+ */
+function replanOpenSteps(tx: Tx, oldPlan: StepPlan[], r: Routine, a: Assignment) {
+  if (!a.date) return;
+  const oldTitles = new Set(oldPlan.map((p) => p.title));
+  const mine = tx.tasks().filter((t) => t.assignmentId === a.id);
+  for (const t of mine) {
+    if (!t.done && !t.appointment && oldTitles.has(t.title)) tx.del(t);
+  }
+  const plan = effectivePlan(r, a);
+  const earliest = Math.min(0, ...plan.map((p) => p.offsetDays), ...oldPlan.map((p) => p.offsetDays));
+  const cycleStart = addDays(a.date, earliest - 30);
+  const doneThisCycle = new Set(mine.filter((t) => t.done && (t.date ?? '') >= cycleStart).map((t) => t.title));
+  const bookedThisCycle = mine.some((t) => t.appointment && !t.done);
+  for (const t of planCycle(r, a, a.date)) {
+    if (doneThisCycle.has(t.title)) continue;
+    if (bookedThisCycle && t.stepKind === 'schedule') continue;
+    tx.put(t);
+  }
+}
+
+/**
+ * Saves one assignee's schedule: date, repeat, counting rule and steps.
+ * A plan equal to the routine's default is stored as null (inherit).
+ */
+export function updateSchedule(
+  s: CooState,
+  a: Assignment,
+  p: { date: ISODate | null; repeatMonths: number | null; countFrom: 'done' | 'due' | null; plan: StepPlan[] | null },
+): ChangeSet {
+  const tx = new Tx(s);
+  const r = routineOf(s, a);
+  if (!r) return tx.changes();
+  const oldPlan = effectivePlan(r, a);
+  const plan = p.plan && samePlan(p.plan, r.plan) ? null : p.plan;
+  const countFrom = p.countFrom === r.countFrom ? null : p.countFrom;
+  const withRules = tx.put({ ...a, repeatMonths: p.repeatMonths, countFrom, plan });
+  if (p.date !== a.date) setAssignmentDate(s, withRules, p.date, tx);
+  const cur = tx.get(withRules);
+  if (!r.medication && cur.date && !samePlan(oldPlan, effectivePlan(r, cur))) {
+    replanOpenSteps(tx, oldPlan, r, cur);
+  }
+  return tx.changes();
+}
+
 export function updateAssignment(s: CooState, a: Assignment, patch: Partial<Assignment>): ChangeSet {
   const tx = new Tx(s);
   tx.put({ ...a, ...patch });
@@ -463,8 +534,8 @@ export interface RoutineDraft {
   repeatMonths: number | null;
   countFrom: 'done' | 'due';
   medication: boolean;
-  subjects: { type: SubjectType; id: string }[];
-  date: ISODate | null;
+  /** Each assignee with its own due date and repeat. */
+  subjects: { type: SubjectType; id: string; date: ISODate | null; repeatMonths: number | null }[];
   contactId: string | null;
   supply: MedicationSupply | null;
 }
@@ -492,8 +563,8 @@ export function createRoutine(s: CooState, d: RoutineDraft): { changes: ChangeSe
       routineId: routine.id,
       subjectType: sub.type,
       subjectId: sub.id,
-      date: d.date,
-      repeatMonths: d.repeatMonths,
+      date: sub.date,
+      repeatMonths: sub.repeatMonths,
       contactId: d.contactId,
       supply: d.supply,
     });
@@ -509,10 +580,26 @@ export function createRoutine(s: CooState, d: RoutineDraft): { changes: ChangeSe
 export function editRoutine(
   s: CooState,
   r: Routine,
-  p: { title: string; description: string; subjects: { type: SubjectType; id: string }[] },
+  p: {
+    title: string;
+    description: string;
+    subjects: { type: SubjectType; id: string }[];
+    /** New template defaults. Changed default steps re-plan everyone who uses them. */
+    defaults?: { repeatMonths: number | null; countFrom: 'done' | 'due'; plan: StepPlan[] };
+  },
 ): ChangeSet {
   const tx = new Tx(s);
-  tx.put({ ...r, title: p.title, description: p.description });
+  const next = tx.put({
+    ...r,
+    title: p.title,
+    description: p.description,
+    ...(p.defaults ?? {}),
+  });
+  if (p.defaults && !r.medication && !samePlan(r.plan, p.defaults.plan)) {
+    for (const a of assignmentsOf(s, r)) {
+      if (a.plan == null && a.date && !a.done) replanOpenSteps(tx, r.plan, next, a);
+    }
+  }
   const current = assignmentsOf(s, r);
   const want = new Set(p.subjects.map((x) => `${x.type}:${x.id}`));
   for (const a of current) {
@@ -554,17 +641,25 @@ export function defaultSupply(): MedicationSupply {
   return { onHand: 30, asOf: today(), perDay: 1, unit: 'tablets', perRefill: 30, refillsLeft: 0, orderLeadDays: 7 };
 }
 
-export function assignExisting(s: CooState, r: Routine, type: SubjectType, id: string): { changes: ChangeSet; assignment: Assignment } {
+export function assignExisting(
+  s: CooState,
+  r: Routine,
+  type: SubjectType,
+  id: string,
+  opts: { date?: ISODate | null; repeatMonths?: number | null } = {},
+): { changes: ChangeSet; assignment: Assignment } {
   const tx = new Tx(s);
   const a = tx.put(
     makeAssignment({
       routineId: r.id,
       subjectType: type,
       subjectId: id,
-      repeatMonths: r.repeatMonths,
+      date: r.medication ? null : opts.date ?? null,
+      repeatMonths: opts.repeatMonths === undefined ? r.repeatMonths : opts.repeatMonths,
       supply: r.medication ? defaultSupply() : null,
     }),
   );
+  if (!r.medication && a.date) for (const t of planCycle(r, a, a.date)) tx.put(t);
   if (r.medication && a.supply) {
     const withDate = tx.put({ ...a, date: runOutDate(a.supply) });
     for (const t of planCycle(r, withDate, withDate.date!)) tx.put(t);

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Area, Routine, SubjectType } from '../types/coo';
+import type { Area, Routine, StepPlan, SubjectType } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { useToast } from '../store/Toast';
@@ -21,9 +21,11 @@ import {
   personSub,
   sortedCars,
   sortedPeople,
+  subjectName,
 } from '../lib/model';
 import { today } from '../lib/dates';
 import { RoutineDetailDialog } from './RoutineDetail';
+import { StepPlanEditor, cleanPlan } from './StepPlanEditor';
 
 type Sub = { type: SubjectType; id: string };
 const key = (x: Sub) => `${x.type}:${x.id}`;
@@ -60,6 +62,66 @@ function SubjectChecklist({
   );
 }
 
+export function RepeatSelect({
+  id,
+  value,
+  onChange,
+  label,
+}: {
+  id?: string;
+  value: number | null;
+  onChange: (v: number | null) => void;
+  label?: string;
+}) {
+  return (
+    <select id={id} aria-label={label} value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
+      {REPEAT_OPTIONS.map((o) => (
+        <option key={String(o.value)} value={o.value ?? ''}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** One row per chosen person or car: its own due date and repeat. */
+function AssigneeSchedules({
+  keys,
+  dateLabel,
+  dates,
+  repeats,
+  defaultRepeat,
+  onDate,
+  onRepeat,
+}: {
+  keys: string[];
+  dateLabel: string;
+  dates: Record<string, string>;
+  repeats: Record<string, number | null>;
+  defaultRepeat: number | null;
+  onDate: (k: string, v: string) => void;
+  onRepeat: (k: string, v: number | null) => void;
+}) {
+  const { s } = useStore();
+  if (keys.length === 0) return <p className="muted small">Choose who it’s for above, then set each one’s {dateLabel.toLowerCase()}.</p>;
+  return (
+    <div className="assignee-schedules">
+      {keys.map((k) => {
+        const [type, id] = k.split(':') as [SubjectType, string];
+        const name = subjectName(s, type, id);
+        return (
+          <div key={k} className="assignee-row">
+            <span className="assignee-name">{name}</span>
+            <input type="date" aria-label={`${dateLabel} for ${name}`} value={dates[k] ?? ''} onChange={(e) => onDate(k, e.target.value)} />
+            <RepeatSelect label={`Repeats for ${name}`} value={k in repeats ? repeats[k] : defaultRepeat} onChange={(v) => onRepeat(k, v)} />
+          </div>
+        );
+      })}
+      <p className="muted small">Leave a date empty to start that one without a schedule.</p>
+    </div>
+  );
+}
+
 export function RoutineFormDialog({ preselect, area: initialArea }: { preselect?: Sub; area?: Area }) {
   const { s, apply } = useStore();
   const { closeDialog } = useUI();
@@ -70,7 +132,9 @@ export function RoutineFormDialog({ preselect, area: initialArea }: { preselect?
   const [description, setDescription] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set(preselect ? [key(preselect)] : []));
   const [hasDate, setHasDate] = useState(false);
-  const [date, setDate] = useState('');
+  /** Per-assignee due date and repeat (repeat missing = follow the default). */
+  const [dates, setDates] = useState<Record<string, string>>({});
+  const [repeats, setRepeats] = useState<Record<string, number | null>>({});
   const [repeat, setRepeat] = useState<number | null>(null);
   const [remind, setRemind] = useState(String(defaultRemindDays(initialArea ?? 'health')));
   const [countFrom, setCountFrom] = useState<'done' | 'due'>('done');
@@ -126,7 +190,13 @@ export function RoutineFormDialog({ preselect, area: initialArea }: { preselect?
     const subjects = [...selected]
       .map((k) => {
         const [type, id] = k.split(':') as [SubjectType, string];
-        return { type, id };
+        const scheduled = !medication && hasDate;
+        return {
+          type,
+          id,
+          date: scheduled ? dates[k] || null : null,
+          repeatMonths: scheduled ? (k in repeats ? repeats[k] : repeat) : null,
+        };
       })
       .filter((x) => x.type === eligible(area));
     if (subjects.length === 0) {
@@ -144,11 +214,10 @@ export function RoutineFormDialog({ preselect, area: initialArea }: { preselect?
       dateLabel: template?.dateLabel ?? (area === 'identity' ? 'Expires' : 'Due'),
       plan,
       followUps: template?.followUps ?? [],
-      repeatMonths: medication ? null : hasDate ? repeat : null,
+      repeatMonths: medication ? null : repeat,
       countFrom,
       medication,
       subjects,
-      date: !medication && hasDate && date ? date : null,
       contactId: contactId || null,
       supply: medication
         ? {
@@ -229,22 +298,18 @@ export function RoutineFormDialog({ preselect, area: initialArea }: { preselect?
           </label>
           {hasDate && (
             <div className="sched-details">
-              <div className="fields">
-                <Field label={area === 'identity' ? 'Expiry date' : 'Due date'}>
-                  {(id) => <input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />}
-                </Field>
-                <Field label="Repeats">
-                  {(id) => (
-                    <select id={id} value={repeat ?? ''} onChange={(e) => setRepeat(e.target.value ? Number(e.target.value) : null)}>
-                      {REPEAT_OPTIONS.map((o) => (
-                        <option key={String(o.value)} value={o.value ?? ''}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </Field>
-              </div>
+              <Field label="Repeats by default" hint="Each person or car can have its own date and repeat below.">
+                {(id) => <RepeatSelect id={id} value={repeat} onChange={setRepeat} />}
+              </Field>
+              <AssigneeSchedules
+                keys={[...selected].filter((k) => k.startsWith(`${eligible(area)}:`))}
+                dateLabel={area === 'identity' ? 'Expiry date' : 'Due date'}
+                dates={dates}
+                repeats={repeats}
+                defaultRepeat={repeat}
+                onDate={(k, v) => setDates((cur) => ({ ...cur, [k]: v }))}
+                onRepeat={(k, v) => setRepeats((cur) => ({ ...cur, [k]: v }))}
+              />
               {template ? (
                 <p className="muted small">{template.summary}</p>
               ) : (
@@ -295,9 +360,14 @@ export function EditRoutineDialog({ routine }: { routine: Routine }) {
   const { closeDialog } = useUI();
   const [title, setTitle] = useState(routine.title);
   const [description, setDescription] = useState(routine.description);
+  const [repeat, setRepeat] = useState<number | null>(routine.repeatMonths);
+  const [countFrom, setCountFrom] = useState<'done' | 'due'>(routine.countFrom);
+  const [plan, setPlan] = useState<StepPlan[]>(routine.plan);
   const current = assignmentsOf(s, routine);
   const [selected, setSelected] = useState<Set<string>>(new Set(current.map((a) => `${a.subjectType}:${a.subjectId}`)));
   const removed = current.filter((a) => !selected.has(`${a.subjectType}:${a.subjectId}`));
+  const inheriting = current.filter((a) => a.plan == null).length;
+  const own = current.length - inheriting;
 
   const toggle = (x: Sub) =>
     setSelected((cur) => {
@@ -313,16 +383,24 @@ export function EditRoutineDialog({ routine }: { routine: Routine }) {
       const [type, id] = k.split(':') as [SubjectType, string];
       return { type, id };
     });
-    apply(editRoutine(s, routine, { title: title.trim(), description: description.trim(), subjects }), {
-      toast: subjects.length === 0 ? 'Routine removed' : 'Routine saved',
-      undo: removed.length > 0,
-    });
+    apply(
+      editRoutine(s, routine, {
+        title: title.trim(),
+        description: description.trim(),
+        subjects,
+        defaults: routine.medication ? undefined : { repeatMonths: repeat, countFrom, plan: cleanPlan(plan) },
+      }),
+      {
+        toast: subjects.length === 0 ? 'Routine removed' : 'Routine saved',
+        undo: true,
+      },
+    );
     closeDialog();
   };
 
   return (
     <Dialog
-      eyebrow={`${AREA_LABEL[routine.area]} · Routine`}
+      eyebrow={`${AREA_LABEL[routine.area]} · Routine template`}
       title="Edit routine"
       wide
       onSubmit={submit}
@@ -346,10 +424,41 @@ export function EditRoutineDialog({ routine }: { routine: Routine }) {
       <Field label="Description" optional>
         {(id) => <textarea id={id} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />}
       </Field>
+      {!routine.medication && (
+        <Fieldset legend="Defaults">
+          <p className="muted small">
+            The starting point for everyone this routine is assigned to. Each person or car can override these in its own
+            schedule.
+          </p>
+          <div className="fields">
+            <Field label="Repeats" hint="Used for new assignments.">
+              {(id) => <RepeatSelect id={id} value={repeat} onChange={setRepeat} />}
+            </Field>
+            <Field label="Next one counted from">
+              {(id) => (
+                <select id={id} value={countFrom} onChange={(e) => setCountFrom(e.target.value as 'done' | 'due')}>
+                  <option value="done">The day it’s done</option>
+                  <option value="due">The due date</option>
+                </select>
+              )}
+            </Field>
+          </div>
+          <div className="field">
+            <span className="label-like">Default steps before each {routine.dateLabel.toLowerCase()} date</span>
+            <StepPlanEditor plan={plan} onChange={setPlan} dateLabel={routine.dateLabel} />
+          </div>
+          {current.length > 0 && (
+            <p className="muted small">
+              {inheriting > 0 && `Changing the steps re-plans the open steps of ${inheriting === 1 ? 'the one assignee' : `the ${inheriting} assignees`} using the defaults.`}
+              {own > 0 && ` ${own === 1 ? 'One assignee has' : `${own} assignees have`} their own steps and won’t change.`}
+            </p>
+          )}
+        </Fieldset>
+      )}
       <Fieldset legend="Assigned to">
         <SubjectChecklist type={eligible(routine.area)} selected={selected} onToggle={toggle} />
         <p className="muted small">
-          Newly assigned people or cars start with no date. Unchecking someone removes this routine and its steps from them and unlinks their documents.
+          Newly assigned people or cars start with no date; set it in their schedule. Unchecking someone removes this routine and its steps from them and unlinks their documents.
         </p>
         {removed.length > 0 && (
           <p className="small tone-warn">
@@ -361,15 +470,60 @@ export function EditRoutineDialog({ routine }: { routine: Routine }) {
   );
 }
 
-/** "Assign an existing routine" tile → pick a routine of the area not yet assigned to the subject. */
+/**
+ * "Assign an existing routine": pick a routine of the area not yet assigned to
+ * the subject, then give this subject its own date and repeat.
+ */
 export function AssignExistingDialog({ subject, area }: { subject: Sub; area: Area }) {
   const { s, apply } = useStore();
   const { openDialog } = useUI();
+  const [picked, setPicked] = useState<Routine | null>(null);
+  const [date, setDate] = useState('');
+  const [repeat, setRepeat] = useState<number | null>(null);
   const list = s.routines.filter(
     (r) =>
       r.area === area &&
       !s.assignments.some((a) => a.routineId === r.id && a.subjectType === subject.type && a.subjectId === subject.id),
   );
+  const name = subjectName(s, subject.type, subject.id);
+
+  const assign = (r: Routine, opts: { date?: string | null; repeatMonths?: number | null } = {}) => {
+    const { changes, assignment } = assignExisting(s, r, subject.type, subject.id, opts);
+    apply(changes, { toast: `Assigned ${r.title} to ${name}` });
+    openDialog(<RoutineDetailDialog assignmentId={assignment.id} />);
+  };
+
+  if (picked) {
+    return (
+      <Dialog
+        eyebrow={`${name} · ${picked.title}`}
+        title={`Schedule for ${name}`}
+        onSubmit={() => assign(picked, { date: date || null, repeatMonths: repeat })}
+        actions={
+          <>
+            <button type="button" className="btn ghost" onClick={() => setPicked(null)}>
+              Back
+            </button>
+            <button type="submit" className="btn primary">
+              Assign
+            </button>
+          </>
+        }
+      >
+        <p className="muted">
+          {name} gets the routine’s default steps. You can change them, and how the next date is counted, in {name}’s schedule
+          afterwards.
+        </p>
+        <div className="fields">
+          <Field label={picked.dateLabel} optional hint="Leave empty to start without a schedule.">
+            {(id) => <input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} />}
+          </Field>
+          <Field label="Repeats">{(id) => <RepeatSelect id={id} value={repeat} onChange={setRepeat} />}</Field>
+        </div>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog eyebrow={`${AREA_LABEL[area]} · Routines`} title="Assign an existing routine">
       {list.length === 0 ? (
@@ -382,9 +536,13 @@ export function AssignExistingDialog({ subject, area }: { subject: Sub; area: Ar
                 type="button"
                 className="row row-button"
                 onClick={() => {
-                  const { changes, assignment } = assignExisting(s, r, subject.type, subject.id);
-                  apply(changes, { toast: `Assigned ${r.title}` });
-                  openDialog(<RoutineDetailDialog assignmentId={assignment.id} />);
+                  if (r.medication) {
+                    assign(r);
+                    return;
+                  }
+                  setRepeat(r.repeatMonths);
+                  setDate('');
+                  setPicked(r);
                 }}
               >
                 <Icon name={r.icon} />

@@ -10,6 +10,7 @@ import type {
   Person,
   Reservation,
   Routine,
+  StepPlan,
   SubjectType,
   Task,
   Trip,
@@ -17,7 +18,6 @@ import type {
 import {
   addDays,
   addMonths,
-  age,
   daysFromToday,
   diffDays,
   fmtDate,
@@ -53,9 +53,9 @@ export function subjectName(s: CooState, type: SubjectType | null, id: string | 
   return sub.type === 'person' ? sub.entity.name : sub.entity.makeModel;
 }
 
-export function personSub(p: Person): string {
-  const a = age(p.birthYear);
-  return a === null ? 'Person' : `Age ${a}`;
+/** People have no sub-label (age is not shown). */
+export function personSub(_p: Person): string {
+  return '';
 }
 
 export function subjectSub(sub: Subject): string {
@@ -184,8 +184,7 @@ export function docsOfAssignment(s: CooState, a: Assignment): Document[] {
 export function routineSummary(r: Routine): string {
   if (r.medication) return 'Tracks supply';
   if (!r.repeatMonths) return 'No schedule';
-  const t = repeatText(r.repeatMonths);
-  return `Repeats ${t}`;
+  return `By default repeats ${repeatText(r.repeatMonths)}`;
 }
 
 export function doneVerb(r: Routine | undefined): string {
@@ -193,9 +192,26 @@ export function doneVerb(r: Routine | undefined): string {
 }
 
 /** Default next date offered when a renewal or appointment cycle completes. */
+/** This assignee's steps: its own override, else the routine's defaults. */
+export function effectivePlan(r: Routine, a: Assignment): StepPlan[] {
+  return a.plan ?? r.plan;
+}
+
+export function effectiveCountFrom(r: Routine, a: Assignment): 'done' | 'due' {
+  return a.countFrom ?? r.countFrom;
+}
+
+export function hasOverrides(a: Assignment): boolean {
+  return a.plan != null || a.countFrom != null;
+}
+
+export function samePlan(x: StepPlan[], y: StepPlan[]): boolean {
+  return JSON.stringify(x) === JSON.stringify(y);
+}
+
 export function suggestedNextDate(r: Routine, a: Assignment, doneOn: ISODate): ISODate | null {
   if (!a.repeatMonths) return null;
-  const base = r.countFrom === 'due' && a.date ? a.date : doneOn;
+  const base = effectiveCountFrom(r, a) === 'due' && a.date ? a.date : doneOn;
   return addMonths(base, a.repeatMonths);
 }
 
@@ -249,8 +265,16 @@ export function appointmentNote(s: CooState, t: Task): string {
     .join(' · ');
 }
 
+export function subtaskProgress(t: Task): string {
+  const list = t.subtasks ?? [];
+  if (list.length === 0) return '';
+  return `${list.filter((x) => x.done).length} of ${list.length} sub-tasks`;
+}
+
 export function taskMeta(s: CooState, t: Task): string {
   const parts = [taskWho(s, t), taskWhat(s, t)];
+  const progress = subtaskProgress(t);
+  if (progress) parts.push(progress);
   if (t.appointment) {
     parts.push('Appointment');
     const note = appointmentNote(s, t);

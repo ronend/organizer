@@ -11,17 +11,130 @@ import {
   byDate,
   contactsFor,
   docsOfAssignment,
+  effectivePlan,
   routineOf,
+  samePlan,
   scheduleLine,
   stepsOf,
   subjectName,
 } from '../lib/model';
-import { REPEAT_OPTIONS } from '../lib/templates';
-import { addStep, setAssignmentDate, updateAssignment } from '../lib/ops';
-import { EditRoutineDialog } from './RoutineForm';
+import { addStep, updateAssignment, updateSchedule } from '../lib/ops';
+import { EditRoutineDialog, RepeatSelect } from './RoutineForm';
+import { StepPlanEditor, cleanPlan } from './StepPlanEditor';
 import { RefillDialog } from './TaskFlows';
 import { TaskDetailDialog } from './TaskDialogs';
 import { DocFormFor, openDocViewer } from './DocDialogs';
+
+const KIND_WORD: Record<string, string> = { plain: 'reminder', schedule: 'book', renew: 'renew', pickup: 'pick up' };
+
+/**
+ * This assignee's schedule: its own date, repeat, counting rule and steps.
+ * Starts from the routine's defaults; anything changed here applies only to
+ * this person or car.
+ */
+function ScheduleSection({ assignmentId }: { assignmentId: string }) {
+  const { s, apply } = useStore();
+  const a = assignmentById(s, assignmentId)!;
+  const r = routineOf(s, a)!;
+  const name = subjectName(s, a.subjectType, a.subjectId);
+  const [date, setDate] = useState(a.date ?? '');
+  const [repeat, setRepeat] = useState<number | null>(a.repeatMonths);
+  const [countFrom, setCountFrom] = useState<'' | 'done' | 'due'>(a.countFrom ?? '');
+  const [plan, setPlan] = useState(effectivePlan(r, a));
+  const [editSteps, setEditSteps] = useState(false);
+
+  const cleaned = cleanPlan(plan);
+  const custom = !samePlan(cleaned, r.plan);
+  const dirty =
+    (date || null) !== a.date ||
+    repeat !== a.repeatMonths ||
+    (countFrom || null) !== (a.countFrom ?? null) ||
+    !samePlan(cleaned, effectivePlan(r, a));
+
+  const save = () => {
+    const dateChanged = (date || null) !== a.date;
+    apply(
+      updateSchedule(s, a, {
+        date: date || null,
+        repeatMonths: repeat,
+        countFrom: countFrom || null,
+        plan: custom ? cleaned : null,
+      }),
+      {
+        toast:
+          !a.date && date ? 'Schedule saved. Steps planned' : dateChanged && date ? 'Schedule saved. Open steps moved' : 'Schedule saved',
+        undo: true,
+      },
+    );
+    setEditSteps(false);
+  };
+
+  const defaultCount = r.countFrom === 'done' ? 'the day it’s done' : 'the due date';
+
+  return (
+    <div className="schedule-box">
+      <div className="schedule-head">
+        <span className="label-like">Schedule for {name}</span>
+        {(custom || a.countFrom) && <span className="muted small">Differs from the routine’s defaults</span>}
+      </div>
+      <div className="fields">
+        <Field label={r.dateLabel} optional>
+          {(id) => <input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} />}
+        </Field>
+        <Field label="Repeats">{(id) => <RepeatSelect id={id} value={repeat} onChange={setRepeat} />}</Field>
+      </div>
+      <Field label="Next one counted from">
+        {(id) => (
+          <select id={id} value={countFrom} onChange={(e) => setCountFrom(e.target.value as '' | 'done' | 'due')}>
+            <option value="">Routine default ({defaultCount})</option>
+            <option value="done">The day it’s done</option>
+            <option value="due">The due date</option>
+          </select>
+        )}
+      </Field>
+      <div className="field">
+        <div className="schedule-steps-head">
+          <span className="label-like">Steps before each date</span>
+          <span className="schedule-links">
+            {custom && (
+              <button type="button" className="link small" onClick={() => setPlan(r.plan)}>
+                Use the routine’s defaults
+              </button>
+            )}
+            {!editSteps && (
+              <button type="button" className="link small" onClick={() => setEditSteps(true)}>
+                Change steps
+              </button>
+            )}
+          </span>
+        </div>
+        {editSteps ? (
+          <StepPlanEditor plan={plan} onChange={setPlan} dateLabel={r.dateLabel} />
+        ) : cleaned.length === 0 ? (
+          <span className="muted small">No steps.</span>
+        ) : (
+          <ul className="plan-summary">
+            {[...cleaned]
+              .sort((x, y) => x.offsetDays - y.offsetDays)
+              .map((p, i) => (
+                <li key={i} className="small">
+                  {p.title} <span className="muted">· {p.offsetDays === 0 ? 'on the day' : `${-p.offsetDays} days before`} · {KIND_WORD[p.kind]}</span>
+                </li>
+              ))}
+          </ul>
+        )}
+        {!custom && <span className="muted small">Using the routine’s default steps.</span>}
+        {custom && <span className="muted small">Custom steps for {name} only.</span>}
+      </div>
+      <div className="schedule-actions">
+        <span />
+        <button type="button" className="btn primary small" disabled={!dirty} onClick={save}>
+          Save schedule
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function RoutineDetailDialog({ assignmentId }: { assignmentId: string }) {
   const { s, apply } = useStore();
@@ -38,15 +151,6 @@ export function RoutineDetailDialog({ assignmentId }: { assignmentId: string }) 
   const docs = docsOfAssignment(s, a);
   const contacts = contactsFor(s, r.area === 'car' ? 'car' : r.area === 'health' ? 'health' : 'any');
   const docKind = r.area === 'car' ? 'car' : r.area;
-
-  const onDate = (v: string) => {
-    const next = v || null;
-    if (next === a.date) return;
-    apply(setAssignmentDate(s, a, next), {
-      toast: !a.date && next ? 'Date set. Steps planned' : next ? 'Date changed. Open steps moved' : 'Date cleared',
-      undo: true,
-    });
-  };
 
   return (
     <Dialog
@@ -72,26 +176,7 @@ export function RoutineDetailDialog({ assignmentId }: { assignmentId: string }) 
           </button>
         </div>
       ) : (
-        <div className="fields">
-          <Field label={r.dateLabel} optional>
-            {(id) => <input id={id} type="date" defaultValue={a.date ?? ''} key={a.date ?? 'none'} onChange={(e) => onDate(e.target.value)} />}
-          </Field>
-          <Field label="Repeats" hint="Applies at the next renewal.">
-            {(id) => (
-              <select
-                id={id}
-                value={a.repeatMonths ?? ''}
-                onChange={(e) => apply(updateAssignment(s, a, { repeatMonths: e.target.value ? Number(e.target.value) : null }), { toast: 'Saved' })}
-              >
-                {REPEAT_OPTIONS.map((o) => (
-                  <option key={String(o.value)} value={o.value ?? ''}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
-        </div>
+        <ScheduleSection key={a.id} assignmentId={a.id} />
       )}
       <Field label="Preferred contact" optional>
         {(id) => (

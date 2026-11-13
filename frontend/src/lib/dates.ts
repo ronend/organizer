@@ -113,11 +113,6 @@ export function fmtDateTime(dt: LocalDateTime): string {
   return `${fmtDayHeading(datePart(dt))}, ${timePart(dt)}`;
 }
 
-export function age(birthYear: number | null): number | null {
-  if (!birthYear) return null;
-  return new Date().getFullYear() - birthYear;
-}
-
 export function greeting(): string {
   const h = new Date().getHours();
   if (h < 12) return 'Good morning.';
