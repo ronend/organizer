@@ -75,6 +75,8 @@ def samples(sub: str) -> dict[str, dict]:
                 "orderLeadDays": 5,
             },
             "history": [{"date": "2026-01-01", "text": "Renewed"}],
+            "plan": None,
+            "countFrom": None,
         },
         "task": {
             **base("task", "t_1"),
@@ -93,6 +95,10 @@ def samples(sub: str) -> dict[str, dict]:
             "reservationId": None,
             "tripTask": None,
             "docTask": None,
+            "subtasks": [
+                {"id": "st_1", "title": "Find two passport photos", "done": True},
+                {"id": "st_2", "title": "Fill in the DS-82 form", "done": False},
+            ],
         },
         "document": {
             **base("document", "d_1"),

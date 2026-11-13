@@ -17,9 +17,9 @@ Every record carries a `kind` discriminator, an `id`, `createdAt` and `updatedAt
 | `person`      | `people`       | A household member |
 | `car`         | `cars`         | A car (`plate` stored uppercase, unique) |
 | `contact`     | `contacts`     | Doctor, garage, ... grouped `health` / `cars` / `other` |
-| `routine`     | `routines`     | A recurring obligation, written once (plan + follow-up steps) |
-| `assignment`  | `assignments`  | One routine applied to one person or car, with its own date / status / medication supply / history |
-| `task`        | `tasks`        | An agenda item. Optional links: subject (person/car), `assignmentId` (routine step), `tripId` / `reservationId` (trip task), `appointment`, `docTask` |
+| `routine`     | `routines`     | A template, written once: default steps (`plan`), follow-ups, default `repeatMonths` and `countFrom` |
+| `assignment`  | `assignments`  | One routine applied to one person or car: its own `date`, `repeatMonths`, status, supply and history, plus optional overrides `plan` and `countFrom` (`null` = use the routine's) |
+| `task`        | `tasks`        | An agenda item. Optional links: subject (person/car), `assignmentId` (routine step), `tripId` / `reservationId` (trip task), `appointment`, `docTask`. `subtasks` is a checklist of `{id, title, done}` (no dates of their own; missing on older tasks, read as `[]`) |
 | `document`    | `documents`    | A stored document (`docKind` car / health / identity) with optional files |
 | `trip`        | `trips`        | A trip (`start`..`end`, travelers = person ids) |
 | `reservation` | `reservations` | A flight / stay / car / ... belonging to a trip, with optional files |

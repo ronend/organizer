@@ -202,6 +202,8 @@ def agenda(state: dict, filter: Optional[str] = None, on: Optional[date] = None)
             row["time"] = t["appointment"]["time"]
         if t.get("stepKind") and t["stepKind"] != "plain":
             row["stepKind"] = t["stepKind"]
+        if t.get("subtasks"):
+            row["subtasks"] = [{"title": s["title"], "done": s["done"]} for s in t["subtasks"]]
 
         if not t.get("date"):
             buckets["later"].append(row)
@@ -246,7 +248,19 @@ def routines(state: dict) -> list[dict]:
             else:
                 car = cars.get(a["subjectId"])
                 name = car_label(car) if car else "(unknown car)"
-            assignees.append({"assignmentId": a["id"], "subject": name, "date": a.get("date"), "done": a.get("done", False)})
+            plan = a.get("plan") if a.get("plan") is not None else r.get("plan", [])
+            assignees.append(
+                {
+                    "assignmentId": a["id"],
+                    "subject": name,
+                    "date": a.get("date"),
+                    "repeatMonths": a.get("repeatMonths"),
+                    "countFrom": a.get("countFrom") or r.get("countFrom"),
+                    "customSteps": a.get("plan") is not None,
+                    "steps": [{"title": p["title"], "daysBefore": -p["offsetDays"], "kind": p["kind"]} for p in plan],
+                    "done": a.get("done", False),
+                }
+            )
         assignees.sort(key=lambda x: (x["date"] is None, x["date"] or ""))
         out.append(
             {
@@ -254,7 +268,11 @@ def routines(state: dict) -> list[dict]:
                 "title": r["title"],
                 "area": r["area"],
                 "dateLabel": r.get("dateLabel"),
-                "repeatMonths": r.get("repeatMonths"),
+                "defaultRepeatMonths": r.get("repeatMonths"),
+                "defaultCountFrom": r.get("countFrom"),
+                "defaultSteps": [
+                    {"title": p["title"], "daysBefore": -p["offsetDays"], "kind": p["kind"]} for p in r.get("plan", [])
+                ],
                 "medication": r.get("medication", False),
                 "assignees": assignees,
             }
@@ -318,7 +336,12 @@ def trip_detail(state: dict, query: str) -> dict:
 
 
 def new_task(
-    state: dict, title: str, on: Optional[str] = None, for_: Optional[str] = None, notes: Optional[str] = None
+    state: dict,
+    title: str,
+    on: Optional[str] = None,
+    for_: Optional[str] = None,
+    notes: Optional[str] = None,
+    subtasks: Optional[list[str]] = None,
 ) -> dict:
     title = (title or "").strip()
     if not title:
@@ -348,6 +371,11 @@ def new_task(
         "reservationId": None,
         "tripTask": None,
         "docTask": None,
+        "subtasks": [
+            {"id": new_id("st"), "title": s.strip()[:300], "done": False}
+            for s in (subtasks or [])
+            if s and s.strip()
+        ][:100],
     }
 
 

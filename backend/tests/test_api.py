@@ -229,3 +229,43 @@ def test_download_urls_foreign_key_is_403(client, sub):
     resp = client.post("/api/files/urls", json={"keys": [f"u/{sub}/a/x.pdf", "u/other/a/x.pdf"]})
     assert resp.status_code == 403
     assert client.post("/api/files/urls", json={"keys": ["x"] * 101}).status_code == 422
+
+
+def test_task_without_subtasks_is_accepted(client, sub):
+    """Tasks saved before sub-tasks existed have no `subtasks` field."""
+    task = samples(sub)["task"]
+    legacy = {k: v for k, v in task.items() if k != "subtasks"}
+    assert client.post("/api/batch", json={"put": [legacy], "delete": []}).status_code == 200
+    got = client.get("/api/state").json()["tasks"][0]
+    assert got["subtasks"] == []
+
+
+def test_subtask_validation(client, sub):
+    task = samples(sub)["task"]
+    bad_extra = {**task, "subtasks": [{"id": "st_1", "title": "x", "done": False, "due": "2026-01-01"}]}
+    bad_title = {**task, "subtasks": [{"id": "st_1", "title": "", "done": False}]}
+    too_many = {**task, "subtasks": [{"id": f"st_{i}", "title": "x", "done": False} for i in range(101)]}
+    for payload in (bad_extra, bad_title, too_many):
+        res = client.post("/api/batch", json={"put": [payload], "delete": []})
+        assert res.status_code == 422, payload["subtasks"][:1]
+
+
+def test_assignment_overrides(client, sub):
+    """Per-assignee plan/countFrom overrides; older assignments without them stay valid."""
+    a = samples(sub)["assignment"]
+    legacy = {k: v for k, v in a.items() if k not in ("plan", "countFrom")}
+    assert client.post("/api/batch", json={"put": [legacy], "delete": []}).status_code == 200
+    got = client.get("/api/state").json()["assignments"][0]
+    assert got["plan"] is None and got["countFrom"] is None
+
+    custom = {
+        **legacy,
+        "countFrom": "due",
+        "plan": [{"title": "Book it", "offsetDays": -10, "kind": "schedule", "prep": "", "docTask": None}],
+    }
+    assert client.post("/api/batch", json={"put": [custom], "delete": []}).status_code == 200
+    got = client.get("/api/state").json()["assignments"][0]
+    assert got["plan"][0]["offsetDays"] == -10 and got["countFrom"] == "due"
+
+    bad = {**legacy, "countFrom": "sometimes"}
+    assert client.post("/api/batch", json={"put": [bad], "delete": []}).status_code == 422

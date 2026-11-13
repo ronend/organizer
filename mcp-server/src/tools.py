@@ -94,7 +94,8 @@ def register_tools(mcp: FastMCP) -> None:
         description=(
             "Add a plain task to the agenda. `who` is a person's name, a car's "
             "make/model or plate, or 'general' (the default) for household tasks. "
-            "`date` is YYYY-MM-DD and defaults to today."
+            "`date` is YYYY-MM-DD and defaults to today. `subtasks` is an "
+            "optional checklist of sub-task titles."
         )
     )
     async def add_task(
@@ -106,10 +107,13 @@ def register_tools(mcp: FastMCP) -> None:
             Field(description="Who/what it is for: person name, car name or plate, or 'general' (default)"),
         ] = None,
         notes: Annotated[Optional[str], Field(description="Optional notes")] = None,
+        subtasks: Annotated[
+            Optional[list[str]], Field(description="Optional checklist of sub-task titles")
+        ] = None,
     ) -> str:
         token = token_from_context(ctx)
         state = await client.get_state(token)
-        task = logic.new_task(state, title, date, who, notes)
+        task = logic.new_task(state, title, date, who, notes, subtasks)
         await client.batch(token, put=[task])
         return _dumps({"created": task})
 

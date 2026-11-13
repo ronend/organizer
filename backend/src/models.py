@@ -116,6 +116,12 @@ class HistoryEntry(_Strict):
     text: Long
 
 
+class Subtask(_Strict):
+    id: Id
+    title: Annotated[str, Field(min_length=1, max_length=300)]
+    done: bool
+
+
 class AppointmentInfo(_Strict):
     time: Annotated[str, Field(pattern=r"^(\d{2}:\d{2})?$")]
     providerId: Optional[Id]
@@ -185,6 +191,10 @@ class Assignment(_Base):
     contactId: Optional[Id]
     supply: Optional[MedicationSupply]
     history: Annotated[list[HistoryEntry], Field(max_length=1000)]
+    # Per-assignee overrides of the routine's rules. None = use the routine's.
+    # Defaults keep assignments saved before overrides existed valid.
+    plan: Optional[Annotated[list[StepPlan], Field(max_length=50)]] = None
+    countFrom: Optional[Literal["done", "due"]] = None
 
 
 class Task(_Base):
@@ -204,6 +214,9 @@ class Task(_Base):
     reservationId: Optional[Id]
     tripTask: Optional[TripTaskKind]
     docTask: Optional[DocTaskSpec]
+    # Checklist inside the task. Defaults to [] so tasks saved before
+    # sub-tasks existed stay valid.
+    subtasks: Annotated[list[Subtask], Field(max_length=100)] = Field(default_factory=list)
 
 
 class Document(_Base):
