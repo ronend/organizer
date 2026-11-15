@@ -4,7 +4,8 @@ import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { useToast } from '../store/Toast';
 import { uploadFile } from '../api/client';
-import { Dialog, Field, FileImage, Fieldset, FormActions, StatusText, Viewer, isImage, useBusy } from '../components/ui';
+import { Dialog, Field, FileImage, Fieldset, FormActions, IconButton, StatusText, Viewer, isImage, useBusy } from '../components/ui';
+import { copyText } from '../lib/clipboard';
 import { Icon } from '../components/Icon';
 import { fmtDate } from '../lib/dates';
 import { assignmentsFor, contactName, contactsFor, docValidity, routineOf, subjectName } from '../lib/model';
@@ -545,6 +546,7 @@ export function openDocViewer(ui: ReturnType<typeof useUI>, _s: CooState, d: Doc
 
 export function DocViewer({ docId }: { docId: string }) {
   const { s } = useStore();
+  const toast = useToast();
   const d = s.documents.find((x) => x.id === docId);
   if (!d) return null;
   const v = docValidity(d);
@@ -574,9 +576,18 @@ export function DocViewer({ docId }: { docId: string }) {
         )}
         <dl className="big-dl">
           {docRows(s, d, true).map(([k, val]) => (
-            <div key={k}>
-              <dt>{k}</dt>
-              <dd>{val}</dd>
+            <div key={k} className="dl-row">
+              <div className="dl-text">
+                <dt>{k}</dt>
+                <dd>{val}</dd>
+              </div>
+              {d.docKind === 'identity' && k !== 'Routine' && (
+                <IconButton
+                  icon="copy"
+                  label={`Copy ${k}`}
+                  onClick={async () => toast.show({ text: (await copyText(val)) ? `Copied ${k.toLowerCase()}` : 'Couldn’t copy. Select the text instead.' })}
+                />
+              )}
             </div>
           ))}
         </dl>

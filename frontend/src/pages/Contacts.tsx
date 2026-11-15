@@ -3,6 +3,7 @@ import type { Contact, ContactGroup } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { useToast } from '../store/Toast';
+import { copyText } from '../lib/clipboard';
 import { Dialog, Empty, Field, FormActions, PageHead, SectionHead } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { deleteContact, makeContact, putEntity } from '../lib/ops';
@@ -100,7 +101,7 @@ function ContactTile({ c }: { c: Contact }) {
         <button
           type="button"
           className="btn secondary small"
-          onClick={() => navigator.clipboard?.writeText(c.phone).then(() => toast.show({ text: `Copied ${c.phone}` }))}
+          onClick={() => copyText(c.phone).then((ok) => toast.show({ text: ok ? `Copied ${c.phone}` : 'Couldn’t copy. Select the text instead.' }))}
         >
           <Icon name="copy" size={16} /> Copy number
         </button>

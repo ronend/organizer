@@ -2364,3 +2364,16 @@ input[type='file'] {
 .row-body:hover .parent-link {
   text-decoration: underline;
 }
+
+.big-dl .dl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.big-dl .dl-text {
+  min-width: 0;
+}

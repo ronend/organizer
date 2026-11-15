@@ -4,6 +4,7 @@ import type { FileRef, Reservation, ReservationType, Trip } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { useToast } from '../store/Toast';
+import { copyText } from '../lib/clipboard';
 import { uploadFile } from '../api/client';
 import { Chips, Dialog, Field, FileImage, Fieldset, FormActions, StatusText, Viewer, isImage, useBusy } from '../components/ui';
 import { Icon } from '../components/Icon';
@@ -305,7 +306,7 @@ export function ReservationDetailDialog({ reservationId }: { reservationId: stri
               <button
                 type="button"
                 className="link"
-                onClick={() => navigator.clipboard?.writeText(r.confirmation).then(() => toast.show({ text: `Copied ${r.confirmation}` }))}
+                onClick={() => copyText(r.confirmation).then((ok) => toast.show({ text: ok ? `Copied ${r.confirmation}` : 'Couldn’t copy. Select the text instead.' }))}
               >
                 Copy
               </button>
@@ -367,7 +368,7 @@ export function TicketViewer({ reservationId }: { reservationId: string }) {
             <button
               type="button"
               className="btn secondary small"
-              onClick={() => navigator.clipboard?.writeText(r.confirmation).then(() => toast.show({ text: `Copied ${r.confirmation}` }))}
+              onClick={() => copyText(r.confirmation).then((ok) => toast.show({ text: ok ? `Copied ${r.confirmation}` : 'Couldn’t copy. Select the text instead.' }))}
             >
               <Icon name="copy" size={16} /> Copy
             </button>
