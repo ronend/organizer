@@ -1,0 +1,3 @@
+# Local test dependencies (not deployed).
+-r requirements.txt
+pytest>=8

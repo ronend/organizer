@@ -21,7 +21,7 @@ from typing import Annotated, Optional
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import Field
 
-from . import client, logic
+from . import client, documents, logic
 from .client import token_from_context
 
 
@@ -160,3 +160,80 @@ def register_tools(mcp: FastMCP) -> None:
         task = logic.rescheduled_task(logic.find_task(state, task_id), date)
         await client.batch(token, put=[task])
         return f"Moved {task['title']!r} to {task['date']}."
+
+    # ── DOCUMENTS ───────────────────────────────────────────────────────────
+
+    @mcp.tool(
+        description=(
+            "Add an identity document (passport, driver license, city or state ID, birth certificate, "
+            "Social Security card, visa or residence card, other) to a person's Identity page. "
+            "`details` is a map of extra fields; the usual ones per type are "
+            "Passport: Full name, Nationality, Place of birth, Date of birth; "
+            "Driver license: Full name, Class, Restrictions and endorsements, Date of birth; "
+            "City or state ID: Full name, Date of birth; Birth certificate: Full name, Place of birth, Date of birth; "
+            "Social Security card: Full name; Visa or residence card: Full name, Category, Nationality. "
+            "With an expiry date and no `renewal_routine`, coo creates a renewal routine with reminder steps "
+            "(set `remind` false to skip; `remind_days` defaults to 180 for passports, 60 for driver licenses "
+            "and city/state IDs, else 90). Naming an existing renewal routine links it instead and archives "
+            "the older ID of the same type on it, moving the routine to the new expiry. If the person already "
+            "has an active ID of this type, the call is refused until you choose: pass `renewal_routine` "
+            "(replace) or `keep_both` (add alongside). Images can't be attached here; add them in the app."
+        )
+    )
+    async def add_id_document(
+        ctx: Context,
+        person: Annotated[str, Field(description="Whose document (person name)")],
+        type: Annotated[str, Field(description="ID type, e.g. Passport, Driver license, City or state ID")],
+        name: Annotated[Optional[str], Field(description="Display name (default: \"<Person>’s <type>\")")] = None,
+        id_number: Annotated[Optional[str], Field(description="Document number (shown masked in lists)")] = None,
+        issuer: Annotated[Optional[str], Field(description="Issued by, e.g. U.S. Department of State")] = None,
+        issue_date: Annotated[Optional[str], Field(description="Issue date YYYY-MM-DD")] = None,
+        expiry_date: Annotated[Optional[str], Field(description="Expiry date YYYY-MM-DD")] = None,
+        details: Annotated[Optional[dict[str, str]], Field(description="Extra fields, e.g. {\"Nationality\": \"Portugal\"}")] = None,
+        renewal_routine: Annotated[Optional[str], Field(description="Existing Identity routine of this person to link")] = None,
+        remind: Annotated[bool, Field(description="Create renewal reminders from the expiry date (default true)")] = True,
+        remind_days: Annotated[Optional[int], Field(description="Start reminding this many days before expiry")] = None,
+        keep_handy: Annotated[bool, Field(description="Pin it to the person's Identity page")] = False,
+        keep_both: Annotated[
+            bool,
+            Field(description="Add it even though the person already has an active ID of this type (e.g. two passports)"),
+        ] = False,
+    ) -> str:
+        token = token_from_context(ctx)
+        state = await client.get_state(token)
+        puts, summary = documents.new_id_document(
+            state, person, type, name, id_number, issuer, issue_date, expiry_date,
+            details, renewal_routine, remind, remind_days, keep_handy, keep_both,
+        )
+        deletes = summary.pop("_delete", [])
+        await client.batch(token, put=puts, delete=deletes)
+        return _dumps(summary)
+
+    @mcp.tool(
+        description=(
+            "Add a health document to a person's treatment history: Result, Referral, Prescription, "
+            "Visit summary, Imaging, Vaccination record, Insurance or Other. `provider` is a Health or "
+            "Other contact's name; `episode` groups related documents (e.g. \"Knee injury\"); `routine` "
+            "links one of the person's Health routines and closes its open \"file the document\" task. "
+            "The file itself can't be attached here; add it in the app."
+        )
+    )
+    async def add_health_document(
+        ctx: Context,
+        person: Annotated[str, Field(description="Whose document (person name)")],
+        name: Annotated[str, Field(description="Document name, e.g. \"MRI report, left knee\"")],
+        type: Annotated[Optional[str], Field(description="Document type (default Other)")] = None,
+        date: Annotated[Optional[str], Field(description="Document date YYYY-MM-DD (default today)")] = None,
+        provider: Annotated[Optional[str], Field(description="Provider: a contact's name")] = None,
+        about: Annotated[Optional[str], Field(description="One line on what this is about")] = None,
+        episode: Annotated[Optional[str], Field(description="Episode name; reuses an existing one when it matches")] = None,
+        routine: Annotated[Optional[str], Field(description="One of the person's Health routines to link")] = None,
+        keep_handy: Annotated[bool, Field(description="Pin it to the person's Health page")] = False,
+    ) -> str:
+        token = token_from_context(ctx)
+        state = await client.get_state(token)
+        puts, summary = documents.new_health_document(
+            state, person, name, type, date, provider, about, episode, routine, keep_handy
+        )
+        await client.batch(token, put=puts)
+        return _dumps(summary)

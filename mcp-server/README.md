@@ -28,6 +28,8 @@ tools then send the full, modified record with `POST /api/batch` (the API upsert
 | `add_task(title, date?, who?, notes?, subtasks?)` | New plain task; `date` defaults to today, `who` is a person name, car name/plate, or `general` (default); `subtasks` is an optional list of checklist titles |
 | `complete_task(task_id)` | Marks a plain task (or a `<task>~<sub-task>` sub-task) done. Refuses routine steps that need input (`schedule` / `renew` / `pickup`) and trip booking tasks — those are finished in the app |
 | `reschedule_task(task_id, date)` | Moves a task to a new date. Refuses booked appointments |
+| `add_id_document(person, type, name?, id_number?, issuer?, issue_date?, expiry_date?, details?, renewal_routine?, remind?, remind_days?, keep_handy?, keep_both?)` | Adds an ID (Passport, Driver license, City or state ID, Birth certificate, Social Security card, Visa or residence card, Other) with the type's detail fields. With an expiry and no routine it creates a renewal routine with steps (180/60/60/90 days ahead by type). If the person already has an active ID of that type it refuses until you pass `renewal_routine` (replace: archives the old one, moves the routine to the new expiry) or `keep_both`. No images over MCP |
+| `add_health_document(person, name, type?, date?, provider?, about?, episode?, routine?, keep_handy?)` | Adds a treatment-history document. `provider` matches a Health/Other contact, `episode` reuses an existing one's spelling, `routine` links a Health routine and closes its open "file the document" task. No file upload over MCP |
 
 > `add_task` takes `who` rather than `for` — `for` is a Python keyword, and
 > FastMCP maps tool arguments straight onto the function's parameters.
@@ -97,6 +99,18 @@ aws cognito-idp initiate-auth \
 ```
 
 (`USER_PASSWORD_AUTH` must be enabled on the app client.)
+
+## Tests
+
+```bash
+cd mcp-server
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest -q tests
+```
+
+The document tests run against the household captured from the frontend
+(`backend/tests/fixtures/frontend_state.json`) and validate every record with the
+backend's models.
 
 ## Connect to Claude Code (stdio)
 
