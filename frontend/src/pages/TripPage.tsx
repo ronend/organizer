@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import type { Reservation } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
@@ -58,9 +58,6 @@ export default function TripPage() {
 
   return (
     <div className="page">
-      <Link to="/trips" className="back-link">
-        ← All trips
-      </Link>
       <PageHead
         eyebrow={[tripDates(trip), plural(n, 'night'), trip.destination].filter(Boolean).join(' · ')}
         title={trip.name}

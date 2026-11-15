@@ -3,11 +3,11 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import type { Document, Person, Task } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
-import { Chips, Empty, PageHead, Segmented, SectionHead, StatusText } from '../components/ui';
+import { Chips, Empty, PageHead, Segmented, SectionHead } from '../components/ui';
 import { Icon } from '../components/Icon';
 import {
   ArchiveSection,
-  DocActions,
+  DocList,
   DocRow,
   PinnedTiles,
   RoutineGrid,
@@ -19,18 +19,14 @@ import {
 } from '../components/SubjectParts';
 import { IndicatorRow } from './Home';
 import { PersonDialog } from '../dialogs/SubjectDialogs';
-import { DocFormFor, IdFlipCard } from '../dialogs/DocDialogs';
-import { RoutineDetailDialog } from '../dialogs/RoutineDetail';
+import { DocFormFor } from '../dialogs/DocDialogs';
 import { fmtDate, plural } from '../lib/dates';
 import { notesText } from '../lib/richtext';
 import {
-  assignmentStatus,
   assignmentsFor,
   contactName,
-  docValidity,
   docsFor,
   indicators,
-  maskId,
   routineOf,
   subjectPath,
   tasksForSubject,
@@ -233,52 +229,6 @@ function Health({ person }: { person: Person }) {
   );
 }
 
-function IdCard({ d }: { d: Document }) {
-  const { s } = useStore();
-  const { openDialog } = useUI();
-  const act = useDocActions();
-  const v = docValidity(d);
-  const a = s.assignments.find((x) => x.id === d.assignmentId);
-  const st = a ? assignmentStatus(s, a) : null;
-  const numbers = [
-    d.idNumber ? `No. ${maskId(d.idNumber)}` : '',
-    d.issueDate ? `Issued ${fmtDate(d.issueDate)}` : '',
-    d.validUntil ? `Expires ${fmtDate(d.validUntil)}` : '',
-  ].filter(Boolean);
-  return (
-    <div className="id-card">
-      <IdFlipCard doc={d} />
-      <div className="id-head">
-        <span className="tile-title">{d.name}</span>
-        {v && <StatusText tone={v.tone} text={v.text} />}
-      </div>
-      <div className="muted small">{[d.type, d.issuer].filter(Boolean).join(' · ')}</div>
-      {numbers.length > 0 && <div className="small">{numbers.join(' · ')}</div>}
-      {a && st ? (
-        <button type="button" className="link small" onClick={() => openDialog(<RoutineDetailDialog assignmentId={a.id} />)}>
-          Renewal: {st.text}
-        </button>
-      ) : (
-        <span className="muted small">No renewal reminder</span>
-      )}
-      <div className="id-actions">
-        <button type="button" className="btn primary small" onClick={() => act.show(d)}>
-          Show
-        </button>
-        <button type="button" className="btn ghost small" onClick={() => act.edit(d)}>
-          Edit
-        </button>
-        <button type="button" className="btn ghost small" onClick={() => act.download(d)}>
-          Download
-        </button>
-        <button type="button" className="btn ghost small" aria-label={`Archive ${d.name}`} onClick={() => act.archive(d)}>
-          Archive
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function Identity({ person }: { person: Person }) {
   const { s } = useStore();
   const { openDialog } = useUI();
@@ -299,11 +249,7 @@ function Identity({ person }: { person: Person }) {
         {live.length === 0 ? (
           <Empty>No IDs yet. Add a passport or license and coo reminds you before it expires.</Empty>
         ) : (
-          <div className="id-grid">
-            {live.map((d) => (
-              <IdCard key={d.id} d={d} />
-            ))}
-          </div>
+          <DocList docs={live} />
         )}
       </section>
       <RoutineGrid sub={{ type: 'person', entity: person }} area="identity" title="Renewals" />
@@ -331,4 +277,3 @@ export default function PersonPage({ page }: { page: 'overview' | 'health' | 'id
   );
 }
 
-export { DocActions };

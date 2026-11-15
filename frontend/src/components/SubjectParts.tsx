@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import type { Area, Assignment, Document, SubjectType } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
-import { Empty, IconButton, Segmented, SectionHead, StatusText } from './ui';
+import { Empty, IconButton, Segmented, SectionHead, StatusText, isImage } from './ui';
+import { useFileUrl } from '../lib/files';
 import { Icon } from './Icon';
 import { TaskRow } from './TaskRow';
 import { SubjectSwitcher, CAR_PAGES, PERSON_PAGES } from './Shell';
@@ -18,6 +19,7 @@ import {
   docValidity,
   docsOfAssignment,
   isAdHoc,
+  maskId,
   nextStep,
   routineOf,
   scheduleLine,
@@ -167,64 +169,94 @@ export function useDocActions() {
   };
 }
 
-export function DocActions({ d }: { d: Document }) {
-  const act = useDocActions();
+/** Small preview: the ID's front image or the uploaded image; an icon otherwise. */
+export function DocThumb({ d }: { d: Document }) {
+  const img = d.docKind === 'identity' ? d.front : isImage(d.file) ? d.file : null;
+  const url = useFileUrl(img);
   return (
-    <span className="row-actions">
-      <IconButton icon="monitor" label={`Show ${d.name}`} onClick={() => act.show(d)} />
-      <IconButton icon="download" label={`Download ${d.name}`} onClick={() => act.download(d)} />
-      <IconButton icon="archive" label={`Archive ${d.name}`} onClick={() => act.archive(d)} />
+    <span className={`doc-thumb ${d.docKind === 'identity' ? 'id' : ''}`} aria-hidden="true">
+      {img && url ? <img src={url} alt="" /> : <Icon name={d.docKind === 'identity' ? 'idcard' : 'document'} size={20} />}
     </span>
   );
 }
 
-export function PinnedTiles({ docs, title }: { docs: Document[]; title: string }) {
+function docMeta(s: ReturnType<typeof useStore>['s'], d: Document): string[] {
+  const r = routineOf(s, s.assignments.find((a) => a.id === d.assignmentId));
+  if (d.docKind === 'identity') {
+    return [
+      [d.type, d.issuer].filter(Boolean).join(' · '),
+      [d.idNumber ? `No. ${maskId(d.idNumber)}` : '', d.validUntil ? `Expires ${fmtDate(d.validUntil)}` : ''].filter(Boolean).join(' · '),
+    ].filter(Boolean);
+  }
+  if (d.docKind === 'health') {
+    return [[d.type, fmtDate(d.date), contactName(s, d.providerId), d.episode].filter(Boolean).join(' · ')];
+  }
+  return [[d.type, d.validUntil ? `Valid until ${fmtDate(d.validUntil)}` : '', r?.title].filter(Boolean).join(' · ')];
+}
+
+/**
+ * One document in a list: thumbnail, name and details. Clicking opens it full
+ * screen, where it can be edited or downloaded. Archive stays on the row.
+ */
+export function DocRow({ d, actions = true }: { d: Document; actions?: boolean }) {
+  const { s } = useStore();
   const act = useDocActions();
+  const v = docValidity(d);
+  const a = s.assignments.find((x) => x.id === d.assignmentId);
+  const renewal = d.docKind === 'identity' && a ? assignmentStatus(s, a) : null;
+  return (
+    <li className={`row doc-row ${d.archived ? 'archived' : ''}`}>
+      <button type="button" className="row-main row-body with-icon" onClick={() => act.show(d)} aria-label={`Show ${d.name}`}>
+        <DocThumb d={d} />
+        <span className="row-main">
+          <span className="row-title">{d.name}</span>
+          {docMeta(s, d).map((line, i) => (
+            <span key={i} className="row-meta">
+              {line}
+            </span>
+          ))}
+          {renewal && <span className="row-meta">Renewal: {renewal.text}</span>}
+        </span>
+      </button>
+      {v && !d.archived && <StatusText tone={v.tone} text={v.text} />}
+      {actions && (
+        <span className="row-actions">
+          {d.archived ? (
+            <button type="button" className="btn ghost small" onClick={() => act.restore(d)}>
+              Restore
+            </button>
+          ) : (
+            <IconButton icon="archive" label={`Archive ${d.name}`} onClick={() => act.archive(d)} />
+          )}
+        </span>
+      )}
+    </li>
+  );
+}
+
+export function DocList({ docs }: { docs: Document[] }) {
+  return (
+    <ul className="list doc-list">
+      {docs.map((d) => (
+        <DocRow key={d.id} d={d} />
+      ))}
+    </ul>
+  );
+}
+
+/** "Keep handy" / "In the glovebox": pinned documents, as a list. */
+export function PinnedTiles({ docs, title }: { docs: Document[]; title: string }) {
   if (docs.length === 0) return null;
   return (
     <section className="section">
       <SectionHead title={title} count={docs.length} />
-      <div className="card-grid small-cards">
-        {docs.map((d) => {
-          const v = docValidity(d);
-          return (
-            <button key={d.id} type="button" className="tile handy-tile" onClick={() => act.show(d)}>
-              <Icon name={d.docKind === 'identity' ? 'idcard' : 'document'} />
-              <span className="tile-title">{d.name}</span>
-              <span className="muted small">{d.type}</span>
-              {v && <StatusText tone={v.tone} text={v.text} className="small" />}
-            </button>
-          );
-        })}
-      </div>
+      <DocList docs={docs} />
     </section>
-  );
-}
-
-export function DocRow({ d }: { d: Document }) {
-  const { s } = useStore();
-  const act = useDocActions();
-  const v = docValidity(d);
-  const r = routineOf(s, s.assignments.find((a) => a.id === d.assignmentId));
-  const meta = [d.type, d.docKind === 'health' ? fmtDate(d.date) : '', d.docKind === 'health' ? contactName(s, d.providerId) : '', r?.title].filter(Boolean).join(' · ');
-  return (
-    <li className="row doc-row">
-      <button type="button" className="row-main row-body with-icon" onClick={() => act.edit(d)}>
-        <Icon name="document" />
-        <span className="row-main">
-          <span className="row-title">{d.name}</span>
-          <span className="row-meta">{meta}</span>
-        </span>
-      </button>
-      {v && <StatusText tone={v.tone} text={v.text} />}
-      <DocActions d={d} />
-    </li>
   );
 }
 
 export function ArchiveSection({ docs }: { docs: Document[] }) {
   const [open, setOpen] = useState(false);
-  const act = useDocActions();
   if (docs.length === 0) return null;
   return (
     <section className="section">
@@ -236,27 +268,7 @@ export function ArchiveSection({ docs }: { docs: Document[] }) {
           </button>
         }
       />
-      {open && (
-        <ul className="list">
-          {docs.map((d) => (
-            <li key={d.id} className="row doc-row archived">
-              <span className="row-main">
-                <span className="row-title">{d.name}</span>
-                <span className="row-meta">
-                  {d.type}
-                  {d.outdated ? ' · Outdated' : ''}
-                </span>
-              </span>
-              <span className="row-actions">
-                <IconButton icon="monitor" label={`Show ${d.name}`} onClick={() => act.show(d)} />
-                <button type="button" className="btn ghost small" onClick={() => act.restore(d)}>
-                  Restore
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {open && <DocList docs={docs} />}
     </section>
   );
 }

@@ -302,11 +302,14 @@ export function FormActions({ submit, cancel = 'Cancel', disabled }: { submit: s
 export function Viewer({
   title,
   onDownload,
+  onEdit,
   children,
   white,
 }: {
   title: string;
   onDownload?: () => void;
+  /** Shows an Edit button; the edit form replaces the viewer. */
+  onEdit?: () => void;
   children: ReactNode;
   white?: boolean;
 }) {
@@ -328,13 +331,18 @@ export function Viewer({
           <Icon name="close" /> Close
         </button>
         <div className="viewer-title">{title}</div>
-        {onDownload ? (
-          <button type="button" className="btn ghost" onClick={onDownload}>
-            <Icon name="download" /> Download
-          </button>
-        ) : (
-          <span />
-        )}
+        <span className="viewer-actions">
+          {onEdit && (
+            <button type="button" className="btn ghost" onClick={onEdit}>
+              <Icon name="edit" /> Edit
+            </button>
+          )}
+          {onDownload && (
+            <button type="button" className="btn ghost" onClick={onDownload}>
+              <Icon name="download" /> Download
+            </button>
+          )}
+        </span>
       </div>
       <div className="viewer-scroll">{children}</div>
     </div>

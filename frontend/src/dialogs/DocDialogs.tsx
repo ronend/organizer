@@ -547,11 +547,16 @@ export function openDocViewer(ui: ReturnType<typeof useUI>, _s: CooState, d: Doc
 export function DocViewer({ docId }: { docId: string }) {
   const { s } = useStore();
   const toast = useToast();
+  const { openDialog } = useUI();
   const d = s.documents.find((x) => x.id === docId);
   if (!d) return null;
   const v = docValidity(d);
   return (
-    <Viewer title={d.name} onDownload={() => downloadDoc(s, d)}>
+    <Viewer
+      title={d.name}
+      onDownload={() => downloadDoc(s, d)}
+      onEdit={() => openDialog(<DocFormFor kind={d.docKind} subjectType={d.subjectType} subjectId={d.subjectId} doc={d} />)}
+    >
       <div className="viewer-card">
         <div className="eyebrow">{d.type}</div>
         <h2 className="viewer-heading">{d.name}</h2>

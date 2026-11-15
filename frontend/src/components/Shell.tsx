@@ -6,6 +6,7 @@ import { useAuth } from '../auth/useAuth';
 import { MOCK } from '../api/client';
 import { agendaBadge, allSubjects, findSubject, personSub, sortedCars, sortedPeople, subjectPath, subjectSub, type Subject } from '../lib/model';
 import { Icon } from './Icon';
+import { Breadcrumbs } from './Breadcrumbs';
 import { CarDialog, PersonDialog, SubjectChooser } from '../dialogs/SubjectDialogs';
 
 /** Parses /people/:id[/page] and /cars/:id[/page]. */
@@ -227,7 +228,10 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="shell">
       <Sidebar />
       <main className="main" id="main">
-        <div className="column">{children}</div>
+        <div className="column">
+          <Breadcrumbs />
+          {children}
+        </div>
       </main>
       <TabBar />
     </div>

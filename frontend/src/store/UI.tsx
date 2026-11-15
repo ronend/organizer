@@ -24,8 +24,19 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const viewerOpener = useRef<HTMLElement | null>(null);
   const seq = useRef(0);
 
+  const viewerOpen = useRef(false);
+
   const openDialog = useCallback((node: ReactNode) => {
-    if (!opener.current) opener.current = document.activeElement as HTMLElement | null;
+    if (viewerOpen.current) {
+      // A dialog opened from a viewer (e.g. Edit) replaces it; focus returns to
+      // whatever opened the viewer once the dialog closes.
+      viewerOpen.current = false;
+      setViewer(null);
+      opener.current = viewerOpener.current;
+      viewerOpener.current = null;
+    } else if (!opener.current) {
+      opener.current = document.activeElement as HTMLElement | null;
+    }
     setDialog({ node, key: ++seq.current });
   }, []);
 
@@ -38,11 +49,13 @@ export function UIProvider({ children }: { children: ReactNode }) {
 
   const openViewer = useCallback((node: ReactNode) => {
     viewerOpener.current = document.activeElement as HTMLElement | null;
+    viewerOpen.current = true;
     setDialog(null);
     setViewer({ node, key: ++seq.current });
   }, []);
 
   const closeViewer = useCallback(() => {
+    viewerOpen.current = false;
     setViewer(null);
     const el = viewerOpener.current;
     viewerOpener.current = null;

@@ -23,7 +23,8 @@ import { EditRoutineDialog, RepeatSelect } from './RoutineForm';
 import { StepPlanEditor, cleanPlan } from './StepPlanEditor';
 import { RefillDialog } from './TaskFlows';
 import { TaskDetailDialog } from './TaskDialogs';
-import { DocFormFor, openDocViewer } from './DocDialogs';
+import { DocFormFor } from './DocDialogs';
+import { DocRow } from '../components/SubjectParts';
 
 const KIND_WORD: Record<string, string> = { plain: 'reminder', schedule: 'book', renew: 'renew', pickup: 'pick up' };
 
@@ -271,15 +272,7 @@ export function RoutineDetailDialog({ assignmentId }: { assignmentId: string }) 
         ) : (
           <ul className="list">
             {docs.map((d) => (
-              <li key={d.id}>
-                <button type="button" className="row row-button" onClick={() => openDocViewer(ui, s, d)}>
-                  <span className="row-main">
-                    <span className="row-title">{d.name}</span>
-                    <span className="row-meta">{d.type}</span>
-                  </span>
-                  <span className="row-right">Show</span>
-                </button>
-              </li>
+              <DocRow key={d.id} d={d} actions={false} />
             ))}
           </ul>
         )}
