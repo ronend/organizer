@@ -127,6 +127,38 @@ def find_trip(state: dict, query: str) -> dict:
     raise ToolError(f"{query!r} matches several trips; be more specific. Trips: {names}.")
 
 
+SUB_SEP = "~"
+
+
+def subtask_id(parent_id: str, sub_id: str) -> str:
+    """Agenda id of a dated sub-task: '<parent task id>~<sub-task id>'."""
+    return f"{parent_id}{SUB_SEP}{sub_id}"
+
+
+def find_subtask(state: dict, agenda_id: str) -> tuple[dict, dict]:
+    parent_id, _, sub_id = agenda_id.partition(SUB_SEP)
+    parent = find_task(state, parent_id)
+    for s in parent.get("subtasks") or []:
+        if s["id"] == sub_id:
+            return parent, s
+    raise ToolError(f"No sub-task with id {agenda_id!r}. Use get_agenda to see ids.")
+
+
+def _with_subtask(parent: dict, sub_id: str, **changes) -> dict:
+    subs = [({**s, **changes} if s["id"] == sub_id else s) for s in parent.get("subtasks") or []]
+    return {**parent, "subtasks": subs}
+
+
+def completed_subtask(parent: dict, sub: dict) -> dict:
+    if sub.get("done"):
+        raise ToolError(f"{sub['title']!r} is already done.")
+    return _with_subtask(parent, sub["id"], done=True, doneAt=now_iso())
+
+
+def rescheduled_subtask(parent: dict, sub: dict, on: str) -> dict:
+    return _with_subtask(parent, sub["id"], date=parse_date(on))
+
+
 def find_task(state: dict, task_id: str) -> dict:
     for t in state.get("tasks", []):
         if t["id"] == task_id:
@@ -184,6 +216,27 @@ def agenda(state: dict, filter: Optional[str] = None, on: Optional[date] = None)
             tasks = [t for t in tasks if t.get("tripId") == trip["id"]]
 
     buckets: dict[str, list] = {"overdue": [], "today": [], "next_7_days": [], "later": []}
+    # Dated, open sub-tasks of open tasks are agenda items of their own.
+    sub_rows = []
+    for t in tasks:
+        for i, s in enumerate(t.get("subtasks") or []):
+            if s.get("done") or not s.get("date"):
+                continue
+            order = s.get("order")
+            sub_rows.append(
+                {
+                    **t,
+                    "id": subtask_id(t["id"], s["id"]),
+                    "title": s["title"],
+                    "date": s["date"],
+                    "order": order if order is not None else t.get("order", 0) + (i + 1) / 1000,
+                    "appointment": None,
+                    "stepKind": "plain",
+                    "subtasks": [],
+                    "_subtaskOf": t["title"],
+                }
+            )
+    tasks = tasks + sub_rows
     tasks.sort(key=lambda t: (t.get("date") is None, t.get("date") or "", t.get("order", 0)))
     for t in tasks:
         routine_title = None
@@ -202,6 +255,8 @@ def agenda(state: dict, filter: Optional[str] = None, on: Optional[date] = None)
             row["time"] = t["appointment"]["time"]
         if t.get("stepKind") and t["stepKind"] != "plain":
             row["stepKind"] = t["stepKind"]
+        if t.get("_subtaskOf"):
+            row["subtaskOf"] = t["_subtaskOf"]
         if t.get("subtasks"):
             row["subtasks"] = [
                 {"title": s["title"], "done": s["done"], "date": s.get("date")} for s in t["subtasks"]
@@ -392,7 +447,7 @@ def completed_task(task: dict) -> dict:
         }[task["stepKind"]]
         raise ToolError(
             f"{task['title']!r} is a routine step that must be completed in the coo app ({what}). "
-            "Open the task in the app and use its primary action."
+            "Tick its checkbox on the Agenda in the app."
         )
     if task.get("tripTask") == "book":
         raise ToolError(

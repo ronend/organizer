@@ -123,7 +123,11 @@ class Subtask(_Strict):
     title: Annotated[str, Field(min_length=1, max_length=300)]
     done: bool
     # Optional due date; missing on sub-tasks saved before dates existed.
+    # A dated sub-task is also its own row on the Agenda, so it carries the
+    # same ordering and completion stamp as a task.
     date: Optional[ISODate] = None
+    order: Optional[float] = None
+    doneAt: Optional[Timestamp] = None
 
 
 class AppointmentInfo(_Strict):

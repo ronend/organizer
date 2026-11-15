@@ -20,13 +20,13 @@ tools then send the full, modified record with `POST /api/batch` (the API upsert
 
 | Tool                    | Purpose |
 |-------------------------|---------|
-| `get_agenda(filter?)`   | Open tasks in `overdue` / `today` / `next_7_days` (1–7 days) / `later` (8+ days or no date), sorted by date then manual order. Each row: id, title, date, who (person, car "makeModel (plate)", "Trip: name" or "General"), routine title, `appointment` flag. `filter`: `everything` (default), `general`, or a person / car (name or plate) / trip name. |
+| `get_agenda(filter?)`   | Open tasks in `overdue` / `today` / `next_7_days` (1–7 days) / `later` (8+ days or no date), sorted by date then manual order. Each row: id, title, date, who (person, car "makeModel (plate)", "Trip: name" or "General"), routine title, `appointment` flag. Dated open sub-tasks are rows of their own (id `<task id>~<sub-task id>`, with `subtaskOf` = the parent's title). `filter`: `everything` (default), `general`, or a person / car (name or plate) / trip name. |
 | `list_people_and_cars()`| People and cars with ids |
 | `list_routines()`       | Routines with their assignees (subject name, date, done) |
 | `list_trips()`          | Trips, soonest first, with travelers and reservation counts |
 | `get_trip(name_or_id)`  | One trip with its reservations (sorted by start) and open trip tasks |
 | `add_task(title, date?, who?, notes?, subtasks?)` | New plain task; `date` defaults to today, `who` is a person name, car name/plate, or `general` (default); `subtasks` is an optional list of checklist titles |
-| `complete_task(task_id)` | Marks a plain task done. Refuses routine steps that need input (`schedule` / `renew` / `pickup`) and trip booking tasks — those are finished in the app |
+| `complete_task(task_id)` | Marks a plain task (or a `<task>~<sub-task>` sub-task) done. Refuses routine steps that need input (`schedule` / `renew` / `pickup`) and trip booking tasks — those are finished in the app |
 | `reschedule_task(task_id, date)` | Moves a task to a new date. Refuses booked appointments |
 
 > `add_task` takes `who` rather than `for` — `for` is a Python keyword, and

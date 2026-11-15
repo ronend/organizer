@@ -126,10 +126,14 @@ def register_tools(mcp: FastMCP) -> None:
     )
     async def complete_task(
         ctx: Context,
-        task_id: Annotated[str, Field(description="Task id")],
+        task_id: Annotated[str, Field(description="Task id from get_agenda (sub-tasks look like <task id>~<sub-task id>)")],
     ) -> str:
         token = token_from_context(ctx)
         state = await client.get_state(token)
+        if logic.SUB_SEP in task_id:
+            parent, sub = logic.find_subtask(state, task_id)
+            await client.batch(token, put=[logic.completed_subtask(parent, sub)])
+            return f"Done: {sub['title']} (sub-task of {parent['title']!r})"
         task = logic.completed_task(logic.find_task(state, task_id))
         await client.batch(token, put=[task])
         return f"Done: {task['title']}"
@@ -142,11 +146,17 @@ def register_tools(mcp: FastMCP) -> None:
     )
     async def reschedule_task(
         ctx: Context,
-        task_id: Annotated[str, Field(description="Task id")],
+        task_id: Annotated[str, Field(description="Task id from get_agenda (sub-tasks look like <task id>~<sub-task id>)")],
         date: Annotated[str, Field(description="New date YYYY-MM-DD")],
     ) -> str:
         token = token_from_context(ctx)
         state = await client.get_state(token)
+        if logic.SUB_SEP in task_id:
+            parent, sub = logic.find_subtask(state, task_id)
+            updated = logic.rescheduled_subtask(parent, sub, date)
+            await client.batch(token, put=[updated])
+            new_date = next(s["date"] for s in updated["subtasks"] if s["id"] == sub["id"])
+            return f"Moved sub-task {sub['title']!r} to {new_date}."
         task = logic.rescheduled_task(logic.find_task(state, task_id), date)
         await client.batch(token, put=[task])
         return f"Moved {task['title']!r} to {task['date']}."

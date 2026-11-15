@@ -278,3 +278,11 @@ def test_subtask_dates(client, sub):
     assert client.get("/api/state").json()["tasks"][0]["subtasks"][0]["date"] is None
     bad = {**task, "subtasks": [{"id": "st_1", "title": "x", "done": False, "date": "Nov 20"}]}
     assert client.post("/api/batch", json={"put": [bad], "delete": []}).status_code == 422
+
+
+def test_subtask_order_and_done_at(client, sub):
+    task = samples(sub)["task"]
+    st = {"id": "st_1", "title": "Get quotes", "done": True, "date": "2026-11-20", "order": 17.5, "doneAt": "2026-11-15T10:00:00.000Z"}
+    assert client.post("/api/batch", json={"put": [{**task, "subtasks": [st]}], "delete": []}).status_code == 200
+    got = client.get("/api/state").json()["tasks"][0]["subtasks"][0]
+    assert got["order"] == 17.5 and got["doneAt"] == st["doneAt"]
