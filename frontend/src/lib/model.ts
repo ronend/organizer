@@ -11,6 +11,7 @@ import type {
   Reservation,
   Routine,
   StepPlan,
+  Subtask,
   SubjectType,
   Task,
   Trip,
@@ -323,7 +324,7 @@ export interface Indicators {
 
 export function indicators(tasks: Task[]): Indicators {
   const out: Indicators = { overdue: 0, dueToday: 0, reminders: 0, appointments: 0, nextDate: null };
-  for (const t of tasks) {
+  for (const t of withSubtaskItems(tasks)) {
     if (t.done || !t.date) continue;
     const n = daysFromToday(t.date);
     if (n < 0) out.overdue++;
@@ -346,9 +347,65 @@ export function urgencyCompare(a: Indicators, b: Indicators): number {
   return 0;
 }
 
+// ── Agenda items: tasks plus their dated sub-tasks ──────────────────────────
+
+/**
+ * A row on the Agenda. Plain tasks are themselves; a dated sub-task becomes a
+ * task-shaped item (id `<parent>~<sub>`) that keeps a pointer to its parent.
+ */
+export interface AgendaItem extends Task {
+  parent?: Task;
+  sub?: Subtask;
+}
+
+export const SUB_SEP = '~';
+
+export function isSubItem(t: Task): t is AgendaItem & { parent: Task; sub: Subtask } {
+  return !!(t as AgendaItem).sub;
+}
+
+function subItem(parent: Task, sub: Subtask, i: number): AgendaItem {
+  return {
+    ...parent,
+    id: `${parent.id}${SUB_SEP}${sub.id}`,
+    title: sub.title,
+    notes: '',
+    date: sub.date ?? null,
+    order: sub.order ?? parent.order + (i + 1) / 1000,
+    done: sub.done,
+    doneAt: sub.doneAt ?? null,
+    appointment: null,
+    stepKind: 'plain',
+    tripTask: null,
+    docTask: null,
+    subtasks: [],
+    parent,
+    sub,
+  };
+}
+
+/**
+ * Tasks plus one item per dated sub-task of a still-open task. Open sub-tasks
+ * show while the parent is open; completed ones (with a completion stamp) show
+ * on the Done tab.
+ */
+export function withSubtaskItems(tasks: Task[]): AgendaItem[] {
+  const out: AgendaItem[] = [];
+  for (const t of tasks) {
+    out.push(t);
+    (t.subtasks ?? []).forEach((st, i) => {
+      if (!st.date) return;
+      if (!st.done && t.done) return;
+      if (st.done && !st.doneAt) return;
+      out.push(subItem(t, st, i));
+    });
+  }
+  return out;
+}
+
 export function agendaBadge(s: CooState): number {
   const t = today();
-  return s.tasks.filter((x) => !x.done && x.date && x.date <= t).length;
+  return withSubtaskItems(s.tasks).filter((x) => !x.done && x.date && x.date <= t).length;
 }
 
 // ── Documents ───────────────────────────────────────────────────────────────

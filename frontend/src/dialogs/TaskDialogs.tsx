@@ -4,7 +4,7 @@ import type { SubjectType, Subtask, Task } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { Dialog, Field, FormActions, IconButton } from '../components/ui';
-import { addDays, dueLabel, fmtDate, today } from '../lib/dates';
+import { addDays, dueLabel, fmtDate, nowStamp, today } from '../lib/dates';
 import {
   allSubjects,
   appointmentNote,
@@ -57,7 +57,7 @@ export function SubtaskList({
   const add = () => {
     const title = draft.trim();
     if (!title) return;
-    onChange([...items, { id: newId('st'), title, done: false, date: draftDate || null }], true);
+    onChange([...items, { id: newId('st'), title, done: false, date: draftDate || null, order: null, doneAt: null }], true);
     setDraft('');
     setDraftDate('');
   };
@@ -80,7 +80,7 @@ export function SubtaskList({
                 type="checkbox"
                 checked={x.done}
                 aria-label={`${x.done ? 'Reopen' : 'Complete'} sub-task ${x.title}`}
-                onChange={() => onChange(items.map((y, j) => (j === i ? { ...y, done: !y.done } : y)), true)}
+                onChange={() => onChange(items.map((y, j) => (j === i ? { ...y, done: !y.done, doneAt: !y.done ? nowStamp() : null } : y)), true)}
               />
               <input
                 className="subtask-title"

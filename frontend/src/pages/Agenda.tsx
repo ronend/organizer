@@ -15,10 +15,12 @@ import {
   bucketOf,
   byDate,
   isGeneral,
+  isSubItem,
+  withSubtaskItems,
   type Bucket,
 } from '../lib/model';
 import { addDays, fmtDate, today, weekday } from '../lib/dates';
-import { moveTask, nextOrder } from '../lib/ops';
+import { moveTask, nextOrder, updateSubtask } from '../lib/ops';
 
 const EMPTY_TEXT: Record<Bucket, string> = {
   overdue: 'Nothing overdue.',
@@ -84,14 +86,16 @@ export default function Agenda() {
     return t.subjectType === type && t.subjectId === id;
   };
 
-  const open = useMemo(() => s.tasks.filter((t) => !t.done && matches(t)).sort(byDate), [s.tasks, filter]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Dated sub-tasks are agenda items of their own (see withSubtaskItems).
+  const items = useMemo(() => withSubtaskItems(s.tasks), [s.tasks]);
+  const open = useMemo(() => items.filter((t) => !t.done && matches(t)).sort(byDate), [items, filter]); // eslint-disable-line react-hooks/exhaustive-deps
   const sections = useMemo(
     () => BUCKETS.map((b) => ({ bucket: b, tasks: open.filter((t) => bucketOf(t.date) === b) })),
     [open],
   );
   const done = useMemo(
-    () => s.tasks.filter((t) => t.done && matches(t)).sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? '')),
-    [s.tasks, filter], // eslint-disable-line react-hooks/exhaustive-deps
+    () => items.filter((t) => t.done && matches(t)).sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? '')),
+    [items, filter], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const commitMove = (task: Task, bucket: Bucket, index: number) => {
@@ -99,7 +103,10 @@ export default function Agenda() {
     const p = placement(bucket, others, index);
     const curIndex = sections.find((x) => x.bucket === bucket)!.tasks.findIndex((t) => t.id === task.id);
     if (curIndex === index && bucketOf(task.date) === bucket) return; // dropped in place
-    apply(moveTask(s, task, p.date, p.order), { toast: moveToast(task.date, p.date), undo: true });
+    const changes = isSubItem(task)
+      ? updateSubtask(s, task.parent, task.sub.id, { date: p.date, order: p.order })
+      : moveTask(s, task, p.date, p.order);
+    apply(changes, { toast: moveToast(task.date, p.date), undo: true });
   };
 
   // ── Keyboard ─────────────────────────────────────────────────────────────
@@ -191,7 +198,7 @@ export default function Agenda() {
       setDrag(null);
       dragRef.current = null;
       if (!cur || !cur.active || e.type === 'pointercancel') return;
-      const task = s.tasks.find((t) => t.id === cur.id);
+      const task = items.find((t) => t.id === cur.id);
       const tgt = computeTarget(e.clientX, e.clientY, cur.id).target;
       if (task && tgt) commitMove(task, tgt.bucket, tgt.index);
     };

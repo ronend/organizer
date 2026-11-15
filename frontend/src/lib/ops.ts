@@ -307,6 +307,18 @@ export function addTask(
   return tx.changes();
 }
 
+/** Updates one sub-task of a task. */
+export function updateSubtask(s: CooState, parent: Task, subId: string, patch: Partial<Subtask>): ChangeSet {
+  const tx = new Tx(s);
+  const cur = s.tasks.find((t) => t.id === parent.id) ?? parent;
+  tx.put({ ...cur, subtasks: (cur.subtasks ?? []).map((x) => (x.id === subId ? { ...x, ...patch } : x)) });
+  return tx.changes();
+}
+
+export function setSubtaskDone(s: CooState, parent: Task, subId: string, done: boolean): ChangeSet {
+  return updateSubtask(s, parent, subId, { done, doneAt: done ? nowStamp() : null });
+}
+
 export function setTaskDone(s: CooState, t: Task, done: boolean): ChangeSet {
   const tx = new Tx(s);
   tx.put({ ...t, done, doneAt: done ? nowStamp() : null });

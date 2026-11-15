@@ -3,7 +3,7 @@ import type { Task } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { dueLabel, fmtDate } from '../lib/dates';
-import { taskMeta } from '../lib/model';
+import { isSubItem, taskMeta, taskWho } from '../lib/model';
 import { Icon } from './Icon';
 import { useCompleteTask } from '../dialogs/TaskFlows';
 import { TaskDetailDialog } from '../dialogs/TaskDialogs';
@@ -47,10 +47,24 @@ export function TaskRow({
   return (
     <li className={`row task-row ${task.done ? 'done' : ''} ${dragging ? 'dragging' : ''}`} data-task-id={task.id}>
       <TaskCheck task={task} />
-      <button type="button" className="row-main row-body" onClick={() => openDialog(<TaskDetailDialog taskId={task.id} />)}>
-        <span className="row-title">{task.title}</span>
-        <span className="row-meta">{meta ?? taskMeta(s, task)}</span>
-      </button>
+      {isSubItem(task) ? (
+        <button
+          type="button"
+          className="row-main row-body"
+          aria-label={`${task.title}. Sub-task of ${task.parent.title}. Open the parent task.`}
+          onClick={() => openDialog(<TaskDetailDialog taskId={task.parent.id} />)}
+        >
+          <span className="row-title">{task.title}</span>
+          <span className="row-meta">
+            <Icon name="corner" size={13} className="sub-icon" /> Part of <span className="parent-link">{task.parent.title}</span> · {taskWho(s, task.parent)}
+          </span>
+        </button>
+      ) : (
+        <button type="button" className="row-main row-body" onClick={() => openDialog(<TaskDetailDialog taskId={task.id} />)}>
+          <span className="row-title">{task.title}</span>
+          <span className="row-meta">{meta ?? taskMeta(s, task)}</span>
+        </button>
+      )}
       <span className={`row-right ${due.overdue && !task.done ? 'overdue' : ''}`}>{right}</span>
       {draggable ? (
         <button

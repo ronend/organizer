@@ -172,8 +172,11 @@ export interface Subtask {
   id: string;
   title: string;
   done: boolean;
-  /** Optional due date (missing on older sub-tasks). */
+  /** Optional due date (missing on older sub-tasks). A dated sub-task is its own Agenda row. */
   date?: ISODate | null;
+  /** Manual order on the Agenda within its day (like Task.order). */
+  order?: number | null;
+  doneAt?: Timestamp | null;
 }
 
 export interface Task extends Base {

@@ -2349,3 +2349,18 @@ input[type='file'] {
     width: auto !important;
   }
 }
+
+/* Sub-task rows on the Agenda */
+.sub-icon {
+  vertical-align: -2px;
+  color: var(--muted);
+}
+
+.parent-link {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.row-body:hover .parent-link {
+  text-decoration: underline;
+}

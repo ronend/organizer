@@ -8,6 +8,7 @@ import {
   assignmentById,
   contactsFor,
   effectivePlan,
+  isSubItem,
   onHandNow,
   renewQuestion,
   routineOf,
@@ -15,7 +16,7 @@ import {
   suggestedNextDate,
   taskWho,
 } from '../lib/model';
-import { bookAppointment, completeCycle, logRefill, setTaskDone } from '../lib/ops';
+import { bookAppointment, completeCycle, logRefill, setSubtaskDone, setTaskDone } from '../lib/ops';
 import { ReservationFormDialog } from './TripDialogs';
 
 export function AppointmentDialog({ task }: { task: Task }) {
@@ -157,6 +158,14 @@ export function useCompleteTask() {
   const { openDialog } = useUI();
   return useCallback(
     (t: Task) => {
+      // A dated sub-task shown on the Agenda: ticks just that sub-task.
+      if (isSubItem(t)) {
+        apply(setSubtaskDone(s, t.parent, t.sub.id, !t.done), {
+          toast: `${t.done ? 'Reopened' : 'Done'} · ${t.title}`,
+          undo: true,
+        });
+        return;
+      }
       if (t.done) {
         apply(setTaskDone(s, t, false), { toast: `Reopened · ${t.title}`, undo: true });
         return;

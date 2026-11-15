@@ -21,6 +21,7 @@ import {
   tripReservations,
   tripWhen,
   urgencyCompare,
+  withSubtaskItems,
   type Indicators,
 } from '../lib/model';
 import { loadDemoData } from '../lib/seed';
@@ -144,7 +145,7 @@ export default function Home() {
             {trips.map((t) => {
               const when = tripWhen(t);
               const notBooked = tripReservations(s, t).filter((r) => r.status === 'planned').length;
-              const reminders = s.tasks.filter((x) => x.tripId === t.id && !x.done && x.date && daysFromToday(x.date) <= 14).length;
+              const reminders = withSubtaskItems(s.tasks).filter((x) => x.tripId === t.id && !x.done && x.date && daysFromToday(x.date) <= 14).length;
               return (
                 <StatusTile key={t.id} icon="suitcase" title={t.name} sub={tripDates(t, true)} onClick={() => navigate(`/trips/${t.id}`)}>
                   <div className="indicators">

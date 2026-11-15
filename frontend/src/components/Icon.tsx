@@ -175,6 +175,7 @@ const P: Record<string, JSX.Element> = {
       <path d="M7.5 17c.8-2 2.5-3 4.5-3s3.7 1 4.5 3" />
     </>
   ),
+  corner: <path d="M6 4v8a4 4 0 0 0 4 4h9M15 12l4 4-4 4" />,
   bold: <path d="M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z" />,
   italic: <path d="M10 5h8M6 19h8M14 5l-4 14" />,
   list: (

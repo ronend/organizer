@@ -366,7 +366,7 @@ export async function buildDemo(s: CooState): Promise<ChangeSet> {
 
   // ── General tasks ──
   const g = (title: string, date: string, notes = '', subtasks: string[] = []) =>
-    tx.put(makeTask({ title, date, notes, subtasks: subtasks.map((t, i) => ({ id: newId('st'), title: t, done: i === 0, date: i === 2 ? T(10) : null })) }));
+    tx.put(makeTask({ title, date, notes, subtasks: subtasks.map((t, i) => ({ id: newId('st'), title: t, done: i === 0, date: i === 2 ? T(10) : null, order: null, doneAt: i === 0 ? new Date().toISOString() : null })) }));
   g('Pay property tax', T(-3), 'Second installment');
   g('Call the plumber', T(0), 'Kitchen sink drips');
   g('Renew gym membership', T(9));
