@@ -13,6 +13,7 @@ const TOP: Record<string, string> = {
   agenda: 'Agenda',
   trips: 'Trips',
   routines: 'Routines',
+  documents: 'Documents',
   contacts: 'Contacts',
 };
 const SUBPAGE: Record<string, string> = { health: 'Health', identity: 'Identity', documents: 'Documents' };

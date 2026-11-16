@@ -69,6 +69,7 @@ function Sidebar() {
         )}
         {nav('/trips', 'suitcase', 'Trips', undefined, pathname.startsWith('/trips/'))}
         {nav('/routines', 'repeat', 'Routines')}
+        {nav('/documents', 'document', 'Documents')}
       </div>
 
       <div className="side-group">
@@ -176,6 +177,7 @@ function TabBar() {
       )}
       {tab('/trips', 'suitcase', 'Trips', undefined, pathname.startsWith('/trips/'))}
       {tab('/routines', 'repeat', 'Routines')}
+      {tab('/documents', 'document', 'Docs')}
       {tab('/contacts', 'contacts', 'Contacts')}
     </nav>
   );

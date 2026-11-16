@@ -23,6 +23,7 @@ import {
   nextStep,
   routineOf,
   scheduleLine,
+  subjectName,
   subjectPath,
   tasksForSubject,
   type Subject,
@@ -198,7 +199,7 @@ function docMeta(s: ReturnType<typeof useStore>['s'], d: Document): string[] {
  * One document in a list: thumbnail, name and details. Clicking opens it full
  * screen, where it can be edited or downloaded. Archive stays on the row.
  */
-export function DocRow({ d, actions = true }: { d: Document; actions?: boolean }) {
+export function DocRow({ d, actions = true, showSubject = false }: { d: Document; actions?: boolean; showSubject?: boolean }) {
   const { s } = useStore();
   const act = useDocActions();
   const v = docValidity(d);
@@ -210,6 +211,7 @@ export function DocRow({ d, actions = true }: { d: Document; actions?: boolean }
         <DocThumb d={d} />
         <span className="row-main">
           <span className="row-title">{d.name}</span>
+          {showSubject && <span className="row-meta strong">{subjectName(s, d.subjectType, d.subjectId)}</span>}
           {docMeta(s, d).map((line, i) => (
             <span key={i} className="row-meta">
               {line}
@@ -234,11 +236,11 @@ export function DocRow({ d, actions = true }: { d: Document; actions?: boolean }
   );
 }
 
-export function DocList({ docs }: { docs: Document[] }) {
+export function DocList({ docs, showSubject = false }: { docs: Document[]; showSubject?: boolean }) {
   return (
     <ul className="list doc-list">
       {docs.map((d) => (
-        <DocRow key={d.id} d={d} />
+        <DocRow key={d.id} d={d} showSubject={showSubject} />
       ))}
     </ul>
   );
@@ -255,7 +257,7 @@ export function PinnedTiles({ docs, title }: { docs: Document[]; title: string }
   );
 }
 
-export function ArchiveSection({ docs }: { docs: Document[] }) {
+export function ArchiveSection({ docs, showSubject = false }: { docs: Document[]; showSubject?: boolean }) {
   const [open, setOpen] = useState(false);
   if (docs.length === 0) return null;
   return (
@@ -268,7 +270,7 @@ export function ArchiveSection({ docs }: { docs: Document[] }) {
           </button>
         }
       />
-      {open && <DocList docs={docs} />}
+      {open && <DocList docs={docs} showSubject={showSubject} />}
     </section>
   );
 }

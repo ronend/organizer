@@ -16,6 +16,7 @@ import Routines from './pages/Routines';
 import PersonPage from './pages/PersonPage';
 import CarPage from './pages/CarPage';
 import Contacts from './pages/Contacts';
+import Documents from './pages/Documents';
 import './styles.css';
 
 /** Wires the api client to auth and redirects to Cognito when signed out. */
@@ -64,6 +65,7 @@ function Pages() {
         <Route path="/trips" element={<Trips />} />
         <Route path="/trips/:id" element={<TripPage />} />
         <Route path="/routines" element={<Routines />} />
+        <Route path="/documents" element={<Documents />} />
         <Route path="/people/:id" element={<PersonPage page="overview" />} />
         <Route path="/people/:id/health" element={<PersonPage page="health" />} />
         <Route path="/people/:id/identity" element={<PersonPage page="identity" />} />
