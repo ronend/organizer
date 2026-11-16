@@ -1712,6 +1712,13 @@ input[type='file'] {
   font-size: 13px;
 }
 
+.flip-placeholder span {
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .flip-inner {
     transition: none;

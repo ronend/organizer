@@ -171,7 +171,7 @@ export function useDocActions() {
 
 /** Small preview: the ID's front image or the uploaded image; an icon otherwise. */
 export function DocThumb({ d }: { d: Document }) {
-  const img = d.docKind === 'identity' ? d.front : isImage(d.file) ? d.file : null;
+  const img = d.docKind === 'identity' ? (isImage(d.front) ? d.front : null) : isImage(d.file) ? d.file : null;
   const url = useFileUrl(img);
   return (
     <span className={`doc-thumb ${d.docKind === 'identity' ? 'id' : ''}`} aria-hidden="true">

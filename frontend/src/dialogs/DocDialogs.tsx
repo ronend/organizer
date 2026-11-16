@@ -89,14 +89,14 @@ function ImagePicker({
   onRemove: (v: boolean) => void;
 }) {
   return (
-    <Field label={label} optional>
+    <Field label={label} optional hint="An image or a PDF.">
       {(id) => (
         <>
-          <input id={id} type="file" accept="image/*" onChange={(e) => onFile(e.target.files?.[0] ?? null)} />
+          <input id={id} type="file" accept="image/*,application/pdf" onChange={(e) => onFile(e.target.files?.[0] ?? null)} />
           {current && (
             <label className="check-row small">
               <input type="checkbox" checked={remove} onChange={(e) => onRemove(e.target.checked)} />
-              <span>Remove the current image ({current.name})</span>
+              <span>Remove the current file ({current.name})</span>
             </label>
           )}
         </>
@@ -219,8 +219,8 @@ export function IdDialog({ subjectType, subjectId, assignmentId, docType, closeT
         </button>
       </Fieldset>
       <div className="fields">
-        <ImagePicker label="Front image" current={doc?.front ?? null} onFile={setFront} remove={rmFront} onRemove={setRmFront} />
-        <ImagePicker label="Back image" current={doc?.back ?? null} onFile={setBack} remove={rmBack} onRemove={setRmBack} />
+        <ImagePicker label="Front" current={doc?.front ?? null} onFile={setFront} remove={rmFront} onRemove={setRmFront} />
+        <ImagePicker label="Back" current={doc?.back ?? null} onFile={setBack} remove={rmBack} onRemove={setRmBack} />
       </div>
       <p className="muted small">Clicking a card anywhere flips it between front and back.</p>
       <Field label="Linked renewal routine" optional>
@@ -473,8 +473,25 @@ export function IdFlipCard({ doc, large }: { doc: Document; large?: boolean }) {
   };
   const side = (f: FileRef | null, which: 'front' | 'back') => (
     <div className={`flip-face flip-${which}`}>
-      {f ? (
+      {f && isImage(f) ? (
         <FileImage file={f} alt={`${doc.name}, ${which}`} className="flip-img" />
+      ) : f ? (
+        <div className="flip-placeholder">
+          <Icon name="document" size={large ? 36 : 28} />
+          <span>{f.name}</span>
+          <button
+            type="button"
+            className="btn secondary small"
+            onClick={async (e) => {
+              e.stopPropagation();
+              const url = await getFileUrl(f.key);
+              if (url) window.open(url, '_blank', 'noopener');
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            Open PDF
+          </button>
+        </div>
       ) : (
         <div className="flip-placeholder">
           <Icon name="idcard" size={large ? 36 : 28} />
@@ -527,9 +544,12 @@ function docRows(s: CooState, d: Document, full: boolean): [string, string][] {
 
 export async function downloadDoc(s: CooState, d: Document) {
   if (d.docKind === 'identity') {
-    const images = [d.front, d.back].filter((x): x is FileRef => !!x);
+    const sides = [d.front, d.back].filter((x): x is FileRef => !!x);
+    const images = sides.filter((x) => isImage(x));
     const blob = await summarySvg({ title: d.name, typeLabel: d.type, rows: docRows(s, d, true), images });
     saveBlob(blob, `${safeFilename(d.name)}.svg`);
+    // PDFs can't be embedded in the SVG card, so save them alongside it.
+    for (const f of sides) if (!isImage(f)) await downloadOriginal(f);
     return;
   }
   if (d.file) {
