@@ -1567,6 +1567,26 @@ input[type='file'] {
   background: var(--tint);
 }
 
+.pdf-loading {
+  min-height: 160px;
+  border-radius: var(--r-tile);
+  background: var(--tint);
+  animation: pdf-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.flip-img.pdf-loading {
+  min-height: 0;
+}
+
+@keyframes pdf-pulse {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdf-loading { animation: none; }
+}
+
 .big-dl {
   display: grid;
   gap: 14px;

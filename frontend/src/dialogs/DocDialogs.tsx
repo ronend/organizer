@@ -4,7 +4,7 @@ import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { useToast } from '../store/Toast';
 import { uploadFile } from '../api/client';
-import { Dialog, Field, FileImage, Fieldset, FormActions, IconButton, StatusText, Viewer, isImage, useBusy } from '../components/ui';
+import { Dialog, Field, FilePreview, Fieldset, FormActions, IconButton, StatusText, Viewer, isImage, isPdf, useBusy } from '../components/ui';
 import { copyText } from '../lib/clipboard';
 import { Icon } from '../components/Icon';
 import { fmtDate } from '../lib/dates';
@@ -473,25 +473,18 @@ export function IdFlipCard({ doc, large }: { doc: Document; large?: boolean }) {
   };
   const side = (f: FileRef | null, which: 'front' | 'back') => (
     <div className={`flip-face flip-${which}`}>
-      {f && isImage(f) ? (
-        <FileImage file={f} alt={`${doc.name}, ${which}`} className="flip-img" />
-      ) : f ? (
-        <div className="flip-placeholder">
-          <Icon name="document" size={large ? 36 : 28} />
-          <span>{f.name}</span>
-          <button
-            type="button"
-            className="btn secondary small"
-            onClick={async (e) => {
-              e.stopPropagation();
-              const url = await getFileUrl(f.key);
-              if (url) window.open(url, '_blank', 'noopener');
-            }}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            Open PDF
-          </button>
-        </div>
+      {f ? (
+        <FilePreview
+          file={f}
+          alt={`${doc.name}, ${which}`}
+          className="flip-img"
+          fallback={
+            <div className="flip-placeholder">
+              <Icon name="document" size={large ? 36 : 28} />
+              <span>{f.name}</span>
+            </div>
+          }
+        />
       ) : (
         <div className="flip-placeholder">
           <Icon name="idcard" size={large ? 36 : 28} />
@@ -564,6 +557,21 @@ export function openDocViewer(ui: ReturnType<typeof useUI>, _s: CooState, d: Doc
   ui.openViewer(<DocViewer docId={d.id} />);
 }
 
+function OpenFileButton({ file, label }: { file: FileRef; label: string }) {
+  return (
+    <button
+      type="button"
+      className="btn secondary"
+      onClick={async () => {
+        const url = await getFileUrl(file.key);
+        if (url) window.open(url, '_blank', 'noopener');
+      }}
+    >
+      <Icon name="document" /> {label}
+    </button>
+  );
+}
+
 export function DocViewer({ docId }: { docId: string }) {
   const { s } = useStore();
   const toast = useToast();
@@ -584,21 +592,11 @@ export function DocViewer({ docId }: { docId: string }) {
           <>
             <IdFlipCard doc={d} large />
             <p className="muted small center">Click the card to flip it</p>
+            {[d.front, d.back].map((f, i) => f && isPdf(f) && <OpenFileButton key={i} file={f} label={`Open the ${i ? 'back' : 'front'} PDF`} />)}
           </>
         )}
-        {d.docKind !== 'identity' && d.file && isImage(d.file) && <FileImage file={d.file} alt={d.name} className="viewer-image" />}
-        {d.docKind !== 'identity' && d.file && !isImage(d.file) && (
-          <button
-            type="button"
-            className="btn secondary"
-            onClick={async () => {
-              const url = await getFileUrl(d.file!.key);
-              if (url) window.open(url, '_blank', 'noopener');
-            }}
-          >
-            <Icon name="document" /> Open {d.file.name}
-          </button>
-        )}
+        {d.docKind !== 'identity' && d.file && <FilePreview file={d.file} alt={d.name} className="viewer-image" />}
+        {d.docKind !== 'identity' && d.file && !isImage(d.file) && <OpenFileButton file={d.file} label={`Open ${d.file.name}`} />}
         <dl className="big-dl">
           {docRows(s, d, true).map(([k, val]) => (
             <div key={k} className="dl-row">

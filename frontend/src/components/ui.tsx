@@ -3,6 +3,7 @@ import type { Tone } from '../lib/model';
 import { useUI } from '../store/UI';
 import { Icon } from './Icon';
 import { useFileUrl } from '../lib/files';
+import { pdfFirstPage } from '../lib/pdf';
 import type { FileRef } from '../types/coo';
 
 // ── Status ──────────────────────────────────────────────────────────────────
@@ -359,6 +360,38 @@ export function FileImage({ file, alt, className }: { file: FileRef | null; alt:
 
 export function isImage(f: FileRef | null | undefined) {
   return !!f && f.contentType.startsWith('image/');
+}
+
+export function isPdf(f: FileRef | null | undefined) {
+  return !!f && (f.contentType === 'application/pdf' || /\.pdf$/i.test(f.name));
+}
+
+/** The first page of a PDF, rendered as an image. Renders `fallback` while loading or on failure. */
+export function PdfPage({ file, alt, className, fallback = null }: { file: FileRef; alt: string; className?: string; fallback?: ReactNode }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
+  useEffect(() => {
+    let live = true;
+    setState('loading');
+    pdfFirstPage(file).then((u) => {
+      if (!live) return;
+      setSrc(u);
+      setState(u ? 'ok' : 'error');
+    });
+    return () => {
+      live = false;
+    };
+  }, [file.key]);
+  if (state === 'ok' && src) return <img src={src} alt={alt} className={className} />;
+  if (state === 'loading') return <div className={`pdf-loading ${className ?? ''}`} role="status" aria-label="Loading preview" />;
+  return <>{fallback}</>;
+}
+
+/** An image file as-is, or the first page of a PDF. */
+export function FilePreview({ file, alt, className, fallback = null }: { file: FileRef; alt: string; className?: string; fallback?: ReactNode }) {
+  if (isImage(file)) return <FileImage file={file} alt={alt} className={className} />;
+  if (isPdf(file)) return <PdfPage file={file} alt={alt} className={className} fallback={fallback} />;
+  return <>{fallback}</>;
 }
 
 export function FileInput({
