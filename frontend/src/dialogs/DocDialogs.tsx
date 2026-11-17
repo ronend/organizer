@@ -3,39 +3,30 @@ import type { CooState, DetailRow, DocKind, Document, FileRef, SubjectType } fro
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { useToast } from '../store/Toast';
-import { uploadFile } from '../api/client';
+import { saveDocument, uploadFile, type SaveDocumentRequest, type SaveDocumentResult } from '../api/client';
 import { Dialog, Field, FilePreview, Fieldset, FormActions, IconButton, StatusText, Viewer, isImage, isPdf, useBusy } from '../components/ui';
 import { copyText } from '../lib/clipboard';
 import { Icon } from '../components/Icon';
 import { fmtDate } from '../lib/dates';
 import { assignmentsFor, contactName, contactsFor, docValidity, routineOf, subjectName } from '../lib/model';
-import { Tx, makeDocument, renewalRoutineForId, saveDocument } from '../lib/ops';
+import { category, detailFields, remindDefault as remindDefaultFor } from '../lib/registry';
 import { downloadOriginal, getFileUrl, safeFilename, saveBlob, summarySvg } from '../lib/files';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-export const ID_TYPES = ['Passport', 'Driver license', 'City or state ID', 'Birth certificate', 'Social Security card', 'Visa or residence card', 'Other'];
-export const HEALTH_TYPES = ['Result', 'Referral', 'Prescription', 'Visit summary', 'Imaging', 'Vaccination record', 'Insurance', 'Other'];
-export const CAR_TYPES = ['ID card', 'Policy', 'Registration', 'Inspection', 'Receipt', 'Photo', 'Other'];
-
-const ID_FIELDS: Record<string, string[]> = {
-  Passport: ['Full name', 'Nationality', 'Place of birth', 'Date of birth'],
-  'Driver license': ['Full name', 'Class', 'Restrictions and endorsements', 'Date of birth'],
-  'City or state ID': ['Full name', 'Date of birth'],
-  'Birth certificate': ['Full name', 'Place of birth', 'Date of birth'],
-  'Social Security card': ['Full name'],
-  'Visa or residence card': ['Full name', 'Category', 'Nationality'],
-  Other: [],
-};
+// Types, detail fields and reminder defaults come from the registry (lib/registry.json).
+export const ID_TYPES = category('identity').types;
+export const HEALTH_TYPES = category('health').types;
+export const CAR_TYPES = category('car').types;
 
 export function remindDefault(type: string): number {
-  return { Passport: 180, 'Driver license': 60, 'City or state ID': 60 }[type] ?? 90;
+  return remindDefaultFor('identity', type);
 }
 
 /** Swap suggested rows for the new type, keeping anything already typed. */
 function swapRows(rows: DetailRow[], from: string, to: string): DetailRow[] {
-  const oldNames = new Set(ID_FIELDS[from] ?? []);
-  const next = (ID_FIELDS[to] ?? []).map((name) => ({ name, value: rows.find((r) => r.name === name)?.value ?? '' }));
+  const oldNames = new Set(detailFields('identity', from));
+  const next = detailFields('identity', to).map((name) => ({ name, value: rows.find((r) => r.name === name)?.value ?? '' }));
   const names = new Set(next.map((r) => r.name));
   for (const r of rows) {
     if (names.has(r.name)) continue;
@@ -75,6 +66,38 @@ async function maybeUpload(f: File | null): Promise<FileRef | null> {
   return f ? uploadFile(f, f.name) : null;
 }
 
+/**
+ * Saves through POST /api/documents (the server applies the document rules)
+ * and applies what it wrote. Returns null, after a toast, if it failed, so
+ * the form stays open.
+ */
+function useSaveDocument() {
+  const { commit } = useStore();
+  const toast = useToast();
+  return async (req: SaveDocumentRequest, message: (r: SaveDocumentResult) => string): Promise<SaveDocumentResult | null> => {
+    let result: SaveDocumentResult | null = null;
+    try {
+      await commit(async () => {
+        result = await saveDocument(req);
+        return result.changes;
+      });
+    } catch (e) {
+      toast.show({ text: `Couldn’t save: ${e instanceof Error ? e.message : 'error'}` });
+      return null;
+    }
+    toast.show({ text: message(result!) });
+    return result;
+  };
+}
+
+function savedText(r: SaveDocumentResult, first = 'Document saved.'): string {
+  const parts = [first];
+  if (r.summary.remindersPlannedFrom) parts.push(`Renewal reminders planned from ${fmtDate(r.summary.remindersPlannedFrom, true)}.`);
+  if (r.summary.archivedOlder?.length) parts.push('The older one was archived.');
+  if (r.summary.routineMovedTo) parts.push(`${r.summary.linkedRoutine ?? 'The routine'} moved to ${fmtDate(r.summary.routineMovedTo, true)}.`);
+  return parts.join(' ');
+}
+
 function ImagePicker({
   label,
   current,
@@ -108,7 +131,8 @@ function ImagePicker({
 // ── ID ──────────────────────────────────────────────────────────────────────
 
 export function IdDialog({ subjectType, subjectId, assignmentId, docType, closeTaskId, doc }: FormProps) {
-  const { s, apply } = useStore();
+  const { s } = useStore();
+  const save = useSaveDocument();
   const { closeDialog } = useUI();
   const toast = useToast();
   const { busy, run } = useBusy();
@@ -120,7 +144,7 @@ export function IdDialog({ subjectType, subjectId, assignmentId, docType, closeT
   const [issuer, setIssuer] = useState(doc?.issuer ?? '');
   const [issueDate, setIssueDate] = useState(doc?.issueDate ?? '');
   const [expiry, setExpiry] = useState(doc?.validUntil ?? '');
-  const [rows, setRows] = useState<DetailRow[]>(doc?.details.length ? doc.details : (ID_FIELDS[initialType] ?? []).map((n) => ({ name: n, value: '' })));
+  const [rows, setRows] = useState<DetailRow[]>(doc?.details.length ? doc.details : detailFields('identity', initialType).map((n) => ({ name: n, value: '' })));
   const [front, setFront] = useState<File | null>(null);
   const [back, setBack] = useState<File | null>(null);
   const [rmFront, setRmFront] = useState(false);
@@ -149,31 +173,31 @@ export function IdDialog({ subjectType, subjectId, assignmentId, docType, closeT
         toast.show({ text: `Upload failed: ${e instanceof Error ? e.message : 'error'}` });
         return;
       }
-      const base = doc ?? makeDocument({ docKind: 'identity', subjectType, subjectId, name: name.trim(), type });
-      let d: Document = {
-        ...base,
-        name: name.trim(),
-        type,
-        idNumber: idNumber.trim(),
-        issuer: issuer.trim(),
-        issueDate: issueDate || null,
-        validUntil: expiry || null,
-        details: rows.map((r) => ({ name: r.name.trim(), value: r.value.trim() })).filter((r) => r.name && r.value),
-        front: f ?? (rmFront ? null : base.front),
-        back: b ?? (rmBack ? null : base.back),
-        assignmentId: linked || null,
-        pinned,
-      };
-      const tx = new Tx(s);
-      let planned: string | null = null;
-      if (!linked && remind && expiry) {
-        const { assignment, firstDate } = renewalRoutineForId(s, d, Math.max(0, Number(remindDays) || remindDefault(type)), tx);
-        d = { ...d, assignmentId: assignment.id };
-        planned = firstDate;
-      }
-      apply(saveDocument(s, d, { closeTaskId }, tx), {
-        toast: planned ? `Saved. Renewal reminders planned from ${fmtDate(planned, true)}.` : 'Saved',
-      });
+      const result = await save(
+        {
+          document: {
+            id: doc?.id,
+            subjectType,
+            subjectId,
+            docKind: 'identity',
+            name: name.trim(),
+            type,
+            idNumber: idNumber.trim(),
+            issuer: issuer.trim(),
+            issueDate: issueDate || null,
+            validUntil: expiry || null,
+            details: rows.map((r) => ({ name: r.name.trim(), value: r.value.trim() })).filter((r) => r.name && r.value),
+            front: f ?? (rmFront ? null : (doc?.front ?? null)),
+            back: b ?? (rmBack ? null : (doc?.back ?? null)),
+            assignmentId: linked || null,
+            pinned,
+          },
+          renewal: !linked && remind && expiry ? { remindDays: Math.max(0, Number(remindDays) || remindDefault(type)) } : null,
+          closeTaskId,
+        },
+        (r) => savedText(r, 'Saved.'),
+      );
+      if (!result) return;
       closeDialog();
     });
 
@@ -259,7 +283,8 @@ export function IdDialog({ subjectType, subjectId, assignmentId, docType, closeT
 // ── Health ──────────────────────────────────────────────────────────────────
 
 export function HealthDocDialog({ subjectType, subjectId, assignmentId, docType, closeTaskId, doc }: FormProps) {
-  const { s, apply } = useStore();
+  const { s } = useStore();
+  const save = useSaveDocument();
   const { closeDialog } = useUI();
   const toast = useToast();
   const { busy, run } = useBusy();
@@ -290,20 +315,28 @@ export function HealthDocDialog({ subjectType, subjectId, assignmentId, docType,
         toast.show({ text: `Upload failed: ${e instanceof Error ? e.message : 'error'}` });
         return;
       }
-      const base = doc ?? makeDocument({ docKind: 'health', subjectType, subjectId, name: n, type });
-      const d: Document = {
-        ...base,
-        name: n,
-        type,
-        date: date || null,
-        providerId: providerId || null,
-        about: about.trim(),
-        episode: newEpisode.trim() || episode,
-        assignmentId: linked || null,
-        pinned,
-        file: up ?? base.file,
-      };
-      apply(saveDocument(s, d, { closeTaskId }), { toast: 'Document saved' });
+      const result = await save(
+        {
+          document: {
+            id: doc?.id,
+            subjectType,
+            subjectId,
+            docKind: 'health',
+            name: n,
+            type,
+            date: date || null,
+            providerId: providerId || null,
+            about: about.trim(),
+            episode: newEpisode.trim() || episode,
+            assignmentId: linked || null,
+            pinned,
+            file: up ?? doc?.file ?? null,
+          },
+          closeTaskId,
+        },
+        (r) => savedText(r),
+      );
+      if (!result) return;
       closeDialog();
     });
 
@@ -382,16 +415,17 @@ export function HealthDocDialog({ subjectType, subjectId, assignmentId, docType,
 // ── Car ─────────────────────────────────────────────────────────────────────
 
 export function CarDocDialog({ subjectType, subjectId, assignmentId, docType, closeTaskId, doc }: FormProps) {
-  const { s, apply } = useStore();
+  const { s } = useStore();
+  const save = useSaveDocument();
   const { closeDialog } = useUI();
   const toast = useToast();
   const { busy, run } = useBusy();
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState(doc?.name ?? '');
-  const [type, setType] = useState(doc?.type ?? docType ?? 'ID card');
+  const [type, setType] = useState(doc?.type ?? docType ?? category('car').defaultType);
   const [validUntil, setValidUntil] = useState(doc?.validUntil ?? '');
   const [linked, setLinked] = useState(doc?.assignmentId ?? assignmentId ?? '');
-  const [pinned, setPinned] = useState(doc?.pinned ?? !doc);
+  const [pinned, setPinned] = useState(doc?.pinned ?? category('car').pin.default);
   const routines = assignmentsFor(s, subjectType, subjectId);
 
   const submit = () =>
@@ -408,10 +442,25 @@ export function CarDocDialog({ subjectType, subjectId, assignmentId, docType, cl
         toast.show({ text: `Upload failed: ${e instanceof Error ? e.message : 'error'}` });
         return;
       }
-      const base = doc ?? makeDocument({ docKind: 'car', subjectType, subjectId, name: n, type });
-      const d: Document = { ...base, name: n, type, validUntil: validUntil || null, assignmentId: linked || null, pinned, file: up ?? base.file };
-      const archives = !doc && linked && s.documents.some((o) => o.assignmentId === linked && o.type === type && !o.archived);
-      apply(saveDocument(s, d, { closeTaskId }), { toast: archives ? 'Saved. The older one was archived' : 'Document saved' });
+      const result = await save(
+        {
+          document: {
+            id: doc?.id,
+            subjectType,
+            subjectId,
+            docKind: 'car',
+            name: n,
+            type,
+            validUntil: validUntil || null,
+            assignmentId: linked || null,
+            pinned,
+            file: up ?? doc?.file ?? null,
+          },
+          closeTaskId,
+        },
+        (r) => savedText(r),
+      );
+      if (!result) return;
       closeDialog();
     });
 

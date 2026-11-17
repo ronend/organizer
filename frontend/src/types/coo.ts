@@ -30,7 +30,10 @@ interface Base {
   updatedAt: Timestamp;
 }
 
-export type SubjectType = 'person' | 'car';
+type Registry = typeof import('../lib/registry.json');
+
+/** Subject types come from the registry (lib/registry.json): person, car, ... */
+export type SubjectType = keyof Registry['subjectTypes'];
 
 // ── Subjects ────────────────────────────────────────────────────────────────
 
@@ -71,7 +74,8 @@ export type Area = 'health' | 'identity' | 'car';
  */
 export type StepKind = 'plain' | 'schedule' | 'renew' | 'pickup';
 
-export type DocKind = 'car' | 'health' | 'identity';
+/** Document categories come from the registry: identity, health, car, ... */
+export type DocKind = keyof Registry['categories'];
 
 /** Marks a "file the new document" task; its detail offers "Add document". */
 export interface DocTaskSpec {

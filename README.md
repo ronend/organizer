@@ -53,10 +53,14 @@ user files in a private S3 bucket.
 - The Lambda Function URL is `AuthType: NONE`; access control is the FastAPI
   `origin_verify` middleware (checks the `x-origin-verify` header CloudFront
   injects) plus Cognito JWT verification on every data route.
-- The API is a thin, validated store: `GET /api/state` returns the whole
-  household, `POST /api/batch` applies a change set. Domain logic (step
-  planning, renewals, status, the Agenda drag rules) lives in the frontend as
-  pure functions in `frontend/src/lib/`, which is what makes generic Undo work.
+- The API is mostly a thin, validated store: `GET /api/state` returns the whole
+  household, `POST /api/batch` applies a change set. Most domain logic (step
+  planning, status, the Agenda drag rules) lives in the frontend as pure
+  functions in `frontend/src/lib/`, which is what makes generic Undo work.
+  Documents are the exception: `POST /api/documents` saves any document on any
+  subject and applies the document rules server-side, so the app and the MCP
+  server share one implementation. Which subjects exist and which documents
+  each holds is defined once in `backend/src/registry.json`.
 
 > **Naming.** The app was rebranded from "organizer" to "coo". AWS resource
 > names and CloudFormation logical IDs (stack `organizer-app`, the

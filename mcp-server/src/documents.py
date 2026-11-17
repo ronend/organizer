@@ -1,107 +1,106 @@
-"""Creating identity and health documents from MCP.
+"""Documents over MCP: one tool for any document on any subject.
 
-Mirrors the app's ID and health document forms (frontend/src/dialogs/DocDialogs.tsx)
-and the save rules in frontend/src/lib/ops.ts (saveDocument, renewalRoutineForId):
+The rules (archiving the older document on a routine, closing "add the
+document" tasks, renewal reminders, routines following an expiry, one active
+ID per type) live in the coo API's POST /api/documents
+(backend/src/documents.py). This module only turns what Claude says into that
+request: it resolves names to ids (subject, provider contact, routine), matches
+the category and type against the registry (GET /api/registry, the same
+backend/src/registry.json the app uses) and orders detail rows the way the app
+does. New subject types or categories in the registry need no change here.
 
-- IDs: type-specific detail fields; linking to an existing renewal routine
-  archives the older ID of the same type on that routine and closes its open
-  "add the new document" task; otherwise, with an expiry date, a renewal
-  routine is created with steps planned back from the expiry (the app's
-  "Remind me to renew it", on by default).
-- Health documents: provider from contacts, episode, optional linked routine
-  (closes that routine's open "file the document" task).
-
-Files and ID images can't be attached over MCP; add them in the app.
+Files can't be attached over MCP; add them in the app.
 """
 
 from __future__ import annotations
 
-import time
-from datetime import date, timedelta
 from typing import Any, Optional
 
-from .logic import ToolError, _norm, find_subject, new_id, now_iso, parse_date, today
-
-ID_TYPES = [
-    "Passport",
-    "Driver license",
-    "City or state ID",
-    "Birth certificate",
-    "Social Security card",
-    "Visa or residence card",
-    "Other",
-]
-HEALTH_TYPES = ["Result", "Referral", "Prescription", "Visit summary", "Imaging", "Vaccination record", "Insurance", "Other"]
-
-ID_FIELDS = {
-    "Passport": ["Full name", "Nationality", "Place of birth", "Date of birth"],
-    "Driver license": ["Full name", "Class", "Restrictions and endorsements", "Date of birth"],
-    "City or state ID": ["Full name", "Date of birth"],
-    "Birth certificate": ["Full name", "Place of birth", "Date of birth"],
-    "Social Security card": ["Full name"],
-    "Visa or residence card": ["Full name", "Category", "Nationality"],
-    "Other": [],
-}
-
-# Friendly names Claude (or the user) may use for a type.
-_ID_ALIASES = {
-    "license": "Driver license",
-    "drivers license": "Driver license",
-    "driver's license": "Driver license",
-    "driving license": "Driver license",
-    "city id": "City or state ID",
-    "state id": "City or state ID",
-    "id card": "City or state ID",
-    "ssn": "Social Security card",
-    "social security": "Social Security card",
-    "visa": "Visa or residence card",
-    "residence card": "Visa or residence card",
-    "green card": "Visa or residence card",
-}
-_HEALTH_ALIASES = {
-    "lab result": "Result",
-    "lab results": "Result",
-    "results": "Result",
-    "summary": "Visit summary",
-    "visit": "Visit summary",
-    "scan": "Imaging",
-    "mri": "Imaging",
-    "x-ray": "Imaging",
-    "xray": "Imaging",
-    "vaccination": "Vaccination record",
-    "vaccine": "Vaccination record",
-}
+from .logic import ToolError, _norm, _plate, parse_date, today
 
 
-def remind_default(doc_type: str) -> int:
-    return {"Passport": 180, "Driver license": 60, "City or state ID": 60}.get(doc_type, 90)
+# ── registry lookups ────────────────────────────────────────────────────────
 
 
-# ── matching helpers ────────────────────────────────────────────────────────
+def subject_label(reg: dict, stype: str, record: dict) -> str:
+    name = str(record.get(reg["subjectTypes"][stype]["nameField"], ""))
+    return f"{name} ({record['plate']})" if record.get("plate") else name
 
 
-def match_choice(value: str, choices: list[str], aliases: dict[str, str], what: str) -> str:
-    q = _norm(value)
-    for c in choices:
-        if _norm(c) == q:
-            return c
-    if q in aliases:
-        return aliases[q]
-    hits = [c for c in choices if q and q in _norm(c)]
+def find_subject(state: dict, reg: dict, query: str) -> tuple[str, dict]:
+    """Resolve a name (or a car plate, or an id) across every registry subject type."""
+    q = _norm(query)
+    pool = [
+        (stype, rec)
+        for stype, info in reg["subjectTypes"].items()
+        for rec in state.get(info["collection"], [])
+    ]
+
+    def name(stype: str, rec: dict) -> str:
+        return _norm(str(rec.get(reg["subjectTypes"][stype]["nameField"], "")))
+
+    hits = [
+        (t, r) for t, r in pool
+        if r["id"] == query or name(t, r) == q or _norm(subject_label(reg, t, r)) == q
+        or (r.get("plate") and _plate(query) and _plate(r["plate"]) == _plate(query))
+    ]
+    if not hits:
+        hits = [(t, r) for t, r in pool if q and q in name(t, r)]
     if len(hits) == 1:
         return hits[0]
-    raise ToolError(f"Unknown {what} {value!r}. Use one of: {', '.join(choices)}.")
+    known = "; ".join(
+        f"{info['plural']}: {', '.join(subject_label(reg, t, r) for r in state.get(info['collection'], [])) or 'none'}"
+        for t, info in reg["subjectTypes"].items()
+    )
+    if not hits:
+        raise ToolError(f"Nothing matches {query!r}. {known}.")
+    raise ToolError(f"{query!r} is ambiguous ({', '.join(subject_label(reg, t, r) for t, r in hits)}); be more specific.")
 
 
-def find_person(state: dict, query: str) -> dict:
-    kind, subject = find_subject(state, query)
-    if kind != "person":
-        raise ToolError(f"{query!r} is a car; documents here belong to people.")
-    return subject
+def _match_type_or_none(cat: dict, value: str) -> Optional[str]:
+    q = _norm(value)
+    for t in cat["types"]:
+        if _norm(t) == q:
+            return t
+    if q in cat.get("typeAliases", {}):
+        return cat["typeAliases"][q]
+    hits = [t for t in cat["types"] if q and q in _norm(t)]
+    return hits[0] if len(hits) == 1 else None
 
 
-def find_contact(state: dict, query: str, groups: tuple[str, ...]) -> dict:
-    pool = [c for c in state.get("contacts", []) if c.get("group") in groups]
+def match_category(reg: dict, stype: str, query: Optional[str], doc_type: Optional[str]) -> str:
+    """The category: as given (key, label or plural), else inferred from the subject or the type."""
+    allowed = reg["subjectTypes"][stype]["categories"]
+    label = reg["subjectTypes"][stype]["label"].lower()
+    cats = reg["categories"]
+    choices = ", ".join(f"{k} ({cats[k]['label']})" for k in allowed)
+    if query:
+        q = _norm(query)
+        for k in allowed:
+            c = cats[k]
+            if q in {_norm(k), _norm(c["label"]), _norm(c["short"]), _norm(c["plural"])}:
+                return k
+        raise ToolError(f"A {label} can hold: {choices}; not {query!r}.")
+    if len(allowed) == 1:
+        return allowed[0]
+    if doc_type:
+        fits = [k for k in allowed if _match_type_or_none(cats[k], doc_type)]
+        if len(fits) == 1:
+            return fits[0]
+    raise ToolError(f"Say which kind of document (`category`): a {label} can hold {choices}.")
+
+
+def match_type(cat: dict, value: Optional[str]) -> str:
+    if not value:
+        return cat["defaultType"]
+    t = _match_type_or_none(cat, value)
+    if t is None:
+        raise ToolError(f"Unknown {cat['label'].lower()} document type {value!r}. Use one of: {', '.join(cat['types'])}.")
+    return t
+
+
+def find_contact(state: dict, query: str, groups: Optional[list[str]]) -> dict:
+    pool = [c for c in state.get("contacts", []) if not groups or c.get("group") in groups]
     q = _norm(query)
     exact = [c for c in pool if _norm(c["name"]) == q]
     hits = exact or [c for c in pool if q and (q in _norm(c["name"]) or q in _norm(c.get("role", "")))]
@@ -113,15 +112,13 @@ def find_contact(state: dict, query: str, groups: tuple[str, ...]) -> dict:
     raise ToolError(f"{query!r} matches several contacts ({', '.join(c['name'] for c in hits)}); be more specific.")
 
 
-def find_assignment(state: dict, person: dict, area: str, query: str) -> tuple[dict, dict]:
+def find_assignment(state: dict, stype: str, subject: dict, who: str, area: str, query: str) -> tuple[dict, dict]:
     routines = {r["id"]: r for r in state.get("routines", [])}
     mine = [
         (a, routines[a["routineId"]])
         for a in state.get("assignments", [])
-        if a.get("subjectType") == "person"
-        and a.get("subjectId") == person["id"]
-        and a.get("routineId") in routines
-        and routines[a["routineId"]].get("area") == area
+        if a.get("subjectType") == stype and a.get("subjectId") == subject["id"]
+        and a.get("routineId") in routines and routines[a["routineId"]].get("area") == area
     ]
     q = _norm(query)
     exact = [x for x in mine if _norm(x[1]["title"]) == q]
@@ -130,367 +127,185 @@ def find_assignment(state: dict, person: dict, area: str, query: str) -> tuple[d
         return hits[0]
     titles = ", ".join(r["title"] for _, r in mine) or "none"
     if not hits:
-        raise ToolError(f"{person['name']} has no {area} routine matching {query!r}. Their {area} routines: {titles}.")
-    raise ToolError(f"{query!r} matches several of {person['name']}'s routines; be more specific.")
-
-
-# ── record builders (same shapes as frontend/src/lib/ops.ts) ────────────────
-
-
-def _base(prefix: str) -> dict:
-    stamp = now_iso()
-    return {"id": new_id(prefix), "createdAt": stamp, "updatedAt": stamp}
-
-
-_order_seq = 0
-
-
-def _next_order() -> int:
-    global _order_seq
-    _order_seq = max(_order_seq + 1, int(time.time() * 1000))
-    return _order_seq
-
-
-def make_task(**fields: Any) -> dict:
-    task = {
-        "kind": "task",
-        **_base("t"),
-        "title": "",
-        "notes": "",
-        "date": today().isoformat(),
-        "order": _next_order(),
-        "done": False,
-        "doneAt": None,
-        "subjectType": None,
-        "subjectId": None,
-        "assignmentId": None,
-        "stepKind": "plain",
-        "appointment": None,
-        "tripId": None,
-        "reservationId": None,
-        "tripTask": None,
-        "docTask": None,
-        "subtasks": [],
-    }
-    task.update(fields)
-    return task
-
-
-def make_document(**fields: Any) -> dict:
-    doc = {
-        "kind": "document",
-        **_base("d"),
-        "date": None,
-        "validUntil": None,
-        "idNumber": "",
-        "issuer": "",
-        "issueDate": None,
-        "details": [],
-        "front": None,
-        "back": None,
-        "providerId": None,
-        "about": "",
-        "episode": "",
-        "file": None,
-        "assignmentId": None,
-        "pinned": False,
-        "archived": False,
-        "outdated": False,
-    }
-    doc.update(fields)
-    return doc
-
-
-def _step(title: str, offset: int, kind: str = "plain", doc_task: Optional[dict] = None) -> dict:
-    return {"title": title, "offsetDays": offset, "kind": kind, "prep": "", "docTask": doc_task}
-
-
-def plan_cycle(routine: dict, assignment: dict, due: str) -> list[dict]:
-    """Steps for one cycle ending on `due`; past dates are moved to today."""
-    plan = assignment.get("plan") if assignment.get("plan") is not None else routine.get("plan", [])
-    t0 = today()
-    due_d = date.fromisoformat(due)
-    out = []
-    for p in sorted(plan, key=lambda p: p["offsetDays"]):
-        when = max(due_d + timedelta(days=p["offsetDays"]), t0)
-        out.append(
-            make_task(
-                title=p["title"],
-                date=when.isoformat(),
-                subjectType=assignment["subjectType"],
-                subjectId=assignment["subjectId"],
-                assignmentId=assignment["id"],
-                stepKind=p["kind"],
-                docTask=p.get("docTask"),
-                notes=f"Prep: {p['prep']}" if p.get("prep") else "",
-            )
-        )
-    return out
-
-
-def _renewal_for_id(doc: dict, remind_days: int) -> tuple[list[dict], dict, Optional[str]]:
-    """Renewal routine + assignment + steps for an ID (mirrors renewalRoutineForId)."""
-    doc_type = doc["type"]
-    is_passport = doc_type == "Passport"
-    label = "document" if doc_type == "Other" else ("ID card" if doc_type == "City or state ID" else doc_type.lower())
-    plan = [_step("Submit passport renewal" if is_passport else f"Renew {label}", -remind_days, "renew")]
-    if is_passport:
-        plan.insert(0, _step("Check renewal requirements and get a photo", -(remind_days + 30)))
-    routine = {
-        "kind": "routine",
-        **_base("r"),
-        "area": "identity",
-        "template": None,
-        "icon": "idcard",
-        "title": f"{doc['name'] if doc_type == 'Other' else doc_type} renewal",
-        "description": f"Renewal reminders for {doc['name']}.",
-        "dateLabel": "Expires",
-        "plan": plan,
-        "followUps": [
-            _step(f"Add the new {label} to documents", 0, "plain", {"docKind": "identity", "docType": doc_type})
-        ],
-        "repeatMonths": None,
-        "countFrom": "due",
-        "medication": False,
-    }
-    assignment = {
-        "kind": "assignment",
-        **_base("a"),
-        "routineId": routine["id"],
-        "subjectType": doc["subjectType"],
-        "subjectId": doc["subjectId"],
-        "date": doc["validUntil"],
-        "repeatMonths": None,
-        "done": False,
-        "contactId": None,
-        "supply": None,
-        "history": [],
-        "plan": None,
-        "countFrom": None,
-    }
-    tasks = plan_cycle(routine, assignment, doc["validUntil"]) if doc["validUntil"] else []
-    first = min((t["date"] for t in tasks), default=doc["validUntil"])
-    return [routine, assignment, *tasks], assignment, first
-
-
-def _close_doc_tasks(state: dict, assignment_id: str, doc_kind: str) -> list[dict]:
-    stamp = now_iso()
-    return [
-        {**t, "done": True, "doneAt": stamp}
-        for t in state.get("tasks", [])
-        if t.get("assignmentId") == assignment_id
-        and not t.get("done")
-        and (t.get("docTask") or {}).get("docKind") == doc_kind
-    ]
+        raise ToolError(f"{who} has no {area} routine matching {query!r}. {area.capitalize()} routines for {who}: {titles}.")
+    raise ToolError(f"{query!r} matches several of {who}'s routines; be more specific.")
 
 
 def _clip(s: Optional[str], n: int) -> str:
     return (s or "").strip()[:n]
 
 
-# ── public builders ─────────────────────────────────────────────────────────
+# ── the request ─────────────────────────────────────────────────────────────
 
 
-def new_id_document(
+def build_request(
     state: dict,
-    person: str,
-    doc_type: str,
+    reg: dict,
+    subject: str,
     name: Optional[str] = None,
+    category: Optional[str] = None,
+    doc_type: Optional[str] = None,
+    valid_until: Optional[str] = None,
+    on: Optional[str] = None,
     id_number: Optional[str] = None,
     issuer: Optional[str] = None,
     issue_date: Optional[str] = None,
-    expiry_date: Optional[str] = None,
     details: Optional[dict[str, str]] = None,
-    renewal_routine: Optional[str] = None,
-    remind: bool = True,
-    remind_days: Optional[int] = None,
-    keep_handy: bool = False,
-    keep_both: bool = False,
-) -> tuple[list[dict], dict]:
-    p = find_person(state, person)
-    t = match_choice(doc_type, ID_TYPES, _ID_ALIASES, "ID type")
-
-    # Suggested fields for the type come first (matched case-insensitively),
-    # then anything else given. Empty values are dropped, as in the app.
-    given = {_norm(k): (k.strip(), (v or "").strip()) for k, v in (details or {}).items()}
-    rows = []
-    for field in ID_FIELDS[t]:
-        hit = given.pop(_norm(field), None)
-        if hit and hit[1]:
-            rows.append({"name": field, "value": hit[1][:5000]})
-    rows += [{"name": k[:300], "value": v[:5000]} for k, v in given.values() if k and v]
-
-    doc = make_document(
-        docKind="identity",
-        subjectType="person",
-        subjectId=p["id"],
-        name=_clip(name, 300) or f"{p['name']}’s {t.lower()}",
-        type=t,
-        idNumber=_clip(id_number, 300),
-        issuer=_clip(issuer, 300),
-        issueDate=parse_date(issue_date) if issue_date else None,
-        validUntil=parse_date(expiry_date) if expiry_date else None,
-        details=rows,
-        pinned=bool(keep_handy),
-    )
-
-    # A second active ID of the same type is usually a renewal. Make the
-    # caller say which: replace it (link its routine) or keep both.
-    if not renewal_routine and not keep_both and t != "Other":
-        current = [
-            d for d in state.get("documents", [])
-            if d.get("docKind") == "identity" and d.get("subjectId") == p["id"]
-            and d.get("type") == t and not d.get("archived") and not d.get("outdated")
-        ]
-        if current:
-            routines = {r["id"]: r for r in state.get("routines", [])}
-            assignments = {a["id"]: a for a in state.get("assignments", [])}
-            parts = []
-            for d in current:
-                a = assignments.get(d.get("assignmentId") or "")
-                r = routines.get(a["routineId"]) if a else None
-                parts.append(
-                    f"{d['name']!r} (expires {d.get('validUntil') or 'unknown'}"
-                    + (f", renewal routine {r['title']!r})" if r else ", no renewal routine)")
-                )
-            hint = next((p_ for p_ in parts if "renewal routine '" in p_), None)
-            raise ToolError(
-                f"{p['name']} already has an active {t.lower()}: {'; '.join(parts)}. "
-                "If the new one replaces it, call again with renewal_routine set to that routine's title "
-                "(the old one is archived and the routine moves to the new expiry). "
-                "To add it alongside, call again with keep_both=true."
-                + ("" if hint else " The current one has no renewal routine, so use keep_both=true and archive the old one in the app.")
-            )
-
-    puts: list[dict] = []
-    summary: dict[str, Any] = {}
-    if renewal_routine:
-        a, r = find_assignment(state, p, "identity", renewal_routine)
-        doc["assignmentId"] = a["id"]
-        archived = [
-            {**o, "archived": True, "pinned": False}
-            for o in state.get("documents", [])
-            if o.get("assignmentId") == a["id"] and o.get("type") == t and not o.get("archived")
-        ]
-        closed = _close_doc_tasks(state, a["id"], "identity")
-        puts += archived + closed
-        summary["linkedRoutine"] = r["title"]
-        # The routine now tracks the new document's expiry: move its date and
-        # re-plan its open, not-yet-booked steps (as completing a renewal does).
-        if doc["validUntil"] and doc["validUntil"] != a.get("date"):
-            moved = {**a, "date": doc["validUntil"], "done": False}
-            stale = [
-                {"kind": "task", "id": x["id"]}
-                for x in state.get("tasks", [])
-                if x.get("assignmentId") == a["id"] and not x.get("done") and not x.get("appointment")
-                and not (x.get("docTask") or {}).get("docKind") == "identity"
-            ]
-            fresh = plan_cycle(r, moved, doc["validUntil"])
-            puts += [moved, *fresh]
-            summary["routineMovedTo"] = doc["validUntil"]
-            summary["steps"] = [{"title": x["title"], "date": x["date"]} for x in fresh]
-            summary["_delete"] = stale
-        if archived:
-            summary["archivedOlder"] = [o["name"] for o in archived]
-        if closed:
-            summary["closedTasks"] = [x["title"] for x in closed]
-    elif remind:
-        if doc["validUntil"]:
-            days = remind_days if remind_days is not None else remind_default(t)
-            if days < 0 or days > 3650:
-                raise ToolError("remind_days must be between 0 and 3650.")
-            records, a, first = _renewal_for_id(doc, days)
-            doc["assignmentId"] = a["id"]
-            puts += records
-            summary["renewalRoutine"] = records[0]["title"]
-            summary["remindersPlannedFrom"] = first
-            summary["steps"] = [{"title": x["title"], "date": x["date"]} for x in records[2:]]
-        else:
-            summary["note"] = "No renewal reminder: it needs an expiry date."
-
-    puts.insert(0, doc)
-    summary.update(
-        {
-            "document": {
-                "id": doc["id"],
-                "person": p["name"],
-                "name": doc["name"],
-                "type": t,
-                "expires": doc["validUntil"],
-                "details": [r["name"] for r in rows],
-                "keepHandy": doc["pinned"],
-            },
-            "images": "Front and back images can be added in the coo app.",
-        }
-    )
-    return puts, summary
-
-
-def new_health_document(
-    state: dict,
-    person: str,
-    name: str,
-    doc_type: Optional[str] = None,
-    on: Optional[str] = None,
     provider: Optional[str] = None,
     about: Optional[str] = None,
     episode: Optional[str] = None,
     routine: Optional[str] = None,
-    keep_handy: bool = False,
-) -> tuple[list[dict], dict]:
-    p = find_person(state, person)
-    title = _clip(name, 300)
-    if not title:
-        raise ToolError("A health document needs a name.")
-    t = match_choice(doc_type, HEALTH_TYPES, _HEALTH_ALIASES, "document type") if doc_type else "Other"
+    pin: Optional[bool] = None,
+    remind: bool = True,
+    remind_days: Optional[int] = None,
+    keep_both: bool = False,
+) -> tuple[dict, dict]:
+    """The POST /api/documents body, plus context for the reply."""
+    stype, rec = find_subject(state, reg, subject)
+    who = subject_label(reg, stype, rec)
+    kind = match_category(reg, stype, category, doc_type)
+    cat = reg["categories"][kind]
+    t = match_type(cat, doc_type)
+    plain_name = str(rec.get(reg["subjectTypes"][stype]["nameField"], ""))
 
-    provider_id = None
-    provider_name = None
-    if provider:
-        c = find_contact(state, provider, ("health", "other"))
-        provider_id, provider_name = c["id"], c["name"]
+    doc: dict[str, Any] = {
+        "subjectType": stype,
+        "subjectId": rec["id"],
+        "docKind": kind,
+        "type": t,
+        "name": _clip(name, 300) or f"{plain_name}’s {t.lower()}",
+    }
+    if valid_until:
+        doc["validUntil"] = parse_date(valid_until)
+    if on:
+        doc["date"] = parse_date(on)
+    if id_number:
+        doc["idNumber"] = _clip(id_number, 300)
+    if issuer:
+        doc["issuer"] = _clip(issuer, 300)
+    if issue_date:
+        doc["issueDate"] = parse_date(issue_date)
+    if about:
+        doc["about"] = _clip(about, 5000)
+    if pin is not None:
+        doc["pinned"] = bool(pin)
 
-    # Reuse an existing episode's spelling when it matches.
-    ep = _clip(episode, 300)
-    if ep:
+    if details:
+        # The type's suggested fields first (matched case-insensitively), then
+        # the rest; empty values dropped, as in the app.
+        given = {_norm(k): (k.strip(), (v or "").strip()) for k, v in details.items()}
+        rows = []
+        for field in cat.get("detailFields", {}).get(t, []):
+            hit = given.pop(_norm(field), None)
+            if hit and hit[1]:
+                rows.append({"name": field, "value": hit[1][:5000]})
+        rows += [{"name": k[:300], "value": v[:5000]} for k, v in given.values() if k and v]
+        if rows:
+            doc["details"] = rows
+
+    if episode:
+        # Reuse an existing episode's spelling when it matches.
+        ep = _clip(episode, 300)
         existing = {
             _norm(d["episode"]): d["episode"]
             for d in state.get("documents", [])
-            if d.get("subjectId") == p["id"] and d.get("episode")
+            if d.get("subjectId") == rec["id"] and d.get("episode")
         }
-        ep = existing.get(_norm(ep), ep)
+        doc["episode"] = existing.get(_norm(ep), ep)
 
-    doc = make_document(
-        docKind="health",
-        subjectType="person",
-        subjectId=p["id"],
-        name=title,
-        type=t,
-        date=parse_date(on) if on else today().isoformat(),
-        providerId=provider_id,
-        about=_clip(about, 5000),
-        episode=ep,
-        pinned=bool(keep_handy),
-    )
-    puts: list[dict] = [doc]
-    summary: dict[str, Any] = {}
+    context: dict[str, Any] = {"subject": who, "category": kind}
+    if provider:
+        c = find_contact(state, provider, cat.get("providerGroups"))
+        doc["providerId"] = c["id"]
+        context["provider"] = c["name"]
     if routine:
-        a, r = find_assignment(state, p, "health", routine)
+        a, r = find_assignment(state, stype, rec, who, cat["area"], routine)
         doc["assignmentId"] = a["id"]
-        closed = _close_doc_tasks(state, a["id"], "health")
-        puts += closed
-        summary["linkedRoutine"] = r["title"]
-        if closed:
-            summary["closedTasks"] = [x["title"] for x in closed]
-    summary["document"] = {
-        "id": doc["id"],
-        "person": p["name"],
-        "name": doc["name"],
-        "type": t,
-        "date": doc["date"],
-        "provider": provider_name,
-        "episode": doc["episode"] or None,
-        "keepHandy": doc["pinned"],
+        context["routine"] = r["title"]
+
+    body: dict[str, Any] = {
+        "document": doc,
+        "duplicates": "allow" if keep_both else "reject",
+        "today": today().isoformat(),
     }
-    summary["file"] = "Attach the file itself in the coo app if you have one."
-    return puts, summary
+    if cat.get("renewal") and remind and not routine:
+        if remind_days is not None and not 0 <= remind_days <= 3650:
+            raise ToolError("remind_days must be between 0 and 3650.")
+        body["renewal"] = {"remindDays": remind_days} if remind_days is not None else {}
+    return body, context
+
+
+def duplicate_message(detail: str, existing: list[dict]) -> str:
+    """Turn the API's 409 into instructions for Claude."""
+    parts = [
+        f"{d['name']!r} (expires {d.get('validUntil') or 'unknown'}"
+        + (f", renewal routine {d['routine']!r})" if d.get("routine") else ", no renewal routine)")
+        for d in existing
+    ]
+    with_routine = any(d.get("routine") for d in existing)
+    return (
+        f"{detail}: {'; '.join(parts)}. "
+        "If the new one replaces it, call again with `routine` set to that routine's title "
+        "(the old one is archived and the routine moves to the new expiry). "
+        "To add it alongside, call again with keep_both=true."
+        + ("" if with_routine else " The current one has no renewal routine, so use keep_both=true and archive the old one in the app.")
+    )
+
+
+def reply(result: dict, context: dict) -> dict:
+    """What the tool returns: the saved document and what else changed."""
+    d = result["document"]
+    s = result.get("summary", {})
+    doc: dict[str, Any] = {
+        "id": d["id"],
+        "subject": context["subject"],
+        "category": d["docKind"],
+        "name": d["name"],
+        "type": d["type"],
+    }
+    for k in ("validUntil", "date", "episode"):
+        if d.get(k):
+            doc[k] = d[k]
+    if context.get("provider"):
+        doc["provider"] = context["provider"]
+    doc["pinned"] = d["pinned"]
+    out: dict[str, Any] = {"document": doc}
+    for k in ("linkedRoutine", "archivedOlder", "closedTasks", "renewalRoutine", "remindersPlannedFrom", "routineMovedTo", "steps", "note"):
+        if s.get(k):
+            out[k] = s[k]
+    out["files"] = "Attach the file itself (photo or PDF) in the coo app."
+    return out
+
+
+_FEATURE_PARAMS = {
+    "validUntil": "valid_until", "date": "date", "idNumber": "id_number", "issuer": "issuer",
+    "issueDate": "issue_date", "details": "details", "provider": "provider", "about": "about",
+    "episode": "episode",
+}
+
+
+def describe_registry(reg: dict) -> dict:
+    """A compact view of the registry for list_document_types."""
+    out: dict[str, Any] = {}
+    for stype, info in reg["subjectTypes"].items():
+        cats: dict[str, Any] = {}
+        for k in info["categories"]:
+            c = reg["categories"][k]
+            entry: dict[str, Any] = {
+                "label": c["label"],
+                "types": c["types"],
+                "defaultType": c["defaultType"],
+                "parameters": [_FEATURE_PARAMS[f] for f in c["features"] if f in _FEATURE_PARAMS],
+                "pin": f"{c['pin']['label']} (default {'on' if c['pin']['default'] else 'off'})",
+                "routineArea": c["area"],
+            }
+            if c.get("detailFields"):
+                entry["detailFields"] = c["detailFields"]
+            if c.get("renewal"):
+                days = ", ".join(f"{t} {d}" for t, d in c["renewal"]["remindDays"].items())
+                entry["renewalReminders"] = (
+                    f"on by default when there's an expiry; remind_days defaults: {days}, others {c['renewal']['defaultRemindDays']}"
+                )
+            cats[k] = entry
+        out[stype] = {"label": info["label"], "categories": cats}
+    return out

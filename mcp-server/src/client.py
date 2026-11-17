@@ -15,10 +15,13 @@ this MCP server) is forwarded to the API, so items stay owned by the real user.
   - stdio transport: there is no incoming HTTP request, so the token falls back
     to the COO_API_KEY environment variable.
 
-The API surface is two endpoints (see data-structure.md):
-  GET  /api/state  → CooState {people, cars, contacts, routines, assignments,
-                               tasks, documents, trips, reservations}
-  POST /api/batch  → {put: Entity[], delete: {kind, id}[]} → {ok, updatedAt}
+The API surface (see data-structure.md):
+  GET  /api/state      → CooState {people, cars, contacts, routines, assignments,
+                                   tasks, documents, trips, reservations}
+  POST /api/batch      → {put: Entity[], delete: {kind, id}[]} → {ok, updatedAt}
+  GET  /api/registry   → subject types and their document categories
+  POST /api/documents  → create/update any document; the server applies the
+                         document rules (see backend/src/routes/documents.py)
 Records are camelCase and mirror frontend/src/types/coo.ts exactly; puts are
 FULL records (upserts), so edit a fetched record and send it back whole.
 """
@@ -84,16 +87,27 @@ def _headers(token: str) -> dict[str, str]:
     return headers
 
 
+class ApiError(RuntimeError):
+    """A 4xx/5xx from the coo API; ``body`` is the parsed JSON body (or {})."""
+
+    def __init__(self, message: str, status: int, detail: Any, body: dict):
+        super().__init__(message)
+        self.status = status
+        self.detail = detail
+        self.body = body
+
+
 async def _request(method: str, path: str, token: str, json: Any = None) -> Any:
     resp = await _get_client().request(method, path, headers=_headers(token), json=json)
     if resp.status_code >= 400:
-        detail = resp.text
+        detail: Any = resp.text
+        body: dict = {}
         try:
-            data = resp.json()
-            detail = data.get("detail") or data.get("error") or detail
+            body = resp.json()
+            detail = body.get("detail") or body.get("error") or detail
         except Exception:
             pass  # body wasn't JSON — keep raw text
-        raise RuntimeError(f"{method} {path} → {resp.status_code} {detail}")
+        raise ApiError(f"{method} {path} → {resp.status_code} {detail}", resp.status_code, detail, body)
     # 204 No Content (DELETE) / empty body.
     if resp.status_code == 204 or not resp.content:
         return None
@@ -117,3 +131,19 @@ async def batch(
     return await _request(
         "POST", "/api/batch", token, json={"put": put or [], "delete": delete or []}
     )
+
+
+_registry: Optional[dict] = None
+
+
+async def get_registry(token: str) -> dict:
+    """GET /api/registry — subject types and document categories (cached; it only changes on deploy)."""
+    global _registry
+    if _registry is None:
+        _registry = await _request("GET", "/api/registry", token)
+    return _registry
+
+
+async def save_document(token: str, body: dict) -> dict:
+    """POST /api/documents — create/update a document; returns {document, changes, summary}."""
+    return await _request("POST", "/api/documents", token, json=body)

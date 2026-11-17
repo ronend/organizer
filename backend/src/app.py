@@ -13,6 +13,7 @@ from fastapi import FastAPI
 
 from src.middleware.origin_verify import origin_verify
 from src.routes.auth import router as auth_router
+from src.routes.documents import router as documents_router
 from src.routes.files import router as files_router
 from src.routes.links import router as links_router
 from src.routes.state import router as state_router
@@ -28,5 +29,6 @@ app.include_router(auth_router)
 
 # Data routes — require a Cognito access token.
 app.include_router(state_router)
+app.include_router(documents_router)
 app.include_router(files_router)
 app.include_router(links_router)

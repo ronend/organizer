@@ -104,6 +104,55 @@ from the body.
 - Deleting a record that doesn't exist is a no-op.
 - `updatedAt` in the response is the stamp written onto every put record.
 
+### `POST /api/documents`
+
+The one way to create or update a document of any category on any subject; the
+app and the MCP server both use it. The server applies the document rules
+(`backend/src/documents.py`) and writes everything in one batch.
+
+```jsonc
+// request
+{
+  "document": {                 // fields to set; without an existing id → create
+    "subjectType": "car", "subjectId": "c_…", "docKind": "car",
+    "name": "GEICO insurance card", "type": "ID card", "validUntil": "2027-04-25",
+    "file": { "key": "u/<sub>/…", "name": "card.pdf", "contentType": "application/pdf", "size": 1234 }
+  },
+  "renewal": { "remindDays": 60 },   // optional: renewal reminders from the expiry
+  "closeTaskId": "t_…",               // optional: a task to mark done
+  "duplicates": "allow",              // or "reject" (409 for a 2nd active ID of a type)
+  "today": "2026-11-16"               // caller's local date for step planning
+}
+
+// response — `changes` is everything written, already stamped
+{ "document": { … }, "changes": { "put": [ … ], "delete": [ … ] },
+  "summary": { "archivedOlder": [], "closedTasks": [], "linkedRoutine": "…",
+               "renewalRoutine": "…", "remindersPlannedFrom": "…", "routineMovedTo": "…" } }
+```
+
+- New: `subjectType`, `subjectId`, `docKind`, `name` required; `type` defaults
+  to the category's, `pinned` to the category's pin default, `date` to today
+  for categories that use it. Only the category's fields (registry `features`)
+  may be filled → `400` otherwise.
+- Update (existing `id`): only the given fields change; `subjectType`,
+  `subjectId` and `docKind` can't. `null` clears nullable fields.
+- `400` invalid (type not in the category, routine of another subject or area,
+  …), `404` missing subject/contact/routine/task, `403` file outside your
+  storage, `409` duplicate with `{detail, existing: [{id, name, validUntil,
+  assignmentId, routine}]}`.
+- Files are uploaded first with `/api/files/upload-url` (below), the single
+  upload path for every file; the request carries the returned `FileRef`s.
+
+### `GET /api/registry`
+
+The subject/document registry (`backend/src/registry.json`, copied verbatim to
+`frontend/src/lib/registry.json`): `subjectTypes` (person, car, … → state
+collection, name field, document categories) and `categories` (identity,
+health, car, … → types, fields used, detail fields per type, routine area, pin
+label/default, rules). `subjectType`, `docKind` and routine `area` are validated
+against it everywhere, so a new subject type is a new record kind plus a
+registry entry.
+
 ### Files
 
 User files (document scans, reservation attachments) live in the private
@@ -135,7 +184,8 @@ directly from S3 with presigned URLs (the bucket's CORS allows the app origin an
 - The file name is sanitized for the key (`[A-Za-z0-9._-]`, ≤ 100 chars); the
   original name is kept in `file.name`.
 - The returned `file` is what goes into the record (`document.front`,
-  `reservation.files[]`, ...), saved via `/api/batch`.
+  `reservation.files[]`, ...), saved via `/api/documents` (documents) or
+  `/api/batch` (everything else).
 
 #### `POST /api/files/urls`
 

@@ -5,7 +5,8 @@
  * With VITE_LOCAL_MOCK=1 (npm run dev:mock) the calls are served by an
  * in-browser mock backed by localStorage instead (no AWS, no login).
  */
-import type { ChangeSet, CooState, FileRef } from '../types/coo';
+import type { ChangeSet, CooState, Document, FileRef, ISODate } from '../types/coo';
+import { today } from '../lib/dates';
 
 const BASE_URL = '/api';
 export const MOCK = import.meta.env.VITE_LOCAL_MOCK === '1';
@@ -77,6 +78,38 @@ export async function sendBatch(changes: ChangeSet): Promise<void> {
       }),
     });
   }
+}
+
+export interface SaveDocumentRequest {
+  /** Fields to set. Without an existing id this creates the document. */
+  document: Partial<Omit<Document, 'kind' | 'createdAt' | 'updatedAt'>>;
+  /** Create renewal reminders from the expiry (categories with renewal). */
+  renewal?: { remindDays?: number } | null;
+  closeTaskId?: string;
+  duplicates?: 'allow' | 'reject';
+  today?: ISODate;
+}
+
+export interface SaveDocumentResult {
+  document: Document;
+  /** Everything the server wrote, already stamped: apply locally, don't re-send. */
+  changes: ChangeSet;
+  summary: {
+    archivedOlder?: string[];
+    closedTasks?: string[];
+    linkedRoutine?: string;
+    renewalRoutine?: string;
+    remindersPlannedFrom?: ISODate;
+    routineMovedTo?: ISODate;
+    note?: string;
+  };
+}
+
+/** POST /api/documents — the one way to create or update any document. */
+export async function saveDocument(req: SaveDocumentRequest): Promise<SaveDocumentResult> {
+  const body = { ...req, today: req.today ?? today() };
+  if (MOCK) return (await mock()).mockSaveDocument(body);
+  return request<SaveDocumentResult>('/documents', { method: 'POST', body: JSON.stringify(body) });
 }
 
 /** Uploads a file to the user's private S3 prefix and returns its reference. */

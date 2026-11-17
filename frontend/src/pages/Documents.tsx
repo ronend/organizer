@@ -6,12 +6,10 @@ import { Empty, PageHead, SectionHead, Segmented } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { ArchiveSection, DocList } from '../components/SubjectParts';
 import { allSubjects } from '../lib/model';
+import { CATEGORIES, CATEGORY_KEYS } from '../lib/registry';
 
-const KINDS: { value: DocKind; label: string }[] = [
-  { value: 'identity', label: 'IDs' },
-  { value: 'health', label: 'Health' },
-  { value: 'car', label: 'Car' },
-];
+// One filter per registry category, in registry order.
+const KINDS: { value: DocKind; label: string }[] = CATEGORY_KEYS.map((k) => ({ value: k, label: CATEGORIES[k].short }));
 
 type KindFilter = DocKind | 'all';
 

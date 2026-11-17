@@ -21,6 +21,12 @@ interface StoreValue {
   ready: boolean;
   loadError: string | null;
   apply: (cs: ChangeSet, opts?: ApplyOpts) => void;
+  /**
+   * Runs a server-side change (e.g. POST /api/documents) after earlier writes
+   * have landed, then applies the ChangeSet it returns locally without
+   * re-sending it. Rejects if the call fails, so a form can stay open.
+   */
+  commit: (run: () => Promise<ChangeSet>, opts?: { toast?: string | ((cs: ChangeSet) => string) }) => Promise<ChangeSet>;
   reload: () => Promise<void>;
 }
 
@@ -85,7 +91,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [reload, toast],
   );
 
-  const value = useMemo(() => ({ s, ready, loadError, apply, reload }), [s, ready, loadError, apply, reload]);
+  const commit = useCallback(
+    async (run: () => Promise<ChangeSet>, opts: { toast?: string | ((cs: ChangeSet) => string) } = {}) => {
+      const p = queue.current.then(run);
+      queue.current = p.then(
+        () => {},
+        () => {},
+      );
+      const cs = await p;
+      const after = applyChanges(ref.current, cs);
+      ref.current = after;
+      setS(after);
+      const text = typeof opts.toast === 'function' ? opts.toast(cs) : opts.toast;
+      if (text) toast.show({ text });
+      return cs;
+    },
+    [toast],
+  );
+
+  const value = useMemo(() => ({ s, ready, loadError, apply, commit, reload }), [s, ready, loadError, apply, commit, reload]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

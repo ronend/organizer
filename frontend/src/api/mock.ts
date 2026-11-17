@@ -2,7 +2,10 @@
  * Local mock backend (VITE_LOCAL_MOCK=1). Persists to localStorage so the UI
  * can be exercised without AWS. Files are kept as data URLs.
  */
-import type { ChangeSet, CooState, Entity, EntityKind, FileRef } from '../types/coo';
+import type { ChangeSet, CooState, Document, Entity, EntityKind, FileRef } from '../types/coo';
+import type { SaveDocumentRequest, SaveDocumentResult } from './client';
+import { Tx, makeDocument, renewalRoutineForId, saveDocument } from '../lib/ops';
+import { category, remindDefault } from '../lib/registry';
 
 const STATE_KEY = 'coo.mock.state';
 const FILE_PREFIX = 'coo.mock.file.';
@@ -54,6 +57,53 @@ export async function mockBatch(cs: ChangeSet): Promise<void> {
   for (const e of cs.put) store[`${e.kind}#${e.id}`] = { ...e, updatedAt: now };
   for (const d of cs.delete) delete store[`${d.kind}#${d.id}`];
   save(store);
+}
+
+/**
+ * Mock of POST /api/documents. Uses the app's own document ops, so it covers
+ * the common rules (archive on link, close tasks, renewal reminders, expiry
+ * edits) but not the server's validation; the real rules live in
+ * backend/src/documents.py.
+ */
+export async function mockSaveDocument(req: SaveDocumentRequest): Promise<SaveDocumentResult> {
+  const s = await mockState();
+  // Drop unset fields (as JSON does for the real API), so `id: undefined`
+  // can't override a new document's generated id.
+  const f = Object.fromEntries(Object.entries(req.document).filter(([, v]) => v !== undefined)) as SaveDocumentRequest['document'];
+  const prev = f.id ? s.documents.find((d) => d.id === f.id) : undefined;
+  let d: Document;
+  if (prev) {
+    d = { ...prev, ...f } as Document;
+  } else {
+    if (!f.docKind || !f.subjectType || !f.subjectId) throw new Error('A new document needs subjectType, subjectId, docKind');
+    const cat = category(f.docKind);
+    d = makeDocument({
+      ...f,
+      docKind: f.docKind,
+      subjectType: f.subjectType,
+      subjectId: f.subjectId,
+      name: (f.name ?? '').trim(),
+      type: f.type || cat.defaultType,
+      pinned: f.pinned ?? cat.pin.default,
+      date: f.date !== undefined ? f.date : cat.features.includes('date') ? (req.today ?? null) : null,
+    });
+  }
+  if (!d.name.trim()) throw new Error('A document needs a name');
+  const tx = new Tx(s);
+  const summary: SaveDocumentResult['summary'] = {};
+  if (req.renewal && !d.assignmentId && d.validUntil) {
+    const { assignment, firstDate } = renewalRoutineForId(s, d, req.renewal.remindDays ?? remindDefault(d.docKind, d.type), tx);
+    d = { ...d, assignmentId: assignment.id };
+    summary.remindersPlannedFrom = firstDate;
+  }
+  const archivedBefore = new Set(s.documents.filter((o) => o.archived).map((o) => o.id));
+  const changes = saveDocument(s, d, { closeTaskId: req.closeTaskId }, tx);
+  const archived = changes.put.filter((e): e is Document => e.kind === 'document' && e.id !== d.id && e.archived && !archivedBefore.has(e.id));
+  if (archived.length) summary.archivedOlder = archived.map((o) => o.name);
+  await mockBatch(changes);
+  const now = new Date().toISOString();
+  const stamped = { ...changes, put: changes.put.map((e) => ({ ...e, updatedAt: now })) };
+  return { document: stamped.put.find((e) => e.kind === 'document' && e.id === d.id) as Document, changes: stamped, summary };
 }
 
 export async function mockUpload(file: Blob, name: string, contentType: string): Promise<FileRef> {

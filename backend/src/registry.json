@@ -1,0 +1,127 @@
+{
+  "subjectTypes": {
+    "person": {
+      "label": "Person",
+      "plural": "People",
+      "collection": "people",
+      "nameField": "name",
+      "icon": "person",
+      "categories": ["identity", "health"]
+    },
+    "car": {
+      "label": "Car",
+      "plural": "Cars",
+      "collection": "cars",
+      "nameField": "makeModel",
+      "icon": "car",
+      "categories": ["car"]
+    }
+  },
+  "categories": {
+    "identity": {
+      "label": "Identity",
+      "short": "IDs",
+      "plural": "IDs",
+      "icon": "idcard",
+      "area": "identity",
+      "types": ["Passport", "Driver license", "City or state ID", "Birth certificate", "Social Security card", "Visa or residence card", "Other"],
+      "defaultType": "Passport",
+      "features": ["idNumber", "issuer", "issueDate", "validUntil", "details", "front", "back"],
+      "detailFields": {
+        "Passport": ["Full name", "Nationality", "Place of birth", "Date of birth"],
+        "Driver license": ["Full name", "Class", "Restrictions and endorsements", "Date of birth"],
+        "City or state ID": ["Full name", "Date of birth"],
+        "Birth certificate": ["Full name", "Place of birth", "Date of birth"],
+        "Social Security card": ["Full name"],
+        "Visa or residence card": ["Full name", "Category", "Nationality"]
+      },
+      "typeAliases": {
+        "license": "Driver license",
+        "drivers license": "Driver license",
+        "driver's license": "Driver license",
+        "driving license": "Driver license",
+        "city id": "City or state ID",
+        "state id": "City or state ID",
+        "id card": "City or state ID",
+        "ssn": "Social Security card",
+        "social security": "Social Security card",
+        "visa": "Visa or residence card",
+        "residence card": "Visa or residence card",
+        "green card": "Visa or residence card"
+      },
+      "pin": { "label": "Keep handy", "default": false },
+      "replaceOnLink": true,
+      "expiryDrivesRoutine": true,
+      "onePerType": true,
+      "onePerTypeExempt": ["Other"],
+      "renewal": {
+        "remindDays": { "Passport": 180, "Driver license": 60, "City or state ID": 60 },
+        "defaultRemindDays": 90
+      }
+    },
+    "health": {
+      "label": "Health",
+      "short": "Health",
+      "plural": "Health documents",
+      "icon": "stethoscope",
+      "area": "health",
+      "types": ["Result", "Referral", "Prescription", "Visit summary", "Imaging", "Vaccination record", "Insurance", "Other"],
+      "defaultType": "Other",
+      "features": ["date", "provider", "about", "episode", "file"],
+      "detailFields": {},
+      "typeAliases": {
+        "lab result": "Result",
+        "lab results": "Result",
+        "results": "Result",
+        "summary": "Visit summary",
+        "visit": "Visit summary",
+        "scan": "Imaging",
+        "mri": "Imaging",
+        "x-ray": "Imaging",
+        "xray": "Imaging",
+        "vaccination": "Vaccination record",
+        "vaccine": "Vaccination record"
+      },
+      "providerGroups": ["health", "other"],
+      "pin": { "label": "Keep handy on this page", "default": false },
+      "replaceOnLink": false,
+      "expiryDrivesRoutine": false,
+      "onePerType": false,
+      "onePerTypeExempt": [],
+      "renewal": null
+    },
+    "car": {
+      "label": "Car",
+      "short": "Car",
+      "plural": "Car documents",
+      "icon": "document",
+      "area": "car",
+      "types": ["ID card", "Policy", "Registration", "Inspection", "Receipt", "Photo", "Other"],
+      "defaultType": "ID card",
+      "features": ["validUntil", "file"],
+      "detailFields": {},
+      "typeAliases": {
+        "insurance card": "ID card",
+        "insurance id": "ID card",
+        "insurance id card": "ID card",
+        "proof of insurance": "ID card",
+        "insurance": "Policy",
+        "insurance policy": "Policy",
+        "registration card": "Registration",
+        "inspection report": "Inspection",
+        "safety inspection": "Inspection",
+        "emissions": "Inspection",
+        "invoice": "Receipt",
+        "bill": "Receipt",
+        "service receipt": "Receipt",
+        "picture": "Photo"
+      },
+      "pin": { "label": "Keep in the glovebox", "default": true },
+      "replaceOnLink": true,
+      "expiryDrivesRoutine": false,
+      "onePerType": false,
+      "onePerTypeExempt": [],
+      "renewal": null
+    }
+  }
+}

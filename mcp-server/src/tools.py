@@ -1,8 +1,9 @@
 """Tool registrations for the coo MCP server.
 
-A deliberately small set over the coo API's two endpoints (GET /api/state,
-POST /api/batch). Reads fetch the whole state and project it (see logic.py);
-writes send FULL records back (the API upserts). Records mirror
+A deliberately small set over the coo API. Reads fetch the whole state
+(GET /api/state) and project it (see logic.py); task writes send FULL records
+back (POST /api/batch upserts). Documents go through POST /api/documents, which
+applies the document rules server-side (see documents.py). Records mirror
 frontend/src/types/coo.ts.
 
 Names are verb_noun snake_case; descriptions tell Claude WHEN to call each tool.
@@ -165,75 +166,66 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(
         description=(
-            "Add an identity document (passport, driver license, city or state ID, birth certificate, "
-            "Social Security card, visa or residence card, other) to a person's Identity page. "
-            "`details` is a map of extra fields; the usual ones per type are "
-            "Passport: Full name, Nationality, Place of birth, Date of birth; "
-            "Driver license: Full name, Class, Restrictions and endorsements, Date of birth; "
-            "City or state ID: Full name, Date of birth; Birth certificate: Full name, Place of birth, Date of birth; "
-            "Social Security card: Full name; Visa or residence card: Full name, Category, Nationality. "
-            "With an expiry date and no `renewal_routine`, coo creates a renewal routine with reminder steps "
-            "(set `remind` false to skip; `remind_days` defaults to 180 for passports, 60 for driver licenses "
-            "and city/state IDs, else 90). Naming an existing renewal routine links it instead and archives "
-            "the older ID of the same type on it, moving the routine to the new expiry. If the person already "
-            "has an active ID of this type, the call is refused until you choose: pass `renewal_routine` "
-            "(replace) or `keep_both` (add alongside). Images can't be attached here; add them in the app."
+            "List which documents each kind of subject (person, car, ...) can hold: the categories, their "
+            "types, which add_document parameters each uses, suggested detail fields per type, the pin "
+            "label/default and renewal reminder defaults. Call it before add_document when unsure which "
+            "category, type or fields fit."
         )
     )
-    async def add_id_document(
-        ctx: Context,
-        person: Annotated[str, Field(description="Whose document (person name)")],
-        type: Annotated[str, Field(description="ID type, e.g. Passport, Driver license, City or state ID")],
-        name: Annotated[Optional[str], Field(description="Display name (default: \"<Person>’s <type>\")")] = None,
-        id_number: Annotated[Optional[str], Field(description="Document number (shown masked in lists)")] = None,
-        issuer: Annotated[Optional[str], Field(description="Issued by, e.g. U.S. Department of State")] = None,
-        issue_date: Annotated[Optional[str], Field(description="Issue date YYYY-MM-DD")] = None,
-        expiry_date: Annotated[Optional[str], Field(description="Expiry date YYYY-MM-DD")] = None,
-        details: Annotated[Optional[dict[str, str]], Field(description="Extra fields, e.g. {\"Nationality\": \"Portugal\"}")] = None,
-        renewal_routine: Annotated[Optional[str], Field(description="Existing Identity routine of this person to link")] = None,
-        remind: Annotated[bool, Field(description="Create renewal reminders from the expiry date (default true)")] = True,
-        remind_days: Annotated[Optional[int], Field(description="Start reminding this many days before expiry")] = None,
-        keep_handy: Annotated[bool, Field(description="Pin it to the person's Identity page")] = False,
-        keep_both: Annotated[
-            bool,
-            Field(description="Add it even though the person already has an active ID of this type (e.g. two passports)"),
-        ] = False,
-    ) -> str:
-        token = token_from_context(ctx)
-        state = await client.get_state(token)
-        puts, summary = documents.new_id_document(
-            state, person, type, name, id_number, issuer, issue_date, expiry_date,
-            details, renewal_routine, remind, remind_days, keep_handy, keep_both,
-        )
-        deletes = summary.pop("_delete", [])
-        await client.batch(token, put=puts, delete=deletes)
-        return _dumps(summary)
+    async def list_document_types(ctx: Context) -> str:
+        reg = await client.get_registry(token_from_context(ctx))
+        return _dumps(documents.describe_registry(reg))
 
     @mcp.tool(
         description=(
-            "Add a health document to a person's treatment history: Result, Referral, Prescription, "
-            "Visit summary, Imaging, Vaccination record, Insurance or Other. `provider` is a Health or "
-            "Other contact's name; `episode` groups related documents (e.g. \"Knee injury\"); `routine` "
-            "links one of the person's Health routines and closes its open \"file the document\" task. "
-            "The file itself can't be attached here; add it in the app."
+            "Add a document to any subject: a person (Identity: passport, driver license, ...; Health: "
+            "results, referrals, prescriptions, ...), a car (insurance ID card, policy, registration, "
+            "inspection, receipt, ...) or any other subject type coo knows (see list_document_types). "
+            "`subject` is the person's name, the car's make/model or plate. `category` is only needed "
+            "when the subject holds several kinds and `type` doesn't settle it (e.g. a person: identity "
+            "or health). Only pass the fields the category uses; the API refuses others. "
+            "`routine` links one of the subject's routines in the category's area: for IDs and car "
+            "documents the older document of the same type on it is archived, and its open \"add the "
+            "document\" task is closed; for IDs the routine moves to the new expiry. IDs with an expiry "
+            "and no `routine` get a renewal routine with reminder steps (`remind` false to skip). If the "
+            "person already has an active ID of that type the call is refused until you choose `routine` "
+            "(replace) or `keep_both` (add alongside). Files can't be attached here; add them in the app."
         )
     )
-    async def add_health_document(
+    async def add_document(
         ctx: Context,
-        person: Annotated[str, Field(description="Whose document (person name)")],
-        name: Annotated[str, Field(description="Document name, e.g. \"MRI report, left knee\"")],
-        type: Annotated[Optional[str], Field(description="Document type (default Other)")] = None,
-        date: Annotated[Optional[str], Field(description="Document date YYYY-MM-DD (default today)")] = None,
-        provider: Annotated[Optional[str], Field(description="Provider: a contact's name")] = None,
-        about: Annotated[Optional[str], Field(description="One line on what this is about")] = None,
-        episode: Annotated[Optional[str], Field(description="Episode name; reuses an existing one when it matches")] = None,
-        routine: Annotated[Optional[str], Field(description="One of the person's Health routines to link")] = None,
-        keep_handy: Annotated[bool, Field(description="Pin it to the person's Health page")] = False,
+        subject: Annotated[str, Field(description="Whose document: person name, car make/model or plate")],
+        name: Annotated[Optional[str], Field(description="Display name, e.g. \"GEICO insurance card\" (default: \"<Subject>’s <type>\")")] = None,
+        category: Annotated[Optional[str], Field(description="identity, health, car, ... (inferred when the subject holds one kind)")] = None,
+        type: Annotated[Optional[str], Field(description="Document type, e.g. Passport, Result, ID card (default: the category's)")] = None,
+        valid_until: Annotated[Optional[str], Field(description="Expiry / valid until YYYY-MM-DD (identity, car)")] = None,
+        date: Annotated[Optional[str], Field(description="Document date YYYY-MM-DD (health; default today)")] = None,
+        id_number: Annotated[Optional[str], Field(description="Document number (identity; shown masked in lists)")] = None,
+        issuer: Annotated[Optional[str], Field(description="Issued by (identity), e.g. U.S. Department of State")] = None,
+        issue_date: Annotated[Optional[str], Field(description="Issue date YYYY-MM-DD (identity)")] = None,
+        details: Annotated[Optional[dict[str, str]], Field(description="Extra fields (identity), e.g. {\"Nationality\": \"Portugal\"}")] = None,
+        provider: Annotated[Optional[str], Field(description="Provider: a contact's name (health)")] = None,
+        about: Annotated[Optional[str], Field(description="One line on what it's about (health)")] = None,
+        episode: Annotated[Optional[str], Field(description="Episode grouping related documents (health), e.g. \"Knee injury\"")] = None,
+        routine: Annotated[Optional[str], Field(description="Title of one of the subject's routines to link")] = None,
+        pin: Annotated[Optional[bool], Field(description="Pin it at the top of the subject's page (Keep handy / glovebox); default per category")] = None,
+        remind: Annotated[bool, Field(description="IDs: create renewal reminders from the expiry (default true)")] = True,
+        remind_days: Annotated[Optional[int], Field(description="IDs: start reminding this many days before expiry")] = None,
+        keep_both: Annotated[bool, Field(description="Add it even if the subject already has an active ID of this type")] = False,
     ) -> str:
         token = token_from_context(ctx)
         state = await client.get_state(token)
-        puts, summary = documents.new_health_document(
-            state, person, name, type, date, provider, about, episode, routine, keep_handy
+        reg = await client.get_registry(token)
+        body, context = documents.build_request(
+            state, reg, subject, name, category, type, valid_until, date, id_number, issuer, issue_date,
+            details, provider, about, episode, routine, pin, remind, remind_days, keep_both,
         )
-        await client.batch(token, put=puts)
-        return _dumps(summary)
+        try:
+            result = await client.save_document(token, body)
+        except client.ApiError as e:
+            if e.status == 409:
+                raise logic.ToolError(documents.duplicate_message(str(e.detail), e.body.get("existing", [])))
+            if e.status in (400, 404):
+                raise logic.ToolError(str(e.detail))
+            raise
+        return _dumps(documents.reply(result, context))

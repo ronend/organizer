@@ -13,7 +13,9 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+
+from src import registry
 
 # ── Scalar types ────────────────────────────────────────────────────────────
 
@@ -30,11 +32,13 @@ Long = Annotated[str, Field(max_length=5000)]
 RichText = Annotated[str, Field(max_length=20000)]
 Tiny = Annotated[str, Field(max_length=100)]
 
-SubjectType = Literal["person", "car"]
+# Subject types, document categories and routine areas come from the registry
+# (src/registry.json), so a new subject type needs no change here.
+SubjectType = Annotated[str, AfterValidator(registry.check_subject_type)]
 ContactGroup = Literal["health", "cars", "other"]
-Area = Literal["health", "identity", "car"]
+Area = Annotated[str, AfterValidator(registry.check_area)]
 StepKind = Literal["plain", "schedule", "renew", "pickup"]
-DocKind = Literal["car", "health", "identity"]
+DocKind = Annotated[str, AfterValidator(registry.check_doc_kind)]
 TripTaskKind = Literal["book", "checkin"]
 ReservationType = Literal["flight", "stay", "car", "activity", "hike", "train", "other"]
 
@@ -250,6 +254,11 @@ class Document(_Base):
     pinned: bool
     archived: bool
     outdated: bool
+
+    @model_validator(mode="after")
+    def _kind_fits_subject(self) -> "Document":
+        registry.check_doc_for_subject(self.docKind, self.subjectType)
+        return self
 
 
 class Trip(_Base):

@@ -1,7 +1,8 @@
 # coo MCP Server
 
 A standalone [Model Context Protocol](https://modelcontextprotocol.io) server (name
-`coo`) that wraps the coo household app's API (`GET /api/state`, `POST /api/batch`).
+`coo`) that wraps the coo household app's API (`GET /api/state`, `POST /api/batch`,
+`POST /api/documents`, `GET /api/registry`).
 It lets Claude — via Claude Code, Claude.ai connectors, or the Claude API — read
 the household agenda, people, cars, routines and trips, and make small changes to
 tasks.
@@ -13,8 +14,10 @@ request; over stdio it comes from `COO_API_KEY`.
 
 ## What it exposes
 
-Every tool reads the whole state with `GET /api/state` and projects it; write
-tools then send the full, modified record with `POST /api/batch` (the API upserts).
+Every tool reads the whole state with `GET /api/state` and projects it; task
+tools then send the full, modified record with `POST /api/batch` (the API
+upserts). `add_document` only resolves names to ids and posts to
+`POST /api/documents`, where the document rules live.
 
 **Tools**
 
@@ -28,8 +31,8 @@ tools then send the full, modified record with `POST /api/batch` (the API upsert
 | `add_task(title, date?, who?, notes?, subtasks?)` | New plain task; `date` defaults to today, `who` is a person name, car name/plate, or `general` (default); `subtasks` is an optional list of checklist titles |
 | `complete_task(task_id)` | Marks a plain task (or a `<task>~<sub-task>` sub-task) done. Refuses routine steps that need input (`schedule` / `renew` / `pickup`) and trip booking tasks — those are finished in the app |
 | `reschedule_task(task_id, date)` | Moves a task to a new date. Refuses booked appointments |
-| `add_id_document(person, type, name?, id_number?, issuer?, issue_date?, expiry_date?, details?, renewal_routine?, remind?, remind_days?, keep_handy?, keep_both?)` | Adds an ID (Passport, Driver license, City or state ID, Birth certificate, Social Security card, Visa or residence card, Other) with the type's detail fields. With an expiry and no routine it creates a renewal routine with steps (180/60/60/90 days ahead by type). If the person already has an active ID of that type it refuses until you pass `renewal_routine` (replace: archives the old one, moves the routine to the new expiry) or `keep_both`. No images over MCP |
-| `add_health_document(person, name, type?, date?, provider?, about?, episode?, routine?, keep_handy?)` | Adds a treatment-history document. `provider` matches a Health/Other contact, `episode` reuses an existing one's spelling, `routine` links a Health routine and closes its open "file the document" task. No file upload over MCP |
+| `list_document_types()` | Which documents each subject type (person, car, ...) can hold, from the API's registry: categories, types, which `add_document` parameters each uses, detail fields per type, pin label/default, renewal reminder defaults |
+| `add_document(subject, name?, category?, type?, valid_until?, date?, id_number?, issuer?, issue_date?, details?, provider?, about?, episode?, routine?, pin?, remind?, remind_days?, keep_both?)` | Adds a document to any subject (person name, car make/model or plate). `category` is inferred when the subject holds one kind or the type settles it. Posts to `POST /api/documents`, which applies the rules: `routine` links a routine (IDs and car documents archive the older one of that type on it; IDs move it to the new expiry; open "add the document" tasks close); IDs with an expiry get renewal reminders unless `remind` is false; a second active ID of a type is refused until you pass `routine` (replace) or `keep_both`. No files over MCP |
 
 > `add_task` takes `who` rather than `for` — `for` is a Python keyword, and
 > FastMCP maps tool arguments straight onto the function's parameters.
