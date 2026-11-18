@@ -12,6 +12,7 @@ import {
   contactsFor,
   docsOfAssignment,
   effectivePlan,
+  isMedication,
   routineOf,
   samePlan,
   scheduleLine,
@@ -24,6 +25,7 @@ import { StepPlanEditor, cleanPlan } from './StepPlanEditor';
 import { RefillDialog } from './TaskFlows';
 import { TaskDetailDialog } from './TaskDialogs';
 import { DocFormFor } from './DocDialogs';
+import { CATEGORIES, CATEGORY_KEYS } from '../lib/registry';
 import { DocRow } from '../components/SubjectParts';
 
 const KIND_WORD: Record<string, string> = { plain: 'reminder', schedule: 'book', renew: 'renew', pickup: 'pick up' };
@@ -37,7 +39,7 @@ function ScheduleSection({ assignmentId }: { assignmentId: string }) {
   const { s, apply } = useStore();
   const a = assignmentById(s, assignmentId)!;
   const r = routineOf(s, a)!;
-  const name = subjectName(s, a.subjectType, a.subjectId);
+  const name = subjectName(s, a.subjectId);
   const [date, setDate] = useState(a.date ?? '');
   const [repeat, setRepeat] = useState<number | null>(a.repeatMonths);
   const [countFrom, setCountFrom] = useState<'' | 'done' | 'due'>(a.countFrom ?? '');
@@ -151,11 +153,12 @@ export function RoutineDetailDialog({ assignmentId }: { assignmentId: string }) 
   const steps = stepsOf(s, a).sort((x, y) => (x.done === y.done ? byDate(x, y) : x.done ? 1 : -1));
   const docs = docsOfAssignment(s, a);
   const contacts = contactsFor(s, r.area === 'car' ? 'car' : r.area === 'health' ? 'health' : 'any');
-  const docKind = r.area === 'car' ? 'car' : r.area;
+  // The document category that files into this routine's area (identity → identity, ...).
+  const docKind = CATEGORY_KEYS.find((k) => CATEGORIES[k].area === r.area) ?? 'attachment';
 
   return (
     <Dialog
-      eyebrow={`${subjectName(s, a.subjectType, a.subjectId)} · Routine`}
+      eyebrow={`${subjectName(s, a.subjectId)} · Routine`}
       title={r.title}
       wide
     >
@@ -165,7 +168,7 @@ export function RoutineDetailDialog({ assignmentId }: { assignmentId: string }) 
         <span className="muted small">{scheduleLine(s, a)}</span>
       </div>
 
-      {r.medication && a.supply ? (
+      {isMedication(r) && a.supply ? (
         <div className="callout">
           <div>
             Uses {a.supply.perDay} {a.supply.unit} per day · {a.supply.refillsLeft} {a.supply.refillsLeft === 1 ? 'refill' : 'refills'} left · order{' '}
@@ -204,7 +207,7 @@ export function RoutineDetailDialog({ assignmentId }: { assignmentId: string }) 
               <span key={o.id}>
                 {i > 0 && ', '}
                 <button type="button" className="link" onClick={() => ui.openDialog(<RoutineDetailDialog assignmentId={o.id} />)}>
-                  {subjectName(s, o.subjectType, o.subjectId)}
+                  {subjectName(s, o.subjectId)}
                 </button>
               </span>
             ))}
@@ -261,7 +264,7 @@ export function RoutineDetailDialog({ assignmentId }: { assignmentId: string }) 
             <button
               type="button"
               className="link"
-              onClick={() => ui.openDialog(<DocFormFor kind={docKind} subjectType={a.subjectType} subjectId={a.subjectId} assignmentId={a.id} />)}
+              onClick={() => ui.openDialog(<DocFormFor category={docKind} subjectId={a.subjectId} assignmentId={a.id} />)}
             >
               Add
             </button>

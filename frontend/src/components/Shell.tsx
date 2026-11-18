@@ -4,30 +4,44 @@ import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { useAuth } from '../auth/useAuth';
 import { MOCK } from '../api/client';
-import { agendaBadge, allSubjects, findSubject, personSub, sortedCars, sortedPeople, subjectPath, subjectSub, type Subject } from '../lib/model';
+import type { Subject, SubjectType } from '../types/coo';
+import { agendaBadge, allSubjects, findSubject, subjectIcon, subjectPath, subjectSub, subjectsOfType } from '../lib/model';
+import { SUBJECT_TYPES, SUBJECT_TYPE_KEYS, allows } from '../lib/registry';
 import { Icon } from './Icon';
 import { Breadcrumbs } from './Breadcrumbs';
-import { CarDialog, PersonDialog, SubjectChooser } from '../dialogs/SubjectDialogs';
+import { SubjectChooser, SubjectDialog } from '../dialogs/SubjectDialogs';
 
-/** Parses /people/:id[/page] and /cars/:id[/page]. */
+/** Parses /people/:id, /cars/:id and /subjects/:id (+ /page). Trips have their own pages. */
 export function useCurrentSubject(): { sub: Subject | null; page: string } {
   const { s } = useStore();
   const { pathname } = useLocation();
-  const m = pathname.match(/^\/(people|cars)\/([^/]+)(?:\/([^/]+))?/);
+  const m = pathname.match(/^\/(people|cars|subjects)\/([^/]+)(?:\/([^/]+))?/);
   if (!m) return { sub: null, page: '' };
-  const sub = findSubject(s, m[1] === 'people' ? 'person' : 'car', m[2]);
-  return { sub, page: m[3] ?? 'overview' };
+  return { sub: findSubject(s, m[2]), page: m[3] ?? 'overview' };
 }
 
-export const PERSON_PAGES = [
-  { value: 'overview', label: 'Overview' },
-  { value: 'health', label: 'Health' },
-  { value: 'identity', label: 'Identity' },
-];
-export const CAR_PAGES = [
-  { value: 'overview', label: 'Overview' },
-  { value: 'documents', label: 'Documents' },
-];
+export interface SubjectPage {
+  value: string;
+  label: string;
+  icon: string;
+}
+
+/** The pages a subject has: person → Overview / Health / Identity; anything that holds documents → Overview / Documents. */
+export function pagesFor(t: SubjectType): SubjectPage[] {
+  if (t === 'person') {
+    return [
+      { value: 'overview', label: 'Overview', icon: 'person' },
+      { value: 'health', label: 'Health', icon: 'stethoscope' },
+      { value: 'identity', label: 'Identity', icon: 'idcard' },
+    ];
+  }
+  const pages: SubjectPage[] = [{ value: 'overview', label: 'Overview', icon: SUBJECT_TYPES[t].icon }];
+  if (allows(t, 'document')) pages.push({ value: 'documents', label: 'Documents', icon: 'document' });
+  return pages;
+}
+
+/** Subject types listed in the sidebar (trips have their own page). */
+export const SIDEBAR_TYPES = SUBJECT_TYPE_KEYS.filter((t) => t !== 'trip');
 
 function Sidebar() {
   const { s } = useStore();
@@ -72,55 +86,37 @@ function Sidebar() {
         {nav('/documents', 'document', 'Documents')}
       </div>
 
-      <div className="side-group">
-        <div className="side-heading">People</div>
-        {sortedPeople(s).map((p) => {
-          const current = sub?.type === 'person' && sub.entity.id === p.id;
-          return (
-            <Link key={p.id} to={subjectPath('person', p.id)} className={`side-link subject ${current ? 'selected' : ''}`}>
-              <Icon name="person" />
-              <span className="side-label">
-                {p.name}
-                {personSub(p) && <span className="side-sub">{personSub(p)}</span>}
-              </span>
-            </Link>
-          );
-        })}
-        <button type="button" className="side-link add" onClick={() => openDialog(<PersonDialog />)}>
-          <Icon name="plus" />
-          <span className="side-label">Add person</span>
-        </button>
-      </div>
-
-      <div className="side-group">
-        <div className="side-heading">Cars</div>
-        {sortedCars(s).map((c) => {
-          const current = sub?.type === 'car' && sub.entity.id === c.id;
-          return (
-            <Link key={c.id} to={subjectPath('car', c.id)} className={`side-link subject ${current ? 'selected' : ''}`}>
-              <Icon name="car" />
-              <span className="side-label">
-                {c.makeModel}
-                <span className="side-sub">{c.plate}</span>
-              </span>
-            </Link>
-          );
-        })}
-        <button type="button" className="side-link add" onClick={() => openDialog(<CarDialog />)}>
-          <Icon name="plus" />
-          <span className="side-label">Add car</span>
-        </button>
-      </div>
+      {SIDEBAR_TYPES.map((t) => (
+        <div className="side-group" key={t}>
+          <div className="side-heading">{SUBJECT_TYPES[t].plural}</div>
+          {subjectsOfType(s, t).map((x) => {
+            const current = sub?.id === x.id;
+            return (
+              <Link key={x.id} to={subjectPath(x)} className={`side-link subject ${current ? 'selected' : ''}`}>
+                <Icon name={subjectIcon(x)} />
+                <span className="side-label">
+                  {x.name}
+                  {subjectSub(x) && <span className="side-sub">{subjectSub(x)}</span>}
+                </span>
+              </Link>
+            );
+          })}
+          <button type="button" className="side-link add" onClick={() => openDialog(<SubjectDialog subjectType={t} />)}>
+            <Icon name="plus" />
+            <span className="side-label">Add {SUBJECT_TYPES[t].label.toLowerCase()}</span>
+          </button>
+        </div>
+      ))}
 
       {sub && (
         <div className="side-group">
-          <div className="side-heading">{sub.type === 'person' ? sub.entity.name : sub.entity.makeModel}</div>
-          {(sub.type === 'person' ? PERSON_PAGES : CAR_PAGES).map((pg) => {
-            const icon = { overview: sub.type === 'person' ? 'person' : 'car', health: 'stethoscope', identity: 'idcard', documents: 'document' }[pg.value]!;
+          <div className="side-heading">{sub.name}</div>
+          {pagesFor(sub.subjectType).map((pg) => {
+            const icon = pg.icon;
             return (
               <Link
                 key={pg.value}
-                to={subjectPath(sub.type, sub.entity.id, pg.value)}
+                to={subjectPath(sub, pg.value)}
                 className={`side-link ${page === pg.value ? 'active' : ''}`}
                 aria-current={page === pg.value ? 'page' : undefined}
               >
@@ -192,33 +188,31 @@ export function SubjectSwitcher() {
   if (!sub) return null;
 
   const go = (target: Subject) => {
-    let next = 'overview';
-    if (page !== 'overview') {
-      if (target.type === 'car') next = 'documents';
-      else next = sub.type === 'person' ? page : 'health';
-    }
-    navigate(subjectPath(target.type, target.entity.id, next));
+    // Keep the same page when the target has it (Health → Health), else its closest.
+    const pages = pagesFor(target.subjectType).map((p) => p.value);
+    const next = pages.includes(page) ? page : page !== 'overview' && pages.includes('documents') ? 'documents' : 'overview';
+    navigate(subjectPath(target, next));
   };
 
   return (
-    <div className="switcher" role="group" aria-label="People and cars">
+    <div className="switcher" role="group" aria-label="Subjects">
       {allSubjects(s).map((x) => {
-        const sel = x.type === sub.type && x.entity.id === sub.entity.id;
+        const sel = x.id === sub.id;
         return (
           <button
-            key={x.entity.id}
+            key={x.id}
             type="button"
             className={`chip ${sel ? 'selected' : ''}`}
             aria-pressed={sel}
             onClick={() => go(x)}
           >
-            <Icon name={x.type} size={16} />
-            {x.type === 'person' ? x.entity.name : x.entity.makeModel}
+            <Icon name={subjectIcon(x)} size={16} />
+            {x.name}
             {subjectSub(x) && <span className="muted">{subjectSub(x)}</span>}
           </button>
         );
       })}
-      <button type="button" className="chip" aria-label="Add a person or car" onClick={() => openDialog(<SubjectChooser />)}>
+      <button type="button" className="chip" aria-label="Add a subject" onClick={() => openDialog(<SubjectChooser />)}>
         <Icon name="plus" size={16} />
       </button>
     </div>

@@ -43,7 +43,7 @@ export default function Routines() {
                       return (
                         <button key={a.id} type="button" className="chip assignee" onClick={() => openDialog(<RoutineDetailDialog assignmentId={a.id} />)}>
                           <span className={`dot tone-${st.tone}`} aria-hidden="true" />
-                          <strong>{subjectName(s, a.subjectType, a.subjectId)}</strong>
+                          <strong>{subjectName(s, a.subjectId)}</strong>
                           <span className={`tone-${st.tone}`}>{st.text}</span>
                         </button>
                       );

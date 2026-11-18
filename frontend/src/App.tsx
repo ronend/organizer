@@ -14,7 +14,7 @@ import Trips from './pages/Trips';
 import TripPage from './pages/TripPage';
 import Routines from './pages/Routines';
 import PersonPage from './pages/PersonPage';
-import CarPage from './pages/CarPage';
+import SubjectPage from './pages/SubjectPage';
 import Contacts from './pages/Contacts';
 import Documents from './pages/Documents';
 import './styles.css';
@@ -69,8 +69,11 @@ function Pages() {
         <Route path="/people/:id" element={<PersonPage page="overview" />} />
         <Route path="/people/:id/health" element={<PersonPage page="health" />} />
         <Route path="/people/:id/identity" element={<PersonPage page="identity" />} />
-        <Route path="/cars/:id" element={<CarPage page="overview" />} />
-        <Route path="/cars/:id/documents" element={<CarPage page="documents" />} />
+        <Route path="/cars/:id" element={<SubjectPage page="overview" />} />
+        <Route path="/cars/:id/documents" element={<SubjectPage page="documents" />} />
+        {/* Any other subject type from the registry. */}
+        <Route path="/subjects/:id" element={<SubjectPage page="overview" />} />
+        <Route path="/subjects/:id/documents" element={<SubjectPage page="documents" />} />
         <Route path="/contacts" element={<Contacts />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

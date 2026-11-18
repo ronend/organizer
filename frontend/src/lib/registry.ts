@@ -1,28 +1,51 @@
 /**
- * The subject and document registry — which subjects exist and which documents
- * each can hold. `registry.json` is a verbatim copy of backend/src/registry.json
- * (the backend's contract test fails if they drift); edit the backend file and
- * copy it here.
+ * The registry — which subjects exist, what they can hold, and every field
+ * definition. `registry.json` is a verbatim copy of backend/src/registry.json
+ * (the backend's tests fail if they drift); edit the backend file and copy it
+ * here. See data-structure.md.
  */
 import data from './registry.json';
-import type { DocKind, SubjectType } from '../types/coo';
+import type { DocCategory, FieldValue, Fields, ReservationType, RoutineArea, Subject, SubjectType } from '../types/coo';
 
-export interface Category {
+export type FieldType =
+  | 'text' | 'secret' | 'longtext' | 'url' | 'number' | 'date' | 'boolean' | 'select'
+  | 'contact' | 'subject' | 'subjects';
+
+export interface FieldDef {
+  key: string;
   label: string;
-  /** Short label for filters, e.g. "IDs". */
-  short: string;
+  type: FieldType;
+  required?: boolean;
+  unique?: boolean;
+  integer?: boolean;
+  options?: string[];
+  /** contact fields: contacts with one of these tags. */
+  tags?: string[];
+  /** subject(s) fields: subjects of this type. */
+  subjectType?: SubjectType;
+  normalize?: 'plate';
+  /** Offer values already used on other records (e.g. health episodes). */
+  suggest?: boolean;
+  deprecated?: boolean;
+}
+
+export type ObjectKind = 'task' | 'document' | 'assignment' | 'reservation';
+
+export interface SubjectTypeInfo {
+  /** Label of the name input, e.g. "Make and model". */
+  nameLabel: string;
+  namePlaceholder: string;
+  label: string;
   plural: string;
   icon: string;
-  area: string;
-  types: string[];
-  defaultType: string;
-  /** Document fields this category uses (see backend/src/documents.py FEATURE_FIELDS). */
-  features: string[];
-  /** Suggested detail rows per type. */
-  detailFields: Record<string, string[]>;
-  typeAliases: Record<string, string>;
-  providerGroups?: string[];
-  pin: { label: string; default: boolean };
+  attributes: FieldDef[];
+  allows: ObjectKind[];
+  documentCategories: DocCategory[];
+  routineAreas: RoutineArea[];
+  rules: { rule: 'dateOrder'; fields: [string, string] }[];
+}
+
+export interface CategoryRules {
   replaceOnLink: boolean;
   expiryDrivesRoutine: boolean;
   onePerType: boolean;
@@ -30,28 +53,96 @@ export interface Category {
   renewal: { remindDays: Record<string, number>; defaultRemindDays: number } | null;
 }
 
-export interface SubjectTypeInfo {
+export interface Category {
   label: string;
+  /** Short label for filters, e.g. "IDs". */
+  short: string;
   plural: string;
-  collection: string;
-  nameField: string;
   icon: string;
-  categories: DocKind[];
+  area: RoutineArea | null;
+  expiring: boolean;
+  /** Label of the expiry input, e.g. "Expiry date". */
+  expiryLabel: string;
+  /** Label of the document date input. */
+  dateLabel: string;
+  types: string[];
+  defaultType: string;
+  datedByDefault: boolean;
+  fileRoles: string[];
+  fields: FieldDef[];
+  typeFields: Record<string, FieldDef[]>;
+  typeAliases: Record<string, string>;
+  pin: { label: string; default: boolean };
+  /** Heading of the pinned documents section, e.g. "In the glovebox". */
+  pinnedTitle: string;
+  rules: CategoryRules;
 }
 
-export const SUBJECT_TYPES = data.subjectTypes as Record<SubjectType, SubjectTypeInfo>;
-export const CATEGORIES = data.categories as Record<DocKind, Category>;
-export const CATEGORY_KEYS = Object.keys(CATEGORIES) as DocKind[];
+export const SUBJECT_TYPES = data.subjectTypes as unknown as Record<SubjectType, SubjectTypeInfo>;
+export const SUBJECT_TYPE_KEYS = Object.keys(SUBJECT_TYPES) as SubjectType[];
+export const CATEGORIES = data.documentCategories as unknown as Record<DocCategory, Category>;
+export const CATEGORY_KEYS = Object.keys(CATEGORIES) as DocCategory[];
+export const RESERVATION_TYPES = data.reservationTypes as Record<ReservationType, { label: string; icon: string }>;
+export const RESERVATION_FIELDS = data.reservationFields as FieldDef[];
+export const ROUTINE_AREAS = data.routineAreas as Record<RoutineArea, { label: string; icon: string }>;
 
-export function category(kind: DocKind): Category {
+export function subjectType(t: SubjectType): SubjectTypeInfo {
+  return SUBJECT_TYPES[t];
+}
+
+export function category(kind: DocCategory): Category {
   return CATEGORIES[kind];
 }
 
-export function remindDefault(kind: DocKind, type: string): number {
-  const r = CATEGORIES[kind].renewal;
+/** A category's fields plus those of the given type (the type's win on a clash). */
+export function categoryFields(kind: DocCategory, type: string | null | undefined): FieldDef[] {
+  const c = CATEGORIES[kind];
+  const out = new Map(c.fields.map((f) => [f.key, f]));
+  for (const f of c.typeFields[type ?? ''] ?? []) out.set(f.key, f);
+  return [...out.values()].filter((f) => !f.deprecated);
+}
+
+/** Fields that belong to the type only (e.g. a passport's nationality). */
+export function typeFields(kind: DocCategory, type: string): FieldDef[] {
+  return (CATEGORIES[kind].typeFields[type] ?? []).filter((f) => !f.deprecated);
+}
+
+export function remindDefault(kind: DocCategory, type: string): number {
+  const r = CATEGORIES[kind].rules.renewal;
   return r ? (r.remindDays[type] ?? r.defaultRemindDays) : 90;
 }
 
-export function detailFields(kind: DocKind, type: string): string[] {
-  return CATEGORIES[kind].detailFields[type] ?? [];
+export function allows(t: SubjectType, kind: ObjectKind): boolean {
+  return SUBJECT_TYPES[t].allows.includes(kind);
+}
+
+// ── values ──────────────────────────────────────────────────────────────────
+
+export function fieldText(fields: Fields, key: string): string {
+  const v = fields[key];
+  return typeof v === 'string' ? v : v == null ? '' : String(v);
+}
+
+export function fieldNumber(fields: Fields, key: string): number | null {
+  const v = fields[key];
+  return typeof v === 'number' ? v : null;
+}
+
+export function fieldList(fields: Fields, key: string): string[] {
+  const v = fields[key];
+  return Array.isArray(v) ? v : [];
+}
+
+/** Drops empty values; stored records only keep what's filled in. */
+export function compactFields(fields: Fields): Fields {
+  const out: Fields = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0)) continue;
+    out[k] = v as FieldValue;
+  }
+  return out;
+}
+
+export function attr(sub: Subject, key: string): string {
+  return fieldText(sub.attributes, key);
 }

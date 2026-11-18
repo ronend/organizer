@@ -2,12 +2,14 @@
  * Local mock backend (VITE_LOCAL_MOCK=1). Persists to localStorage so the UI
  * can be exercised without AWS. Files are kept as data URLs.
  */
-import type { ChangeSet, CooState, Document, Entity, EntityKind, FileRef } from '../types/coo';
+import type { ChangeSet, CooState, Document, Entity, FileRef } from '../types/coo';
+import { COLLECTION } from '../types/coo';
 import type { SaveDocumentRequest, SaveDocumentResult } from './client';
 import { Tx, makeDocument, renewalRoutineForId, saveDocument } from '../lib/ops';
 import { category, remindDefault } from '../lib/registry';
 
-const STATE_KEY = 'coo.mock.state';
+// v2 data model; the v1 key (`coo.mock.state`) is left alone.
+const STATE_KEY = 'coo.mock.v2.state';
 const FILE_PREFIX = 'coo.mock.file.';
 
 type Store = Record<string, Entity>;
@@ -24,25 +26,13 @@ function save(store: Store) {
   localStorage.setItem(STATE_KEY, JSON.stringify(store));
 }
 
-const COLLECTION: Record<EntityKind, keyof CooState> = {
-  person: 'people',
-  car: 'cars',
-  contact: 'contacts',
-  routine: 'routines',
-  assignment: 'assignments',
-  task: 'tasks',
-  document: 'documents',
-  trip: 'trips',
-  reservation: 'reservations',
-};
 
 const delay = () => new Promise((r) => setTimeout(r, 60));
 
 export async function mockState(): Promise<CooState> {
   await delay();
   const state: CooState = {
-    people: [], cars: [], contacts: [], routines: [], assignments: [],
-    tasks: [], documents: [], trips: [], reservations: [],
+    subjects: [], tasks: [], documents: [], reservations: [], routines: [], assignments: [], contacts: [],
   };
   for (const e of Object.values(load())) {
     (state[COLLECTION[e.kind]] as Entity[]).push(e);
@@ -75,31 +65,30 @@ export async function mockSaveDocument(req: SaveDocumentRequest): Promise<SaveDo
   if (prev) {
     d = { ...prev, ...f } as Document;
   } else {
-    if (!f.docKind || !f.subjectType || !f.subjectId) throw new Error('A new document needs subjectType, subjectId, docKind');
-    const cat = category(f.docKind);
+    if (!f.category || !f.subjectId) throw new Error('A new document needs subjectId and category');
+    const cat = category(f.category);
     d = makeDocument({
       ...f,
-      docKind: f.docKind,
-      subjectType: f.subjectType,
+      category: f.category,
       subjectId: f.subjectId,
-      name: (f.name ?? '').trim(),
+      title: (f.title ?? '').trim(),
       type: f.type || cat.defaultType,
       pinned: f.pinned ?? cat.pin.default,
-      date: f.date !== undefined ? f.date : cat.features.includes('date') ? (req.today ?? null) : null,
+      date: f.date !== undefined ? f.date : cat.datedByDefault ? (req.today ?? null) : null,
     });
   }
-  if (!d.name.trim()) throw new Error('A document needs a name');
+  if (!d.title.trim()) throw new Error('A document needs a title');
   const tx = new Tx(s);
   const summary: SaveDocumentResult['summary'] = {};
-  if (req.renewal && !d.assignmentId && d.validUntil) {
-    const { assignment, firstDate } = renewalRoutineForId(s, d, req.renewal.remindDays ?? remindDefault(d.docKind, d.type), tx);
+  if (req.renewal && !d.assignmentId && d.expiry) {
+    const { assignment, firstDate } = renewalRoutineForId(s, d, req.renewal.remindDays ?? remindDefault(d.category, d.type), tx);
     d = { ...d, assignmentId: assignment.id };
     summary.remindersPlannedFrom = firstDate;
   }
   const archivedBefore = new Set(s.documents.filter((o) => o.archived).map((o) => o.id));
   const changes = saveDocument(s, d, { closeTaskId: req.closeTaskId }, tx);
   const archived = changes.put.filter((e): e is Document => e.kind === 'document' && e.id !== d.id && e.archived && !archivedBefore.has(e.id));
-  if (archived.length) summary.archivedOlder = archived.map((o) => o.name);
+  if (archived.length) summary.archivedOlder = archived.map((o) => o.title);
   await mockBatch(changes);
   const now = new Date().toISOString();
   const stamped = { ...changes, put: changes.put.map((e) => ({ ...e, updatedAt: now })) };

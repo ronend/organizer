@@ -15,14 +15,18 @@ import {
   subjectName,
   suggestedNextDate,
   taskWho,
+  assignmentIdOf,
+  findSubject,
+  reservationIdOf,
+  stepKindOf,
 } from '../lib/model';
-import { bookAppointment, completeCycle, logRefill, setSubtaskDone, setTaskDone } from '../lib/ops';
+import { bookAppointment, completeCycle, logRefill, setTaskDone } from '../lib/ops';
 import { ReservationFormDialog } from './TripDialogs';
 
 export function AppointmentDialog({ task }: { task: Task }) {
   const { s, apply } = useStore();
   const { closeDialog } = useUI();
-  const a = assignmentById(s, task.assignmentId);
+  const a = assignmentById(s, assignmentIdOf(task));
   const r = routineOf(s, a);
   const prepDefault = (r && a ? effectivePlan(r, a) : []).find((p) => p.kind === 'schedule')?.prep ?? '';
   const [date, setDate] = useState(addDays(today(), 7));
@@ -72,7 +76,7 @@ export function AppointmentDialog({ task }: { task: Task }) {
       <Field
         label="Prep notes"
         optional
-        hint={task.subjectType === 'person' ? 'A “Prepare” reminder is added the day before.' : undefined}
+        hint={findSubject(s, task.subjectId)?.subjectType === 'person' ? 'A “Prepare” reminder is added the day before.' : undefined}
       >
         {(id) => <textarea id={id} rows={2} value={prep} onChange={(e) => setPrep(e.target.value)} />}
       </Field>
@@ -83,7 +87,7 @@ export function AppointmentDialog({ task }: { task: Task }) {
 export function RenewDialog({ task }: { task: Task }) {
   const { s, apply } = useStore();
   const { closeDialog } = useUI();
-  const a = assignmentById(s, task.assignmentId)!;
+  const a = assignmentById(s, assignmentIdOf(task))!;
   const r = routineOf(s, a)!;
   const doneOn = task.appointment && task.date && task.date < today() ? task.date : today();
   const [date, setDate] = useState(suggestedNextDate(r, a, doneOn) ?? '');
@@ -99,7 +103,7 @@ export function RenewDialog({ task }: { task: Task }) {
 
   return (
     <Dialog
-      eyebrow={`${subjectName(s, a.subjectType, a.subjectId)} · ${r.title}`}
+      eyebrow={`${subjectName(s, a.subjectId)} · ${r.title}`}
       title={renewQuestion(r)}
       onSubmit={submit}
       actions={<FormActions submit="Save and plan next" />}
@@ -132,7 +136,7 @@ export function RefillDialog({ assignment, task }: { assignment: Assignment; tas
 
   return (
     <Dialog
-      eyebrow={`${subjectName(s, assignment.subjectType, assignment.subjectId)} · ${r.title}`}
+      eyebrow={`${subjectName(s, assignment.subjectId)} · ${r.title}`}
       title="Log refill picked up"
       onSubmit={submit}
       actions={<FormActions submit="Log refill" />}
@@ -158,35 +162,33 @@ export function useCompleteTask() {
   const { openDialog } = useUI();
   return useCallback(
     (t: Task) => {
-      // A dated sub-task shown on the Agenda: ticks just that sub-task.
-      if (isSubItem(t)) {
-        apply(setSubtaskDone(s, t.parent, t.sub.id, !t.done), {
-          toast: `${t.done ? 'Reopened' : 'Done'} · ${t.title}`,
-          undo: true,
-        });
+      // A sub-task (on the Agenda or in a list): ticks just that sub-task.
+      if (isSubItem(t) || t.parentId) {
+        apply(setTaskDone(s, t, !t.done), { toast: `${t.done ? 'Reopened' : 'Done'} · ${t.title}`, undo: true });
         return;
       }
       if (t.done) {
         apply(setTaskDone(s, t, false), { toast: `Reopened · ${t.title}`, undo: true });
         return;
       }
-      if (t.tripTask === 'book' && t.reservationId) {
-        const res = s.reservations.find((x) => x.id === t.reservationId);
+      if (t.source?.kind === 'reservation' && t.source.step === 'book') {
+        const res = s.reservations.find((x) => x.id === reservationIdOf(t));
         if (res) {
-          openDialog(<ReservationFormDialog tripId={res.tripId} reservation={res} forceBooked closeTaskId={t.id} />);
+          openDialog(<ReservationFormDialog tripId={res.subjectId} reservation={res} forceBooked closeTaskId={t.id} />);
           return;
         }
       }
-      const a = assignmentById(s, t.assignmentId);
-      if (a && t.stepKind === 'schedule') {
+      const a = assignmentById(s, assignmentIdOf(t));
+      const step = stepKindOf(t);
+      if (a && step === 'schedule') {
         openDialog(<AppointmentDialog task={t} />);
         return;
       }
-      if (a && t.stepKind === 'pickup' && a.supply) {
+      if (a && step === 'pickup' && a.supply) {
         openDialog(<RefillDialog assignment={a} task={t} />);
         return;
       }
-      if (a && t.stepKind === 'renew') {
+      if (a && step === 'renew') {
         if (!a.repeatMonths) {
           apply(completeCycle(s, t, null), { toast: `Done · ${t.title}`, undo: true });
         } else {

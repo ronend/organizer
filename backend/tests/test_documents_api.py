@@ -54,7 +54,6 @@ def test_registry_endpoint_matches_source(client):
     assert got["version"] == 2 and "trip" in got["subjectTypes"]
 
 
-@pytest.mark.skip(reason="frontend/src/lib/registry.json is updated in the frontend v2 step")
 def test_frontend_registry_is_a_verbatim_copy():
     src = json.loads((ROOT / "backend/src/registry.json").read_text())
     copy = json.loads((ROOT / "frontend/src/lib/registry.json").read_text())

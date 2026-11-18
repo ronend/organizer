@@ -6,7 +6,9 @@ import { MOCK } from '../api/client';
 import { CountCircle, PageHead, SectionHead } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { AddTaskDialog } from '../dialogs/TaskDialogs';
-import { CarDialog, PersonDialog } from '../dialogs/SubjectDialogs';
+import { SubjectDialog } from '../dialogs/SubjectDialogs';
+import { SIDEBAR_TYPES } from '../components/Shell';
+import { SUBJECT_TYPES } from '../lib/registry';
 import { TripDialog } from '../dialogs/TripDialogs';
 import { fmtLongToday, greeting, plural, daysFromToday } from '../lib/dates';
 import {
@@ -16,12 +18,14 @@ import {
   isUpcomingTrip,
   subjectPath,
   subjectSub,
-  tasksForSubject,
   tripDates,
   tripReservations,
   tripWhen,
   urgencyCompare,
-  withSubtaskItems,
+  agendaTasks,
+  subjectIcon,
+  trips as tripsOf,
+  tripInfo,
   type Indicators,
 } from '../lib/model';
 import { loadDemoData } from '../lib/seed';
@@ -73,11 +77,11 @@ export default function Home() {
   const navigate = useNavigate();
 
   const subjects = allSubjects(s)
-    .map((x) => ({ x, ind: indicators(tasksForSubject(s, x.type, x.entity.id)) }))
+    .map((x) => ({ x, ind: indicators(s.tasks.filter((t) => t.subjectId === x.id)) }))
     .sort((a, b) => urgencyCompare(a.ind, b.ind));
   const general = indicators(s.tasks.filter(isGeneral));
-  const trips = s.trips.filter(isUpcomingTrip).sort((a, b) => a.start.localeCompare(b.start));
-  const empty = s.people.length === 0 && s.cars.length === 0 && s.trips.length === 0 && s.tasks.length === 0;
+  const trips = tripsOf(s).filter(isUpcomingTrip).sort((a, b) => tripInfo(a).start.localeCompare(tripInfo(b).start));
+  const empty = s.subjects.length === 0 && s.tasks.length === 0;
 
   return (
     <div className="page">
@@ -119,15 +123,15 @@ export default function Home() {
       )}
 
       <section className="section">
-        <SectionHead title="Everyone and everything" count={s.people.length + s.cars.length} />
+        <SectionHead title="Everyone and everything" count={subjects.length} />
         <div className="tile-grid">
           {subjects.map(({ x, ind }) => (
             <StatusTile
-              key={x.entity.id}
-              icon={x.type}
-              title={x.type === 'person' ? x.entity.name : x.entity.makeModel}
+              key={x.id}
+              icon={subjectIcon(x)}
+              title={x.name}
               sub={subjectSub(x)}
-              onClick={() => navigate(subjectPath(x.type, x.entity.id))}
+              onClick={() => navigate(subjectPath(x))}
             >
               <IndicatorRow ind={ind} />
             </StatusTile>
@@ -145,7 +149,7 @@ export default function Home() {
             {trips.map((t) => {
               const when = tripWhen(t);
               const notBooked = tripReservations(s, t).filter((r) => r.status === 'planned').length;
-              const reminders = withSubtaskItems(s.tasks).filter((x) => x.tripId === t.id && !x.done && x.date && daysFromToday(x.date) <= 14).length;
+              const reminders = agendaTasks(s.tasks).filter((x) => x.subjectId === t.id && !x.done && x.date && daysFromToday(x.date) <= 14).length;
               return (
                 <StatusTile key={t.id} icon="suitcase" title={t.name} sub={tripDates(t, true)} onClick={() => navigate(`/trips/${t.id}`)}>
                   <div className="indicators">
@@ -166,12 +170,11 @@ export default function Home() {
 
       <section className="section">
         <div className="tile-grid add-grid">
-          <button type="button" className="tile dashed" onClick={() => openDialog(<PersonDialog />)}>
-            <Icon name="plus" /> Add person
-          </button>
-          <button type="button" className="tile dashed" onClick={() => openDialog(<CarDialog />)}>
-            <Icon name="plus" /> Add car
-          </button>
+          {SIDEBAR_TYPES.map((t) => (
+            <button key={t} type="button" className="tile dashed" onClick={() => openDialog(<SubjectDialog subjectType={t} />)}>
+              <Icon name="plus" /> Add {SUBJECT_TYPES[t].label.toLowerCase()}
+            </button>
+          ))}
           <button type="button" className="tile dashed" onClick={() => openDialog(<TripDialog />)}>
             <Icon name="plus" /> Plan a trip
           </button>

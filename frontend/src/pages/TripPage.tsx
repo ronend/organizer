@@ -7,17 +7,22 @@ import { Empty, IconButton, PageHead, Segmented, SectionHead, StatusText } from 
 import { Icon } from '../components/Icon';
 import { ReservationDetailDialog, ReservationFormDialog, TicketViewer, TripDialog } from '../dialogs/TripDialogs';
 import { fmtDateTime, fmtDayHeading, plural, timePart, today } from '../lib/dates';
-import { nights, passportStatus, subjectPath, tripDates, tripReservations } from '../lib/model';
-import { RES_ORDER, RES_TYPES, buildTimeline, siteName } from '../lib/reservations';
+import { attachmentsOf, findSubject, nights, passportStatus, subjectPath, tripDates, tripInfo, tripReservations } from '../lib/model';
+import { DocList } from '../components/SubjectParts';
+import { DocFormFor } from '../dialogs/DocDialogs';
+import { RES_ORDER, RES_TYPES, buildTimeline, resField, siteName } from '../lib/reservations';
 
 function ResActions({ r }: { r: Reservation }) {
   const ui = useUI();
+  const { s } = useStore();
+  const link = resField(r, 'link');
+  const hasTickets = attachmentsOf(s, 'reservation', r.id).length > 0 || !!resField(r, 'confirmation');
   return (
     <span className="row-actions">
-      {(r.files.length > 0 || r.confirmation) && (
+      {hasTickets && (
         <IconButton icon="ticket" label={`Show tickets for ${r.title}`} onClick={() => ui.openViewer(<TicketViewer reservationId={r.id} />)} />
       )}
-      {r.link && <IconButton icon="link" label={`Open link for ${r.title} (${siteName(r.link)})`} href={r.link} />}
+      {link && <IconButton icon="link" label={`Open link for ${r.title} (${siteName(link)})`} href={link} />}
     </span>
   );
 }
@@ -25,7 +30,8 @@ function ResActions({ r }: { r: Reservation }) {
 function EventRow({ r, time, label }: { r: Reservation; time: string; label: string | null }) {
   const ui = useUI();
   const meta = RES_TYPES[r.type];
-  const metaLine = [label, label === meta.endWord ? '' : r.address, r.confirmation ? `Ref ${r.confirmation}` : ''].filter(Boolean).join(' · ');
+  const confirmation = resField(r, 'confirmation');
+  const metaLine = [label, label === meta.endWord ? '' : resField(r, 'address'), confirmation ? `Ref ${confirmation}` : ''].filter(Boolean).join(' · ');
   return (
     <li className="row event-row">
       <span className="event-time">{time}</span>
@@ -48,8 +54,11 @@ export default function TripPage() {
   const ui = useUI();
   const navigate = useNavigate();
   const [view, setView] = useState<'timeline' | 'type'>('timeline');
-  const trip = s.trips.find((t) => t.id === id);
-  if (!trip) return <Navigate to="/trips" replace />;
+  const trip = findSubject(s, id);
+  if (!trip || trip.subjectType !== 'trip') return <Navigate to="/trips" replace />;
+  const info = tripInfo(trip);
+  // The trip's own files (not tickets attached to a reservation).
+  const files = s.documents.filter((d) => d.subjectId === trip.id && !d.attachedTo && !d.archived);
   const res = tripReservations(s, trip);
   const notBooked = res.filter((r) => r.status === 'planned').length;
   const n = nights(trip);
@@ -59,7 +68,7 @@ export default function TripPage() {
   return (
     <div className="page">
       <PageHead
-        eyebrow={[tripDates(trip), plural(n, 'night'), trip.destination].filter(Boolean).join(' · ')}
+        eyebrow={[tripDates(trip), plural(n, 'night'), info.destination].filter(Boolean).join(' · ')}
         title={trip.name}
         actions={
           <>
@@ -78,17 +87,17 @@ export default function TripPage() {
       </p>
 
       <section className="section">
-        <SectionHead title="Travelers and passports" count={trip.travelers.length} />
-        {trip.travelers.length === 0 ? (
+        <SectionHead title="Travelers and passports" count={info.travelers.length} />
+        {info.travelers.length === 0 ? (
           <Empty>No travelers yet. Edit the trip to say who is going.</Empty>
         ) : (
           <div className="chip-row">
-            {trip.travelers.map((pid) => {
-              const p = s.people.find((x) => x.id === pid);
+            {info.travelers.map((pid) => {
+              const p = findSubject(s, pid);
               if (!p) return null;
               const st = passportStatus(s, pid, trip);
               return (
-                <button key={pid} type="button" className="chip traveler" onClick={() => navigate(subjectPath('person', pid, 'identity'))}>
+                <button key={pid} type="button" className="chip traveler" onClick={() => navigate(subjectPath(p, 'identity'))}>
                   <strong>{p.name}</strong>
                   <StatusText tone={st.tone} text={st.text} />
                 </button>
@@ -96,6 +105,19 @@ export default function TripPage() {
             })}
           </div>
         )}
+      </section>
+
+      <section className="section">
+        <SectionHead
+          title="Files"
+          count={files.length}
+          action={
+            <button type="button" className="link" onClick={() => ui.openDialog(<DocFormFor category="attachment" subjectId={trip.id} />)}>
+              Add a file
+            </button>
+          }
+        />
+        {files.length === 0 ? <Empty>Itineraries, visas and anything else for the whole trip.</Empty> : <DocList docs={files} />}
       </section>
 
       <div className="toolbar">
@@ -169,7 +191,7 @@ export default function TripPage() {
                           <span className="row-meta">
                             {fmtDateTime(r.start)}
                             {r.end ? ` – ${r.end.slice(0, 10) === r.start.slice(0, 10) ? timePart(r.end) : fmtDateTime(r.end)}` : ''}
-                            {r.confirmation ? ` · Ref ${r.confirmation}` : ''}
+                            {resField(r, 'confirmation') ? ` · Ref ${resField(r, 'confirmation')}` : ''}
                           </span>
                         </span>
                       </button>

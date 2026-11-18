@@ -15,12 +15,13 @@ import {
   bucketOf,
   byDate,
   isGeneral,
-  isSubItem,
-  withSubtaskItems,
+  agendaTasks,
+  subjectLabel,
+  trips as tripsOf,
   type Bucket,
 } from '../lib/model';
 import { addDays, fmtDate, today, weekday } from '../lib/dates';
-import { moveTask, nextOrder, updateSubtask } from '../lib/ops';
+import { moveTask, nextOrder } from '../lib/ops';
 
 const EMPTY_TEXT: Record<Bucket, string> = {
   overdue: 'Nothing overdue.',
@@ -79,15 +80,16 @@ export default function Agenda() {
     setParams(n, { replace: true });
   };
 
+  // `for` is a subject id (older links were "<type>:<id>").
+  const forId = filter.includes(':') ? filter.split(':')[1] : filter;
   const matches = (t: Task) => {
     if (filter === 'all') return true;
     if (filter === 'general') return isGeneral(t);
-    const [type, id] = filter.split(':');
-    return t.subjectType === type && t.subjectId === id;
+    return t.subjectId === forId;
   };
 
-  // Dated sub-tasks are agenda items of their own (see withSubtaskItems).
-  const items = useMemo(() => withSubtaskItems(s.tasks), [s.tasks]);
+  // Dated sub-tasks are agenda items of their own (see agendaTasks).
+  const items = useMemo(() => agendaTasks(s.tasks), [s.tasks]);
   const open = useMemo(() => items.filter((t) => !t.done && matches(t)).sort(byDate), [items, filter]); // eslint-disable-line react-hooks/exhaustive-deps
   const sections = useMemo(
     () => BUCKETS.map((b) => ({ bucket: b, tasks: open.filter((t) => bucketOf(t.date) === b) })),
@@ -103,9 +105,7 @@ export default function Agenda() {
     const p = placement(bucket, others, index);
     const curIndex = sections.find((x) => x.bucket === bucket)!.tasks.findIndex((t) => t.id === task.id);
     if (curIndex === index && bucketOf(task.date) === bucket) return; // dropped in place
-    const changes = isSubItem(task)
-      ? updateSubtask(s, task.parent, task.sub.id, { date: p.date, order: p.order })
-      : moveTask(s, task, p.date, p.order);
+    const changes = moveTask(s, task, p.date, p.order);
     apply(changes, { toast: moveToast(task.date, p.date), undo: true });
   };
 
@@ -231,7 +231,7 @@ export default function Agenda() {
   }, [drag?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const active = drag?.active ? drag : null;
-  const initialFor = filter.includes(':') ? filter : '';
+  const initialFor = filter !== 'all' && filter !== 'general' ? forId : '';
 
   return (
     <div className={`page ${active ? 'is-dragging' : ''}`}>
@@ -257,9 +257,9 @@ export default function Agenda() {
         <select aria-label="Filter" className="filter-select" value={filter} onChange={(e) => setParam('for', e.target.value === 'all' ? null : e.target.value)}>
           <option value="all">Everything</option>
           <option value="general">General tasks</option>
-          {allSubjects(s).map((x) => (
-            <option key={x.entity.id} value={`${x.type}:${x.entity.id}`}>
-              {x.type === 'person' ? x.entity.name : `${x.entity.makeModel} · ${x.entity.plate}`}
+          {[...allSubjects(s), ...tripsOf(s)].map((x) => (
+            <option key={x.id} value={x.id}>
+              {subjectLabel(x)}
             </option>
           ))}
         </select>

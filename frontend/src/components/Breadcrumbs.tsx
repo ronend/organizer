@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useStore } from '../store/Store';
-import { subjectPath } from '../lib/model';
+import { findSubject, subjectPath } from '../lib/model';
 import { Icon } from './Icon';
 
 interface Crumb {
@@ -30,14 +30,16 @@ export function useCrumbs(): Crumb[] {
   if (first in TOP) {
     crumbs.push({ label: TOP[first], to: `/${first}` });
     if (first === 'trips' && id) {
-      crumbs.push({ label: s.trips.find((t) => t.id === id)?.name ?? 'Trip', to: `/trips/${id}` });
+      crumbs.push({ label: findSubject(s, id)?.name ?? 'Trip', to: `/trips/${id}` });
     }
-  } else if (first === 'people' || first === 'cars') {
-    const type = first === 'people' ? 'person' : 'car';
-    const name =
-      type === 'person' ? s.people.find((p) => p.id === id)?.name : s.cars.find((c) => c.id === id)?.makeModel;
-    crumbs.push({ label: name ?? (type === 'person' ? 'Person' : 'Car'), to: subjectPath(type, id) });
-    if (page && SUBPAGE[page]) crumbs.push({ label: SUBPAGE[page], to: subjectPath(type, id, page) });
+  } else if (first === 'people' || first === 'cars' || first === 'subjects') {
+    const sub = findSubject(s, id);
+    if (sub) {
+      crumbs.push({ label: sub.name, to: subjectPath(sub) });
+      if (page && SUBPAGE[page]) crumbs.push({ label: SUBPAGE[page], to: subjectPath(sub, page) });
+    } else {
+      crumbs.push({ label: 'Not found' });
+    }
   }
   // The last crumb is the current page: not a link.
   delete crumbs[crumbs.length - 1].to;

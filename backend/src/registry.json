@@ -2,6 +2,8 @@
   "version": 2,
   "subjectTypes": {
     "person": {
+      "nameLabel": "Name",
+      "namePlaceholder": "Alex",
       "label": "Person",
       "plural": "People",
       "icon": "person",
@@ -14,6 +16,8 @@
       "rules": []
     },
     "car": {
+      "nameLabel": "Make and model",
+      "namePlaceholder": "Honda Civic",
       "label": "Car",
       "plural": "Cars",
       "icon": "car",
@@ -27,6 +31,8 @@
       "rules": []
     },
     "trip": {
+      "nameLabel": "Trip name",
+      "namePlaceholder": "Lisbon and Sintra",
       "label": "Trip",
       "plural": "Trips",
       "icon": "suitcase",
@@ -50,6 +56,8 @@
       "icon": "idcard",
       "area": "identity",
       "expiring": true,
+      "expiryLabel": "Expiry date",
+      "dateLabel": "Date",
       "types": ["Passport", "Driver license", "City or state ID", "Birth certificate", "Social Security card", "Visa or residence card", "Other"],
       "defaultType": "Passport",
       "datedByDefault": false,
@@ -105,6 +113,7 @@
         "green card": "Visa or residence card"
       },
       "pin": { "label": "Keep handy", "default": false },
+      "pinnedTitle": "Keep handy",
       "rules": {
         "replaceOnLink": true,
         "expiryDrivesRoutine": true,
@@ -123,14 +132,16 @@
       "icon": "stethoscope",
       "area": "health",
       "expiring": false,
+      "expiryLabel": "Valid until",
+      "dateLabel": "Document date",
       "types": ["Result", "Referral", "Prescription", "Visit summary", "Imaging", "Vaccination record", "Insurance", "Other"],
       "defaultType": "Other",
       "datedByDefault": true,
       "fileRoles": [],
       "fields": [
         { "key": "providerId", "label": "Provider", "type": "contact", "tags": ["health", "other"] },
-        { "key": "about", "label": "About", "type": "longtext" },
-        { "key": "episode", "label": "Episode", "type": "text" }
+        { "key": "about", "label": "What this is about", "type": "longtext" },
+        { "key": "episode", "label": "Episode", "type": "text", "suggest": true }
       ],
       "typeFields": {},
       "typeAliases": {
@@ -147,6 +158,7 @@
         "vaccine": "Vaccination record"
       },
       "pin": { "label": "Keep handy on this page", "default": false },
+      "pinnedTitle": "Keep handy",
       "rules": { "replaceOnLink": false, "expiryDrivesRoutine": false, "onePerType": false, "onePerTypeExempt": [], "renewal": null }
     },
     "car": {
@@ -156,6 +168,8 @@
       "icon": "document",
       "area": "car",
       "expiring": true,
+      "expiryLabel": "Valid until",
+      "dateLabel": "Date",
       "types": ["ID card", "Policy", "Registration", "Inspection", "Receipt", "Photo", "Other"],
       "defaultType": "ID card",
       "datedByDefault": false,
@@ -179,6 +193,7 @@
         "picture": "Photo"
       },
       "pin": { "label": "Keep in the glovebox", "default": true },
+      "pinnedTitle": "In the glovebox",
       "rules": { "replaceOnLink": true, "expiryDrivesRoutine": false, "onePerType": false, "onePerTypeExempt": [], "renewal": null }
     },
     "attachment": {
@@ -188,6 +203,8 @@
       "icon": "document",
       "area": null,
       "expiring": false,
+      "expiryLabel": "Valid until",
+      "dateLabel": "Date",
       "types": ["File"],
       "defaultType": "File",
       "datedByDefault": false,
@@ -196,6 +213,7 @@
       "typeFields": {},
       "typeAliases": {},
       "pin": { "label": "Keep handy", "default": false },
+      "pinnedTitle": "Keep handy",
       "rules": { "replaceOnLink": false, "expiryDrivesRoutine": false, "onePerType": false, "onePerTypeExempt": [], "renewal": null }
     }
   },

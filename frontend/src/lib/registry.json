@@ -1,39 +1,102 @@
 {
+  "version": 2,
   "subjectTypes": {
     "person": {
+      "nameLabel": "Name",
+      "namePlaceholder": "Alex",
       "label": "Person",
       "plural": "People",
-      "collection": "people",
-      "nameField": "name",
       "icon": "person",
-      "categories": ["identity", "health"]
+      "attributes": [
+        { "key": "birthYear", "label": "Birth year", "type": "number", "integer": true }
+      ],
+      "allows": ["task", "document", "assignment"],
+      "documentCategories": ["identity", "health", "attachment"],
+      "routineAreas": ["health", "identity"],
+      "rules": []
     },
     "car": {
+      "nameLabel": "Make and model",
+      "namePlaceholder": "Honda Civic",
       "label": "Car",
       "plural": "Cars",
-      "collection": "cars",
-      "nameField": "makeModel",
       "icon": "car",
-      "categories": ["car"]
+      "attributes": [
+        { "key": "plate", "label": "Plate", "type": "text", "required": true, "unique": true, "normalize": "plate" },
+        { "key": "odometer", "label": "Odometer", "type": "number" }
+      ],
+      "allows": ["task", "document", "assignment"],
+      "documentCategories": ["car", "attachment"],
+      "routineAreas": ["car"],
+      "rules": []
+    },
+    "trip": {
+      "nameLabel": "Trip name",
+      "namePlaceholder": "Lisbon and Sintra",
+      "label": "Trip",
+      "plural": "Trips",
+      "icon": "suitcase",
+      "attributes": [
+        { "key": "destination", "label": "Destination", "type": "text" },
+        { "key": "start", "label": "Start", "type": "date", "required": true },
+        { "key": "end", "label": "End", "type": "date", "required": true },
+        { "key": "travelers", "label": "Travelers", "type": "subjects", "subjectType": "person" }
+      ],
+      "allows": ["task", "document", "reservation"],
+      "documentCategories": ["attachment"],
+      "routineAreas": [],
+      "rules": [{ "rule": "dateOrder", "fields": ["start", "end"] }]
     }
   },
-  "categories": {
+  "documentCategories": {
     "identity": {
       "label": "Identity",
       "short": "IDs",
       "plural": "IDs",
       "icon": "idcard",
       "area": "identity",
+      "expiring": true,
+      "expiryLabel": "Expiry date",
+      "dateLabel": "Date",
       "types": ["Passport", "Driver license", "City or state ID", "Birth certificate", "Social Security card", "Visa or residence card", "Other"],
       "defaultType": "Passport",
-      "features": ["idNumber", "issuer", "issueDate", "validUntil", "details", "front", "back"],
-      "detailFields": {
-        "Passport": ["Full name", "Nationality", "Place of birth", "Date of birth"],
-        "Driver license": ["Full name", "Class", "Restrictions and endorsements", "Date of birth"],
-        "City or state ID": ["Full name", "Date of birth"],
-        "Birth certificate": ["Full name", "Place of birth", "Date of birth"],
-        "Social Security card": ["Full name"],
-        "Visa or residence card": ["Full name", "Category", "Nationality"]
+      "datedByDefault": false,
+      "fileRoles": ["front", "back"],
+      "fields": [
+        { "key": "idNumber", "label": "ID number", "type": "secret" },
+        { "key": "issuer", "label": "Issued by", "type": "text" },
+        { "key": "issueDate", "label": "Issued", "type": "date" }
+      ],
+      "typeFields": {
+        "Passport": [
+          { "key": "fullName", "label": "Full name", "type": "text" },
+          { "key": "nationality", "label": "Nationality", "type": "text" },
+          { "key": "placeOfBirth", "label": "Place of birth", "type": "text" },
+          { "key": "dateOfBirth", "label": "Date of birth", "type": "text" }
+        ],
+        "Driver license": [
+          { "key": "fullName", "label": "Full name", "type": "text" },
+          { "key": "licenseClass", "label": "Class", "type": "text" },
+          { "key": "restrictions", "label": "Restrictions and endorsements", "type": "text" },
+          { "key": "dateOfBirth", "label": "Date of birth", "type": "text" }
+        ],
+        "City or state ID": [
+          { "key": "fullName", "label": "Full name", "type": "text" },
+          { "key": "dateOfBirth", "label": "Date of birth", "type": "text" }
+        ],
+        "Birth certificate": [
+          { "key": "fullName", "label": "Full name", "type": "text" },
+          { "key": "placeOfBirth", "label": "Place of birth", "type": "text" },
+          { "key": "dateOfBirth", "label": "Date of birth", "type": "text" }
+        ],
+        "Social Security card": [
+          { "key": "fullName", "label": "Full name", "type": "text" }
+        ],
+        "Visa or residence card": [
+          { "key": "fullName", "label": "Full name", "type": "text" },
+          { "key": "visaCategory", "label": "Category", "type": "text" },
+          { "key": "nationality", "label": "Nationality", "type": "text" }
+        ]
       },
       "typeAliases": {
         "license": "Driver license",
@@ -50,13 +113,16 @@
         "green card": "Visa or residence card"
       },
       "pin": { "label": "Keep handy", "default": false },
-      "replaceOnLink": true,
-      "expiryDrivesRoutine": true,
-      "onePerType": true,
-      "onePerTypeExempt": ["Other"],
-      "renewal": {
-        "remindDays": { "Passport": 180, "Driver license": 60, "City or state ID": 60 },
-        "defaultRemindDays": 90
+      "pinnedTitle": "Keep handy",
+      "rules": {
+        "replaceOnLink": true,
+        "expiryDrivesRoutine": true,
+        "onePerType": true,
+        "onePerTypeExempt": ["Other"],
+        "renewal": {
+          "remindDays": { "Passport": 180, "Driver license": 60, "City or state ID": 60 },
+          "defaultRemindDays": 90
+        }
       }
     },
     "health": {
@@ -65,10 +131,19 @@
       "plural": "Health documents",
       "icon": "stethoscope",
       "area": "health",
+      "expiring": false,
+      "expiryLabel": "Valid until",
+      "dateLabel": "Document date",
       "types": ["Result", "Referral", "Prescription", "Visit summary", "Imaging", "Vaccination record", "Insurance", "Other"],
       "defaultType": "Other",
-      "features": ["date", "provider", "about", "episode", "file"],
-      "detailFields": {},
+      "datedByDefault": true,
+      "fileRoles": [],
+      "fields": [
+        { "key": "providerId", "label": "Provider", "type": "contact", "tags": ["health", "other"] },
+        { "key": "about", "label": "What this is about", "type": "longtext" },
+        { "key": "episode", "label": "Episode", "type": "text", "suggest": true }
+      ],
+      "typeFields": {},
       "typeAliases": {
         "lab result": "Result",
         "lab results": "Result",
@@ -82,13 +157,9 @@
         "vaccination": "Vaccination record",
         "vaccine": "Vaccination record"
       },
-      "providerGroups": ["health", "other"],
       "pin": { "label": "Keep handy on this page", "default": false },
-      "replaceOnLink": false,
-      "expiryDrivesRoutine": false,
-      "onePerType": false,
-      "onePerTypeExempt": [],
-      "renewal": null
+      "pinnedTitle": "Keep handy",
+      "rules": { "replaceOnLink": false, "expiryDrivesRoutine": false, "onePerType": false, "onePerTypeExempt": [], "renewal": null }
     },
     "car": {
       "label": "Car",
@@ -96,10 +167,15 @@
       "plural": "Car documents",
       "icon": "document",
       "area": "car",
+      "expiring": true,
+      "expiryLabel": "Valid until",
+      "dateLabel": "Date",
       "types": ["ID card", "Policy", "Registration", "Inspection", "Receipt", "Photo", "Other"],
       "defaultType": "ID card",
-      "features": ["validUntil", "file"],
-      "detailFields": {},
+      "datedByDefault": false,
+      "fileRoles": [],
+      "fields": [],
+      "typeFields": {},
       "typeAliases": {
         "insurance card": "ID card",
         "insurance id": "ID card",
@@ -117,11 +193,48 @@
         "picture": "Photo"
       },
       "pin": { "label": "Keep in the glovebox", "default": true },
-      "replaceOnLink": true,
-      "expiryDrivesRoutine": false,
-      "onePerType": false,
-      "onePerTypeExempt": [],
-      "renewal": null
+      "pinnedTitle": "In the glovebox",
+      "rules": { "replaceOnLink": true, "expiryDrivesRoutine": false, "onePerType": false, "onePerTypeExempt": [], "renewal": null }
+    },
+    "attachment": {
+      "label": "File",
+      "short": "Files",
+      "plural": "Files",
+      "icon": "document",
+      "area": null,
+      "expiring": false,
+      "expiryLabel": "Valid until",
+      "dateLabel": "Date",
+      "types": ["File"],
+      "defaultType": "File",
+      "datedByDefault": false,
+      "fileRoles": [],
+      "fields": [],
+      "typeFields": {},
+      "typeAliases": {},
+      "pin": { "label": "Keep handy", "default": false },
+      "pinnedTitle": "Keep handy",
+      "rules": { "replaceOnLink": false, "expiryDrivesRoutine": false, "onePerType": false, "onePerTypeExempt": [], "renewal": null }
     }
+  },
+  "reservationTypes": {
+    "flight": { "label": "Flight", "icon": "plane" },
+    "stay": { "label": "Stay", "icon": "bed" },
+    "car": { "label": "Car rental", "icon": "car" },
+    "activity": { "label": "Activity", "icon": "ticket" },
+    "hike": { "label": "Hike", "icon": "mountain" },
+    "train": { "label": "Train", "icon": "train" },
+    "other": { "label": "Other", "icon": "dot" }
+  },
+  "reservationFields": [
+    { "key": "address", "label": "Address", "type": "longtext" },
+    { "key": "confirmation", "label": "Confirmation", "type": "text" },
+    { "key": "link", "label": "Link", "type": "url" },
+    { "key": "details", "label": "Details", "type": "longtext" }
+  ],
+  "routineAreas": {
+    "health": { "label": "Health", "icon": "stethoscope" },
+    "identity": { "label": "Identity", "icon": "idcard" },
+    "car": { "label": "Car", "icon": "car" }
   }
 }

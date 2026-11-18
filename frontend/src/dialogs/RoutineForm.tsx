@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Area, Routine, StepPlan, SubjectType } from '../types/coo';
+import type { CooState, RoutineArea, Routine, StepPlan, SubjectType } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { useToast } from '../store/Toast';
@@ -15,45 +15,47 @@ import {
   templatesFor,
 } from '../lib/templates';
 import { assignExisting, createRoutine, deleteRoutine, editRoutine } from '../lib/ops';
-import {
-  assignmentsOf,
-  contactsFor,
-  personSub,
-  sortedCars,
-  sortedPeople,
-  subjectName,
-} from '../lib/model';
+import { assignmentsOf, contactsFor, findSubject, isMedication, subjectName, subjectSub, subjectsOfType } from '../lib/model';
+import { SUBJECT_TYPES, SUBJECT_TYPE_KEYS } from '../lib/registry';
+
+/** The first routine area the subject's type can have (health for people, car for cars). */
+function defaultArea(s: CooState, subjectId?: string): RoutineArea {
+  const sub = findSubject(s, subjectId);
+  return (sub && SUBJECT_TYPES[sub.subjectType].routineAreas[0]) || 'health';
+}
 import { today } from '../lib/dates';
 import { RoutineDetailDialog } from './RoutineDetail';
 import { StepPlanEditor, cleanPlan } from './StepPlanEditor';
 
-type Sub = { type: SubjectType; id: string };
-const key = (x: Sub) => `${x.type}:${x.id}`;
+/** Subject types that can have routines of an area (registry routineAreas). */
+function eligibleTypes(area: RoutineArea): SubjectType[] {
+  return SUBJECT_TYPE_KEYS.filter((t) => SUBJECT_TYPES[t].routineAreas.includes(area));
+}
 
-function eligible(area: Area): SubjectType {
-  return area === 'car' ? 'car' : 'person';
+function eligibleSubjects(s: CooState, area: RoutineArea) {
+  return eligibleTypes(area).flatMap((t) => subjectsOfType(s, t));
 }
 
 function SubjectChecklist({
-  type,
+  area,
   selected,
   onToggle,
 }: {
-  type: SubjectType;
+  area: RoutineArea;
   selected: Set<string>;
-  onToggle: (s: Sub) => void;
+  onToggle: (id: string) => void;
 }) {
   const { s } = useStore();
-  const list =
-    type === 'person'
-      ? sortedPeople(s).map((p) => ({ id: p.id, name: p.name, sub: personSub(p) }))
-      : sortedCars(s).map((c) => ({ id: c.id, name: c.makeModel, sub: c.plate }));
-  if (list.length === 0) return <div className="muted">No {type === 'person' ? 'people' : 'cars'} yet.</div>;
+  const list = eligibleSubjects(s, area).map((x) => ({ id: x.id, name: x.name, sub: subjectSub(x) }));
+  if (list.length === 0) {
+    const names = eligibleTypes(area).map((t) => SUBJECT_TYPES[t].plural.toLowerCase()).join(' or ');
+    return <div className="muted">No {names || 'subjects'} yet.</div>;
+  }
   return (
     <div className="checklist">
       {list.map((x) => (
         <label key={x.id} className="check-row">
-          <input type="checkbox" checked={selected.has(`${type}:${x.id}`)} onChange={() => onToggle({ type, id: x.id })} />
+          <input type="checkbox" checked={selected.has(x.id)} onChange={() => onToggle(x.id)} />
           <span>{x.name}</span>
           <span className="muted">{x.sub}</span>
         </label>
@@ -107,8 +109,7 @@ function AssigneeSchedules({
   return (
     <div className="assignee-schedules">
       {keys.map((k) => {
-        const [type, id] = k.split(':') as [SubjectType, string];
-        const name = subjectName(s, type, id);
+        const name = subjectName(s, k);
         return (
           <div key={k} className="assignee-row">
             <span className="assignee-name">{name}</span>
@@ -122,15 +123,15 @@ function AssigneeSchedules({
   );
 }
 
-export function RoutineFormDialog({ preselect, area: initialArea }: { preselect?: Sub; area?: Area }) {
+export function RoutineFormDialog({ preselect, area: initialArea }: { preselect?: string; area?: RoutineArea }) {
   const { s, apply } = useStore();
   const { closeDialog } = useUI();
   const toast = useToast();
-  const [area, setArea] = useState<Area>(initialArea ?? (preselect?.type === 'car' ? 'car' : 'health'));
+  const [area, setArea] = useState<RoutineArea>(initialArea ?? (defaultArea(s, preselect)));
   const [tpl, setTpl] = useState<string>('blank');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [selected, setSelected] = useState<Set<string>>(new Set(preselect ? [key(preselect)] : []));
+  const [selected, setSelected] = useState<Set<string>>(new Set(preselect ? [preselect] : []));
   const [hasDate, setHasDate] = useState(false);
   /** Per-assignee due date and repeat (repeat missing = follow the default). */
   const [dates, setDates] = useState<Record<string, string>>({});
@@ -151,14 +152,15 @@ export function RoutineFormDialog({ preselect, area: initialArea }: { preselect?
   const template = tpl === 'blank' ? undefined : templateByKey(tpl);
   const medication = !!template?.medication;
 
-  const chooseArea = (a: Area) => {
+  const chooseArea = (a: RoutineArea) => {
     setArea(a);
     setTpl('blank');
     setHasDate(false);
     setRemind(String(defaultRemindDays(a)));
     setCountFrom(a === 'health' ? 'done' : 'due');
-    // Keep subjects of the matching kind.
-    setSelected((cur) => new Set([...cur].filter((k) => k.startsWith(`${eligible(a)}:`))));
+    // Keep only subjects that can have routines of this area.
+    const ok = new Set(eligibleSubjects(s, a).map((x) => x.id));
+    setSelected((cur) => new Set([...cur].filter((k) => ok.has(k))));
   };
 
   const chooseTemplate = (k: string) => {
@@ -176,31 +178,30 @@ export function RoutineFormDialog({ preselect, area: initialArea }: { preselect?
     setHasDate(!t.medication);
   };
 
-  const toggle = (x: Sub) =>
+  const toggle = (id: string) =>
     setSelected((cur) => {
       const n = new Set(cur);
-      if (n.has(key(x))) n.delete(key(x));
-      else n.add(key(x));
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
 
   const submit = () => {
     const t = title.trim();
     if (!t) return;
+    const okIds = new Set(eligibleSubjects(s, area).map((x) => x.id));
     const subjects = [...selected]
       .map((k) => {
-        const [type, id] = k.split(':') as [SubjectType, string];
         const scheduled = !medication && hasDate;
         return {
-          type,
-          id,
+          id: k,
           date: scheduled ? dates[k] || null : null,
           repeatMonths: scheduled ? (k in repeats ? repeats[k] : repeat) : null,
         };
       })
-      .filter((x) => x.type === eligible(area));
+      .filter((x) => okIds.has(x.id));
     if (subjects.length === 0) {
-      toast.show({ text: 'Choose at least one person or car' });
+      toast.show({ text: 'Choose who it’s for' });
       return;
     }
     const remindDays = Math.max(0, Number(remind) || defaultRemindDays(area));
@@ -242,13 +243,13 @@ export function RoutineFormDialog({ preselect, area: initialArea }: { preselect?
       <p className="muted intro">
         Create it once and assign it to as many people or cars as you like. Each keeps its own date and status. A date is optional.
       </p>
-      <Field label="Area">
+      <Field label="RoutineArea">
         {() => (
           <Chips
-            label="Area"
+            label="RoutineArea"
             value={area}
             onChange={chooseArea}
-            options={(['health', 'identity', 'car'] as Area[]).map((a) => ({ value: a, label: AREA_LABEL[a], icon: AREA_ICON[a] }))}
+            options={(['health', 'identity', 'car'] as RoutineArea[]).map((a) => ({ value: a, label: AREA_LABEL[a], icon: AREA_ICON[a] }))}
           />
         )}
       </Field>
@@ -267,7 +268,7 @@ export function RoutineFormDialog({ preselect, area: initialArea }: { preselect?
         {(id) => <textarea id={id} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />}
       </Field>
       <Fieldset legend="Assign to">
-        <SubjectChecklist type={eligible(area)} selected={selected} onToggle={toggle} />
+        <SubjectChecklist area={area} selected={selected} onToggle={toggle} />
       </Fieldset>
 
       {medication ? (
@@ -302,7 +303,7 @@ export function RoutineFormDialog({ preselect, area: initialArea }: { preselect?
                 {(id) => <RepeatSelect id={id} value={repeat} onChange={setRepeat} />}
               </Field>
               <AssigneeSchedules
-                keys={[...selected].filter((k) => k.startsWith(`${eligible(area)}:`))}
+                keys={[...selected].filter((k) => eligibleSubjects(s, area).some((x) => x.id === k))}
                 dateLabel={area === 'identity' ? 'Expiry date' : 'Due date'}
                 dates={dates}
                 repeats={repeats}
@@ -364,31 +365,28 @@ export function EditRoutineDialog({ routine }: { routine: Routine }) {
   const [countFrom, setCountFrom] = useState<'done' | 'due'>(routine.countFrom);
   const [plan, setPlan] = useState<StepPlan[]>(routine.plan);
   const current = assignmentsOf(s, routine);
-  const [selected, setSelected] = useState<Set<string>>(new Set(current.map((a) => `${a.subjectType}:${a.subjectId}`)));
-  const removed = current.filter((a) => !selected.has(`${a.subjectType}:${a.subjectId}`));
+  const [selected, setSelected] = useState<Set<string>>(new Set(current.map((a) => a.subjectId)));
+  const removed = current.filter((a) => !selected.has(a.subjectId));
   const inheriting = current.filter((a) => a.plan == null).length;
   const own = current.length - inheriting;
 
-  const toggle = (x: Sub) =>
+  const toggle = (id: string) =>
     setSelected((cur) => {
       const n = new Set(cur);
-      if (n.has(key(x))) n.delete(key(x));
-      else n.add(key(x));
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
 
   const submit = () => {
     if (!title.trim()) return;
-    const subjects = [...selected].map((k) => {
-      const [type, id] = k.split(':') as [SubjectType, string];
-      return { type, id };
-    });
+    const subjects = [...selected];
     apply(
       editRoutine(s, routine, {
         title: title.trim(),
         description: description.trim(),
-        subjects,
-        defaults: routine.medication ? undefined : { repeatMonths: repeat, countFrom, plan: cleanPlan(plan) },
+        subjectIds: subjects,
+        defaults: isMedication(routine) ? undefined : { repeatMonths: repeat, countFrom, plan: cleanPlan(plan) },
       }),
       {
         toast: subjects.length === 0 ? 'Routine removed' : 'Routine saved',
@@ -424,7 +422,7 @@ export function EditRoutineDialog({ routine }: { routine: Routine }) {
       <Field label="Description" optional>
         {(id) => <textarea id={id} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />}
       </Field>
-      {!routine.medication && (
+      {!isMedication(routine) && (
         <Fieldset legend="Defaults">
           <p className="muted small">
             The starting point for everyone this routine is assigned to. Each person or car can override these in its own
@@ -456,7 +454,7 @@ export function EditRoutineDialog({ routine }: { routine: Routine }) {
         </Fieldset>
       )}
       <Fieldset legend="Assigned to">
-        <SubjectChecklist type={eligible(routine.area)} selected={selected} onToggle={toggle} />
+        <SubjectChecklist area={routine.area} selected={selected} onToggle={toggle} />
         <p className="muted small">
           Newly assigned people or cars start with no date; set it in their schedule. Unchecking someone removes this routine and its steps from them and unlinks their documents.
         </p>
@@ -474,7 +472,7 @@ export function EditRoutineDialog({ routine }: { routine: Routine }) {
  * "Assign an existing routine": pick a routine of the area not yet assigned to
  * the subject, then give this subject its own date and repeat.
  */
-export function AssignExistingDialog({ subject, area }: { subject: Sub; area: Area }) {
+export function AssignExistingDialog({ subjectId, area }: { subjectId: string; area: RoutineArea }) {
   const { s, apply } = useStore();
   const { openDialog } = useUI();
   const [picked, setPicked] = useState<Routine | null>(null);
@@ -483,12 +481,12 @@ export function AssignExistingDialog({ subject, area }: { subject: Sub; area: Ar
   const list = s.routines.filter(
     (r) =>
       r.area === area &&
-      !s.assignments.some((a) => a.routineId === r.id && a.subjectType === subject.type && a.subjectId === subject.id),
+      !s.assignments.some((a) => a.routineId === r.id && a.subjectId === subjectId),
   );
-  const name = subjectName(s, subject.type, subject.id);
+  const name = subjectName(s, subjectId);
 
   const assign = (r: Routine, opts: { date?: string | null; repeatMonths?: number | null } = {}) => {
-    const { changes, assignment } = assignExisting(s, r, subject.type, subject.id, opts);
+    const { changes, assignment } = assignExisting(s, r, subjectId, opts);
     apply(changes, { toast: `Assigned ${r.title} to ${name}` });
     openDialog(<RoutineDetailDialog assignmentId={assignment.id} />);
   };
@@ -536,7 +534,7 @@ export function AssignExistingDialog({ subject, area }: { subject: Sub; area: Ar
                 type="button"
                 className="row row-button"
                 onClick={() => {
-                  if (r.medication) {
+                  if (isMedication(r)) {
                     assign(r);
                     return;
                   }

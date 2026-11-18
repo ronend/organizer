@@ -1020,8 +1020,10 @@ a.tile:hover {
   min-width: 0;
 }
 
-.inline-add input[type='date'] {
+/* Beats the generic input width (input:not(...) has higher specificity). */
+.inline-add input:not([type='checkbox']):not([type='radio'])[type='date'] {
   width: 160px;
+  flex: none;
 }
 
 .routine-row {
@@ -1964,7 +1966,7 @@ input[type='file'] {
     flex-basis: 100%;
   }
 
-  .inline-add input[type='date'] {
+  .inline-add input:not([type='checkbox']):not([type='radio'])[type='date'] {
     flex: 1;
     width: auto;
   }

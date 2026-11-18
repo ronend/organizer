@@ -1,19 +1,20 @@
 import { useNavigate } from 'react-router-dom';
-import type { Trip } from '../types/coo';
+import type { Subject } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { Empty, PageHead, SectionHead, StatusText } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { TripDialog } from '../dialogs/TripDialogs';
-import { isUpcomingTrip, tripDates, tripReservations, tripWhen } from '../lib/model';
+import { findSubject, isUpcomingTrip, tripDates, tripInfo, tripReservations, tripWhen, trips } from '../lib/model';
 import { plural } from '../lib/dates';
 
-function TripRow({ trip }: { trip: Trip }) {
+function TripRow({ trip }: { trip: Subject }) {
   const { s } = useStore();
   const navigate = useNavigate();
   const res = tripReservations(s, trip);
   const notBooked = res.filter((r) => r.status === 'planned').length;
-  const names = trip.travelers.map((id) => s.people.find((p) => p.id === id)?.name).filter(Boolean);
+  const info = tripInfo(trip);
+  const names = info.travelers.map((id) => findSubject(s, id)?.name).filter(Boolean);
   const when = tripWhen(trip);
   return (
     <li>
@@ -23,7 +24,7 @@ function TripRow({ trip }: { trip: Trip }) {
           <span className="row-title strong">{trip.name}</span>
           <span className="row-meta">
             {tripDates(trip)}
-            {trip.destination ? ` · ${trip.destination}` : ''}
+            {info.destination ? ` · ${info.destination}` : ''}
           </span>
           <span className="row-meta">
             {[names.join(', '), plural(res.length, 'reservation')].filter(Boolean).join(' · ')}
@@ -44,8 +45,9 @@ function TripRow({ trip }: { trip: Trip }) {
 export default function Trips() {
   const { s } = useStore();
   const { openDialog } = useUI();
-  const upcoming = s.trips.filter(isUpcomingTrip).sort((a, b) => a.start.localeCompare(b.start));
-  const past = s.trips.filter((t) => !isUpcomingTrip(t)).sort((a, b) => b.start.localeCompare(a.start));
+  const start = (t: Subject) => tripInfo(t).start;
+  const upcoming = trips(s).filter(isUpcomingTrip).sort((a, b) => start(a).localeCompare(start(b)));
+  const past = trips(s).filter((t) => !isUpcomingTrip(t)).sort((a, b) => start(b).localeCompare(start(a)));
   return (
     <div className="page">
       <PageHead

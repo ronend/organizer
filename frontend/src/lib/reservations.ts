@@ -1,4 +1,6 @@
-import type { ISODate, Reservation, ReservationType, Trip } from '../types/coo';
+import type { ISODate, Reservation, ReservationType, Subject } from '../types/coo';
+import { fieldText } from './registry';
+import { tripInfo } from './model';
 import { addDays, datePart, timePart } from './dates';
 
 export interface ResTypeMeta {
@@ -67,7 +69,8 @@ export interface TimelineDay {
  * Multi-day reservations appear at their start and their end; stays and car
  * rentals add a quiet line on each day in between.
  */
-export function buildTimeline(trip: Trip, list: Reservation[]): TimelineDay[] {
+export function buildTimeline(tripSubject: Subject, list: Reservation[]): TimelineDay[] {
+  const trip = tripInfo(tripSubject);
   let first = trip.start;
   let last = trip.end;
   for (const r of list) {
@@ -127,4 +130,9 @@ export function buildTimeline(trip: Trip, list: Reservation[]): TimelineDay[] {
     });
   }
   return days;
+}
+
+/** A reservation's registry field as text (address, confirmation, link, details). */
+export function resField(r: Reservation, key: 'address' | 'confirmation' | 'link' | 'details'): string {
+  return fieldText(r.fields, key);
 }

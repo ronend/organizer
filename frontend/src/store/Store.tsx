@@ -1,13 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { fetchState, sendBatch } from '../api/client';
+import { fetchState, migrate, sendBatch, type StateResponse } from '../api/client';
 import type { ChangeSet, CooState } from '../types/coo';
 import { applyChanges, inverse } from '../lib/ops';
 import { useToast } from './Toast';
 
 const EMPTY: CooState = {
-  people: [], cars: [], contacts: [], routines: [], assignments: [],
-  tasks: [], documents: [], trips: [], reservations: [],
+  subjects: [], tasks: [], documents: [], reservations: [], routines: [], assignments: [], contacts: [],
 };
+
+/** Only the collections (drops schemaVersion / needsMigration). */
+function collections(r: StateResponse): CooState {
+  const { subjects, tasks, documents, reservations, routines, assignments, contacts } = r;
+  return { subjects, tasks, documents, reservations, routines, assignments, contacts };
+}
 
 interface ApplyOpts {
   /** Toast text after the change. */
@@ -44,7 +49,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     try {
-      const st = await fetchState();
+      let res = await fetchState();
+      if (res.needsMigration) {
+        // First load after the v2 upgrade: the server maps and validates the
+        // household, writes v2 records and keeps the v1 rows for rollback.
+        const report = await migrate();
+        if (!report.migrated && report.errors.length) {
+          throw new Error(`Couldn’t upgrade your data: ${report.errors.slice(0, 3).join('; ')}`);
+        }
+        res = await fetchState();
+      }
+      const st = collections(res);
       ref.current = st;
       setS(st);
       setLoadError(null);

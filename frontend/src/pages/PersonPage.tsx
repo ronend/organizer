@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
-import type { Document, Person, Task } from '../types/coo';
+import type { Document, Subject, Task } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { Chips, Empty, PageHead, Segmented, SectionHead } from '../components/ui';
@@ -18,7 +18,7 @@ import {
   useDocActions,
 } from '../components/SubjectParts';
 import { IndicatorRow } from './Home';
-import { PersonDialog } from '../dialogs/SubjectDialogs';
+import { SubjectDialog } from '../dialogs/SubjectDialogs';
 import { DocFormFor } from '../dialogs/DocDialogs';
 import { fmtDate, plural } from '../lib/dates';
 import { notesText } from '../lib/richtext';
@@ -31,19 +31,24 @@ import {
   subjectPath,
   tasksForSubject,
   appointmentNote,
+  assignmentIdOf,
+  findSubject,
 } from '../lib/model';
+import { fieldText } from '../lib/registry';
+
+const f = (d: Document, key: string) => fieldText(d.fields, key);
 
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-function Overview({ person }: { person: Person }) {
+function Overview({ person }: { person: Subject }) {
   const { s } = useStore();
   const { openDialog } = useUI();
   const navigate = useNavigate();
   const areaTasks = (area: string) =>
-    tasksForSubject(s, 'person', person.id).filter((t) => routineOf(s, s.assignments.find((a) => a.id === t.assignmentId))?.area === area);
+    s.tasks.filter((t) => t.subjectId === person.id && routineOf(s, s.assignments.find((a) => a.id === assignmentIdOf(t)))?.area === area);
   const areas = [
-    { key: 'health', title: 'Health', icon: 'stethoscope', kind: 'health' as const },
-    { key: 'identity', title: 'Identity', icon: 'idcard', kind: 'identity' as const },
+    { key: 'health' as const, title: 'Health', icon: 'stethoscope', kind: 'health' as const },
+    { key: 'identity' as const, title: 'Identity', icon: 'idcard', kind: 'identity' as const },
   ];
   return (
     <>
@@ -52,20 +57,20 @@ function Overview({ person }: { person: Person }) {
         <div>
           <div className="subject-name">{person.name}</div>
         </div>
-        <button type="button" className="btn ghost small" onClick={() => openDialog(<PersonDialog person={person} />)}>
+        <button type="button" className="btn ghost small" onClick={() => openDialog(<SubjectDialog subjectType="person" sub={person} />)}>
           Edit
         </button>
       </div>
-      <UpcomingAppointments type="person" id={person.id} />
-      <SubjectTasks type="person" id={person.id} />
+      <UpcomingAppointments id={person.id} />
+      <SubjectTasks id={person.id} />
       <section className="section">
         <SectionHead title="Areas" />
         <div className="tile-grid">
           {areas.map((ar) => {
-            const routines = assignmentsFor(s, 'person', person.id, ar.key).length;
-            const docs = docsFor(s, 'person', person.id, ar.kind).filter((d) => !d.archived).length;
+            const routines = assignmentsFor(s, person.id, ar.key).length;
+            const docs = docsFor(s, person.id, ar.kind).filter((d) => !d.archived).length;
             return (
-              <button key={ar.key} type="button" className="tile status-tile" onClick={() => navigate(subjectPath('person', person.id, ar.key))}>
+              <button key={ar.key} type="button" className="tile status-tile" onClick={() => navigate(subjectPath(person, ar.key))}>
                 <span className="tile-top">
                   <Icon name={ar.icon} className="tile-icon" />
                   <span className="tile-text">
@@ -90,23 +95,23 @@ function Overview({ person }: { person: Person }) {
 
 type HistEntry = { date: string; doc?: Document; visit?: Task };
 
-function Health({ person }: { person: Person }) {
+function Health({ person }: { person: Subject }) {
   const { s } = useStore();
   const { openDialog } = useUI();
   const act = useDocActions();
   const [view, setView] = useState<'timeline' | 'list'>('timeline');
   const [episode, setEpisode] = useState('all');
   const [q, setQ] = useState('');
-  const docs = docsFor(s, 'person', person.id, 'health');
+  const docs = docsFor(s, person.id, 'health');
   const live = docs.filter((d) => !d.archived);
-  const episodes = [...new Set(live.map((d) => d.episode).filter(Boolean))];
-  const visits = tasksForSubject(s, 'person', person.id).filter(
-    (t) => t.appointment && t.done && routineOf(s, s.assignments.find((a) => a.id === t.assignmentId))?.area === 'health',
+  const episodes = [...new Set(live.map((d) => f(d, 'episode')).filter(Boolean))];
+  const visits = tasksForSubject(s, person.id).filter(
+    (t) => t.appointment && t.done && routineOf(s, s.assignments.find((a) => a.id === assignmentIdOf(t)))?.area === 'health',
   );
 
   const entries: HistEntry[] = useMemo(() => {
     const list: HistEntry[] = live
-      .filter((d) => (episode === 'all' || d.episode === episode) && docSearch(q, d, s))
+      .filter((d) => (episode === 'all' || f(d, 'episode') === episode) && docSearch(q, d, s))
       .map((d) => ({ date: d.date ?? d.createdAt.slice(0, 10), doc: d }));
     if (episode === 'all') {
       for (const v of visits) {
@@ -129,14 +134,14 @@ function Health({ person }: { person: Person }) {
 
   return (
     <>
-      <RoutineGrid sub={{ type: 'person', entity: person }} area="health" title="Health routines" />
+      <RoutineGrid sub={person} area="health" title="Health routines" />
       <PinnedTiles title="Keep handy" docs={live.filter((d) => d.pinned)} />
       <section className="section">
         <SectionHead
           title="Treatment history"
           count={live.length}
           action={
-            <button type="button" className="link" onClick={() => openDialog(<DocFormFor kind="health" subjectType="person" subjectId={person.id} />)}>
+            <button type="button" className="link" onClick={() => openDialog(<DocFormFor category="health" subjectId={person.id} />)}>
               Add document
             </button>
           }
@@ -173,13 +178,13 @@ function Health({ person }: { person: Person }) {
                         <span className="tl-dot" aria-hidden="true" />
                         <div className="tl-body">
                           <div className="muted small">{fmtDate(e.date)}</div>
-                          <div className="row-title">{e.doc.name}</div>
-                          <div className="row-meta">{[e.doc.type, contactName(s, e.doc.providerId)].filter(Boolean).join(' · ')}</div>
-                          {e.doc.about && <div className="small">{e.doc.about}</div>}
+                          <div className="row-title">{e.doc.title}</div>
+                          <div className="row-meta">{[e.doc.type, contactName(s, f(e.doc, 'providerId') || null)].filter(Boolean).join(' · ')}</div>
+                          {f(e.doc, 'about') && <div className="small">{f(e.doc, 'about')}</div>}
                           <div className="tl-foot">
-                            {e.doc.episode && (
-                              <button type="button" className="chip small-chip" onClick={() => setEpisode(e.doc!.episode)}>
-                                {e.doc.episode}
+                            {f(e.doc, 'episode') && (
+                              <button type="button" className="chip small-chip" onClick={() => setEpisode(f(e.doc!, 'episode'))}>
+                                {f(e.doc, 'episode')}
                               </button>
                             )}
                             <button type="button" className="btn ghost small" onClick={() => act.show(e.doc!)}>
@@ -229,10 +234,10 @@ function Health({ person }: { person: Person }) {
   );
 }
 
-function Identity({ person }: { person: Person }) {
+function Identity({ person }: { person: Subject }) {
   const { s } = useStore();
   const { openDialog } = useUI();
-  const docs = docsFor(s, 'person', person.id, 'identity');
+  const docs = docsFor(s, person.id, 'identity');
   const live = docs.filter((d) => !d.archived).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   return (
     <>
@@ -241,7 +246,7 @@ function Identity({ person }: { person: Person }) {
           title="IDs and documents"
           count={live.length}
           action={
-            <button type="button" className="link" onClick={() => openDialog(<DocFormFor kind="identity" subjectType="person" subjectId={person.id} />)}>
+            <button type="button" className="link" onClick={() => openDialog(<DocFormFor category="identity" subjectId={person.id} />)}>
               Add ID or document
             </button>
           }
@@ -252,7 +257,7 @@ function Identity({ person }: { person: Person }) {
           <DocList docs={live} />
         )}
       </section>
-      <RoutineGrid sub={{ type: 'person', entity: person }} area="identity" title="Renewals" />
+      <RoutineGrid sub={person} area="identity" title="Renewals" />
       <ArchiveSection docs={docs.filter((d) => d.archived)} />
     </>
   );
@@ -261,9 +266,9 @@ function Identity({ person }: { person: Person }) {
 export default function PersonPage({ page }: { page: 'overview' | 'health' | 'identity' }) {
   const { id } = useParams();
   const { s } = useStore();
-  const person = s.people.find((p) => p.id === id);
-  if (!person) return <Navigate to="/" replace />;
-  const sub = { type: 'person' as const, entity: person };
+  const person = findSubject(s, id);
+  if (!person || person.subjectType !== 'person') return <Navigate to="/" replace />;
+  const sub = person;
   const title = { overview: person.name, health: 'Health', identity: 'Identity' }[page];
   const eyebrow = page === 'overview' ? 'Person' : person.name;
   return (

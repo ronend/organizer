@@ -1,10 +1,11 @@
 /**
- * coo data model — the contract shared with the backend.
+ * coo data model, version 2 — the contract shared with the backend.
  *
  * The backend (backend/src/models.py) mirrors these shapes exactly (pydantic,
- * extra fields forbidden). Every stored record carries a `kind` discriminator
- * and an `id`. All records belong to the signed-in user's household; the
- * backend scopes them by the Cognito `sub`.
+ * extra fields forbidden) and checks every write against the whole household
+ * (backend/src/integrity.py). Everything extensible — subject types and their
+ * attributes, document categories and fields, reservation types, routine
+ * areas — comes from the registry (lib/registry.json). See data-structure.md.
  *
  * Date conventions
  *   ISODate        'YYYY-MM-DD'        (calendar day, no time zone)
@@ -15,6 +16,21 @@
 export type ISODate = string;
 export type LocalDateTime = string;
 export type Timestamp = string;
+
+type Registry = typeof import('../lib/registry.json');
+
+/** person, car, trip, ... (registry subjectTypes). */
+export type SubjectType = keyof Registry['subjectTypes'];
+/** identity, health, car, attachment, ... (registry documentCategories). */
+export type DocCategory = keyof Registry['documentCategories'];
+/** health, identity, car, ... (registry routineAreas). */
+export type RoutineArea = keyof Registry['routineAreas'];
+/** flight, stay, ... (registry reservationTypes). */
+export type ReservationType = keyof Registry['reservationTypes'];
+
+/** A registry-defined field value. */
+export type FieldValue = string | number | boolean | null | string[];
+export type Fields = Record<string, FieldValue>;
 
 export interface FileRef {
   /** S3 object key, always under the user's own prefix. */
@@ -28,43 +44,43 @@ interface Base {
   id: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  archived: boolean;
 }
-
-type Registry = typeof import('../lib/registry.json');
-
-/** Subject types come from the registry (lib/registry.json): person, car, ... */
-export type SubjectType = keyof Registry['subjectTypes'];
 
 // ── Subjects ────────────────────────────────────────────────────────────────
 
-export interface Person extends Base {
-  kind: 'person';
+/** A container — a person, a car, a trip, ... — that tasks, documents, routines and reservations belong to. */
+export interface Subject extends Base {
+  kind: 'subject';
+  subjectType: SubjectType;
   name: string;
-  birthYear: number | null;
+  notes: string;
+  /** Registry attributes, e.g. car.plate, trip.start/end/travelers. */
+  attributes: Fields;
 }
 
-export interface Car extends Base {
-  kind: 'car';
-  makeModel: string;
-  /** Stored uppercase, unique across cars. */
-  plate: string;
-  odometer: number | null;
+// ── Contacts ────────────────────────────────────────────────────────────────
+
+export interface ContactLink {
+  subjectId: string;
+  role: string;
 }
 
-export type ContactGroup = 'health' | 'cars' | 'other';
-
+/** Household-wide; linked to the subjects it serves. */
 export interface Contact extends Base {
   kind: 'contact';
   name: string;
+  /** The contact's own title, e.g. "Orthopedist". */
   role: string;
   phone: string;
-  group: ContactGroup;
+  email: string;
   notes: string;
+  /** e.g. health, cars, other. */
+  tags: string[];
+  links: ContactLink[];
 }
 
 // ── Routines ────────────────────────────────────────────────────────────────
-
-export type Area = 'health' | 'identity' | 'car';
 
 /**
  * plain    — completing just marks it done
@@ -74,13 +90,10 @@ export type Area = 'health' | 'identity' | 'car';
  */
 export type StepKind = 'plain' | 'schedule' | 'renew' | 'pickup';
 
-/** Document categories come from the registry: identity, health, car, ... */
-export type DocKind = keyof Registry['categories'];
-
-/** Marks a "file the new document" task; its detail offers "Add document". */
-export interface DocTaskSpec {
-  docKind: DocKind;
-  docType: string;
+/** A task or routine step that asks for a document; its detail offers "Add document". */
+export interface DocumentRequest {
+  category: DocCategory;
+  type: string;
 }
 
 export interface StepPlan {
@@ -90,16 +103,13 @@ export interface StepPlan {
   kind: StepKind;
   /** Default prep note offered when booking (schedule steps). */
   prep: string;
-  docTask: DocTaskSpec | null;
+  requestsDocument: DocumentRequest | null;
 }
 
-/**
- * A routine is a template: default steps and rules, written once. Each
- * Assignment applies it to one person or car with its own date and schedule.
- */
+/** A reusable template; each Assignment applies it to one subject. */
 export interface Routine extends Base {
   kind: 'routine';
-  area: Area;
+  area: RoutineArea;
   /** Template key (see lib/templates.ts) or null for Blank. */
   template: string | null;
   icon: string;
@@ -115,7 +125,7 @@ export interface Routine extends Base {
   repeatMonths: number | null;
   /** Default base for the next due date: the day it was done, or the previous due date. */
   countFrom: 'done' | 'due';
-  medication: boolean;
+  extension: { medication: boolean } | null;
 }
 
 export interface MedicationSupply {
@@ -134,11 +144,10 @@ export interface HistoryEntry {
   text: string;
 }
 
-/** One routine assigned to one person or car, with its own date, schedule and status. */
+/** One routine applied to one subject, with its own date, schedule and status. */
 export interface Assignment extends Base {
   kind: 'assignment';
   routineId: string;
-  subjectType: SubjectType;
   subjectId: string;
   /** Due / expiry / run-out date. null = no schedule. */
   date: ISODate | null;
@@ -149,12 +158,9 @@ export interface Assignment extends Base {
   contactId: string | null;
   supply: MedicationSupply | null;
   history: HistoryEntry[];
-  /**
-   * This assignee's own steps, overriding the routine's default plan.
-   * null (or missing on older records) = use the routine's.
-   */
+  /** This assignee's own steps, overriding the routine's. null = use the routine's. */
   plan: StepPlan[] | null;
-  /** Override of the routine's countFrom. null / missing = use the routine's. */
+  /** Override of the routine's countFrom. null = use the routine's. */
   countFrom: 'done' | 'due' | null;
 }
 
@@ -169,144 +175,100 @@ export interface AppointmentInfo {
   prep: string;
 }
 
-export type TripTaskKind = 'book' | 'checkin';
-
-/** One checklist item inside a task. */
-export interface Subtask {
-  id: string;
-  title: string;
-  done: boolean;
-  /** Optional due date (missing on older sub-tasks). A dated sub-task is its own Agenda row. */
-  date?: ISODate | null;
-  /** Manual order on the Agenda within its day (like Task.order). */
-  order?: number | null;
-  doneAt?: Timestamp | null;
-}
+/** Why a task exists: a routine step, or a reservation's booking / check-in. */
+export type TaskSource =
+  | { kind: 'assignment'; id: string; step: StepKind }
+  | { kind: 'reservation'; id: string; step: 'book' | 'checkin' };
 
 export interface Task extends Base {
   kind: 'task';
+  /** null = General. */
+  subjectId: string | null;
+  /** Set = a subtask (one level: a subtask's parent is never a subtask). Same subject as the parent. */
+  parentId: string | null;
   title: string;
+  /** Rich text (sanitized HTML) or plain text. */
   notes: string;
-  /** null = unscheduled ("Needs a date"). */
+  /** null = unscheduled ("Needs a date"). A dated subtask is its own Agenda row. */
   date: ISODate | null;
-  /** Secondary sort after date; the user's manual order within a day. */
+  /** Secondary sort after date; the user's manual order within a day (or among siblings). */
   order: number;
   done: boolean;
   doneAt: Timestamp | null;
-  /** null subject = General (or a trip task when tripId is set). */
-  subjectType: SubjectType | null;
-  subjectId: string | null;
-  /** Routine step when set. */
-  assignmentId: string | null;
-  stepKind: StepKind;
+  source: TaskSource | null;
   /** Booked appointment (not draggable). */
   appointment: AppointmentInfo | null;
-  tripId: string | null;
-  reservationId: string | null;
-  tripTask: TripTaskKind | null;
-  docTask: DocTaskSpec | null;
-  /** Checklist. May be missing on tasks saved before sub-tasks existed. */
-  subtasks: Subtask[];
+  requestsDocument: DocumentRequest | null;
 }
 
 // ── Documents ───────────────────────────────────────────────────────────────
 
-export interface DetailRow {
-  name: string;
+export interface DocumentFile {
+  /** One of the category's fileRoles (front / back) or null. */
+  role: string | null;
+  file: FileRef;
+}
+
+export interface CustomField {
+  label: string;
   value: string;
 }
 
-export interface Document extends Base {
-  kind: 'document';
-  docKind: DocKind;
-  subjectType: SubjectType;
-  subjectId: string;
-  name: string;
-  type: string;
-  /** Health: document date. */
-  date: ISODate | null;
-  /** Car: valid until. Identity: expiry date. */
-  validUntil: ISODate | null;
-  /** Identity only. */
-  idNumber: string;
-  issuer: string;
-  issueDate: ISODate | null;
-  details: DetailRow[];
-  front: FileRef | null;
-  back: FileRef | null;
-  /** Health: provider contact + one-line context + episode. */
-  providerId: string | null;
-  about: string;
-  episode: string;
-  /** Car and health: the uploaded file. */
-  file: FileRef | null;
-  assignmentId: string | null;
-  /** "Keep handy" / "Keep in the glovebox". */
-  pinned: boolean;
-  archived: boolean;
+export interface Expiry {
+  validUntil: ISODate;
   /** Replaced by a renewal; shown with an amber "Outdated" chip. */
   outdated: boolean;
 }
 
-// ── Trips ───────────────────────────────────────────────────────────────────
-
-export interface Trip extends Base {
-  kind: 'trip';
-  name: string;
-  destination: string;
-  start: ISODate;
-  end: ISODate;
-  /** Person ids. */
-  travelers: string[];
-  notes: string;
+/** Any file(s) plus metadata. */
+export interface Document extends Base {
+  kind: 'document';
+  subjectId: string;
+  /** An attachment of a task or reservation (same subject). */
+  attachedTo: { kind: 'task' | 'reservation'; id: string } | null;
+  category: DocCategory;
+  type: string;
+  title: string;
+  /** The document's own date (health: visit/result date). */
+  date: ISODate | null;
+  files: DocumentFile[];
+  /** Registry fields of the category and type. */
+  fields: Fields;
+  /** Ad-hoc fields the user added. */
+  customFields: CustomField[];
+  /** Linked routine. */
+  assignmentId: string | null;
+  /** "Keep handy" / "Keep in the glovebox". */
+  pinned: boolean;
+  /** Only on expiring categories. */
+  expiry: Expiry | null;
 }
 
-export type ReservationType = 'flight' | 'stay' | 'car' | 'activity' | 'hike' | 'train' | 'other';
+// ── Reservations ────────────────────────────────────────────────────────────
 
 export interface Reservation extends Base {
   kind: 'reservation';
-  tripId: string;
+  /** A subject whose type allows reservations (a trip). */
+  subjectId: string;
   type: ReservationType;
   title: string;
   start: LocalDateTime;
   end: LocalDateTime | null;
-  address: string;
-  confirmation: string;
-  link: string;
-  files: FileRef[];
   status: 'booked' | 'planned';
   bookBy: ISODate | null;
-  details: string;
   /** Flights: "Remind me to check in online the day before". */
   checkinReminder: boolean;
+  /** address, confirmation, link, details (registry reservationFields). */
+  fields: Fields;
 }
 
 // ── Union + API shapes ──────────────────────────────────────────────────────
 
-export type Entity =
-  | Person
-  | Car
-  | Contact
-  | Routine
-  | Assignment
-  | Task
-  | Document
-  | Trip
-  | Reservation;
+export type Entity = Subject | Task | Document | Reservation | Routine | Assignment | Contact;
 
 export type EntityKind = Entity['kind'];
 
-export const ENTITY_KINDS: EntityKind[] = [
-  'person',
-  'car',
-  'contact',
-  'routine',
-  'assignment',
-  'task',
-  'document',
-  'trip',
-  'reservation',
-];
+export const ENTITY_KINDS: EntityKind[] = ['subject', 'task', 'document', 'reservation', 'routine', 'assignment', 'contact'];
 
 export interface EntityRef {
   kind: EntityKind;
@@ -319,15 +281,23 @@ export interface ChangeSet {
   delete: EntityRef[];
 }
 
-/** GET /api/state response. */
+/** GET /api/state (the collections). */
 export interface CooState {
-  people: Person[];
-  cars: Car[];
-  contacts: Contact[];
-  routines: Routine[];
-  assignments: Assignment[];
+  subjects: Subject[];
   tasks: Task[];
   documents: Document[];
-  trips: Trip[];
   reservations: Reservation[];
+  routines: Routine[];
+  assignments: Assignment[];
+  contacts: Contact[];
 }
+
+export const COLLECTION: Record<EntityKind, keyof CooState> = {
+  subject: 'subjects',
+  task: 'tasks',
+  document: 'documents',
+  reservation: 'reservations',
+  routine: 'routines',
+  assignment: 'assignments',
+  contact: 'contacts',
+};

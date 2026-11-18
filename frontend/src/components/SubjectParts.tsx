@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Area, Assignment, Document, SubjectType } from '../types/coo';
+import type { Assignment, CooState, Document, RoutineArea, Subject } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { Empty, IconButton, Segmented, SectionHead, StatusText, isImage } from './ui';
 import { useFileUrl } from '../lib/files';
 import { Icon } from './Icon';
 import { TaskRow } from './TaskRow';
-import { SubjectSwitcher, CAR_PAGES, PERSON_PAGES } from './Shell';
+import { SubjectSwitcher, pagesFor } from './Shell';
 import { RoutineDetailDialog } from '../dialogs/RoutineDetail';
 import { AssignExistingDialog, RoutineFormDialog } from '../dialogs/RoutineForm';
 import { DocFormFor, DocViewer, downloadDoc } from '../dialogs/DocDialogs';
@@ -18,6 +18,7 @@ import {
   contactName,
   docValidity,
   docsOfAssignment,
+  fileOf,
   isAdHoc,
   maskId,
   nextStep,
@@ -26,8 +27,9 @@ import {
   subjectName,
   subjectPath,
   tasksForSubject,
-  type Subject,
+  validUntil,
 } from '../lib/model';
+import { CATEGORIES, categoryFields, fieldText } from '../lib/registry';
 import { addTask, setArchived } from '../lib/ops';
 
 /** Mobile switcher + segmented control for the subject's pages. */
@@ -39,8 +41,8 @@ export function SubjectNav({ sub, page }: { sub: Subject; page: string }) {
       <Segmented
         label="Pages"
         value={page}
-        onChange={(v) => navigate(subjectPath(sub.type, sub.entity.id, v))}
-        options={sub.type === 'person' ? PERSON_PAGES : CAR_PAGES}
+        onChange={(v) => navigate(subjectPath(sub, v))}
+        options={pagesFor(sub.subjectType)}
       />
     </div>
   );
@@ -73,13 +75,13 @@ export function RoutineCard({ a }: { a: Assignment }) {
   );
 }
 
-export function RoutineGrid({ sub, area, title }: { sub: Subject; area: Area; title: string }) {
+export function RoutineGrid({ sub, area, title }: { sub: Subject; area: RoutineArea; title: string }) {
   const { s } = useStore();
   const { openDialog } = useUI();
   const list = s.assignments
-    .filter((a) => a.subjectType === sub.type && a.subjectId === sub.entity.id && routineOf(s, a)?.area === area)
+    .filter((a) => a.subjectId === sub.id && routineOf(s, a)?.area === area)
     .sort((x, y) => (x.date ?? '9999').localeCompare(y.date ?? '9999'));
-  const target = { type: sub.type, id: sub.entity.id };
+  const target = sub.id;
   return (
     <section className="section">
       <SectionHead
@@ -96,7 +98,7 @@ export function RoutineGrid({ sub, area, title }: { sub: Subject; area: Area; ti
         {list.map((a) => (
           <RoutineCard key={a.id} a={a} />
         ))}
-        <button type="button" className="tile dashed" onClick={() => openDialog(<AssignExistingDialog subject={target} area={area} />)}>
+        <button type="button" className="tile dashed" onClick={() => openDialog(<AssignExistingDialog subjectId={target} area={area} />)}>
           <Icon name="plus" /> Assign an existing routine
         </button>
       </div>
@@ -104,9 +106,9 @@ export function RoutineGrid({ sub, area, title }: { sub: Subject; area: Area; ti
   );
 }
 
-export function UpcomingAppointments({ type, id }: { type: SubjectType; id: string }) {
+export function UpcomingAppointments({ id }: { id: string }) {
   const { s } = useStore();
-  const list = tasksForSubject(s, type, id)
+  const list = tasksForSubject(s, id)
     .filter((t) => t.appointment && !t.done && (t.date ?? '') >= today())
     .sort(byDate);
   if (list.length === 0) return null;
@@ -122,11 +124,11 @@ export function UpcomingAppointments({ type, id }: { type: SubjectType; id: stri
   );
 }
 
-export function SubjectTasks({ type, id, all }: { type: SubjectType; id: string; all?: boolean }) {
+export function SubjectTasks({ id, all }: { id: string; all?: boolean }) {
   const { s, apply } = useStore();
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(today());
-  const list = tasksForSubject(s, type, id)
+  const list = tasksForSubject(s, id)
     .filter((t) => !t.done && !t.appointment && (all || isAdHoc(t)))
     .sort(byDate);
   return (
@@ -144,7 +146,7 @@ export function SubjectTasks({ type, id, all }: { type: SubjectType; id: string;
         onSubmit={(e) => {
           e.preventDefault();
           if (!title.trim()) return;
-          apply(addTask(s, { title: title.trim(), date: date || null, subjectType: type, subjectId: id }), { toast: 'Added to your agenda' });
+          apply(addTask(s, { title: title.trim(), date: date || null, subjectId: id }), { toast: 'Added to your agenda' });
           setTitle('');
         }}
       >
@@ -164,35 +166,39 @@ export function useDocActions() {
   return {
     show: (d: Document) => ui.openViewer(<DocViewer docId={d.id} />),
     download: (d: Document) => downloadDoc(s, d),
-    archive: (d: Document) => apply(setArchived(s, d, true), { toast: `Archived ${d.name}`, undo: true }),
-    restore: (d: Document) => apply(setArchived(s, d, false), { toast: `Restored ${d.name}` }),
-    edit: (d: Document) => ui.openDialog(<DocFormFor kind={d.docKind} subjectType={d.subjectType} subjectId={d.subjectId} doc={d} />),
+    archive: (d: Document) => apply(setArchived(s, d, true), { toast: `Archived ${d.title}`, undo: true }),
+    restore: (d: Document) => apply(setArchived(s, d, false), { toast: `Restored ${d.title}` }),
+    edit: (d: Document) => ui.openDialog(<DocFormFor category={d.category} subjectId={d.subjectId} doc={d} />),
   };
 }
 
-/** Small preview: the ID's front image or the uploaded image; an icon otherwise. */
+/** Small preview: the first image file (an ID's front); the category's icon otherwise. */
 export function DocThumb({ d }: { d: Document }) {
-  const img = d.docKind === 'identity' ? (isImage(d.front) ? d.front : null) : isImage(d.file) ? d.file : null;
+  const img = (fileOf(d, 'front') && isImage(fileOf(d, 'front')) ? fileOf(d, 'front') : d.files.map((f) => f.file).find((f) => isImage(f))) ?? null;
   const url = useFileUrl(img);
+  const card = CATEGORIES[d.category].fileRoles.includes('front');
   return (
-    <span className={`doc-thumb ${d.docKind === 'identity' ? 'id' : ''}`} aria-hidden="true">
-      {img && url ? <img src={url} alt="" /> : <Icon name={d.docKind === 'identity' ? 'idcard' : 'document'} size={20} />}
+    <span className={`doc-thumb ${card ? 'id' : ''}`} aria-hidden="true">
+      {img && url ? <img src={url} alt="" /> : <Icon name={CATEGORIES[d.category].icon} size={20} />}
     </span>
   );
 }
 
-function docMeta(s: ReturnType<typeof useStore>['s'], d: Document): string[] {
+/** The detail lines under a document's title, from its registry fields. */
+function docMeta(s: CooState, d: Document): string[] {
   const r = routineOf(s, s.assignments.find((a) => a.id === d.assignmentId));
-  if (d.docKind === 'identity') {
+  const f = (k: string) => fieldText(d.fields, k);
+  const until = validUntil(d);
+  if (d.category === 'identity') {
     return [
-      [d.type, d.issuer].filter(Boolean).join(' · '),
-      [d.idNumber ? `No. ${maskId(d.idNumber)}` : '', d.validUntil ? `Expires ${fmtDate(d.validUntil)}` : ''].filter(Boolean).join(' · '),
+      [d.type, f('issuer')].filter(Boolean).join(' · '),
+      [f('idNumber') ? `No. ${maskId(f('idNumber'))}` : '', until ? `Expires ${fmtDate(until)}` : ''].filter(Boolean).join(' · '),
     ].filter(Boolean);
   }
-  if (d.docKind === 'health') {
-    return [[d.type, fmtDate(d.date), contactName(s, d.providerId), d.episode].filter(Boolean).join(' · ')];
+  if (d.category === 'health') {
+    return [[d.type, fmtDate(d.date), contactName(s, f('providerId') || null), f('episode')].filter(Boolean).join(' · ')];
   }
-  return [[d.type, d.validUntil ? `Valid until ${fmtDate(d.validUntil)}` : '', r?.title].filter(Boolean).join(' · ')];
+  return [[d.type, until ? `Valid until ${fmtDate(until)}` : '', fmtDate(d.date), r?.title].filter(Boolean).join(' · ')];
 }
 
 /**
@@ -204,14 +210,14 @@ export function DocRow({ d, actions = true, showSubject = false }: { d: Document
   const act = useDocActions();
   const v = docValidity(d);
   const a = s.assignments.find((x) => x.id === d.assignmentId);
-  const renewal = d.docKind === 'identity' && a ? assignmentStatus(s, a) : null;
+  const renewal = CATEGORIES[d.category].rules.renewal && a ? assignmentStatus(s, a) : null;
   return (
     <li className={`row doc-row ${d.archived ? 'archived' : ''}`}>
-      <button type="button" className="row-main row-body with-icon" onClick={() => act.show(d)} aria-label={`Show ${d.name}`}>
+      <button type="button" className="row-main row-body with-icon" onClick={() => act.show(d)} aria-label={`Show ${d.title}`}>
         <DocThumb d={d} />
         <span className="row-main">
-          <span className="row-title">{d.name}</span>
-          {showSubject && <span className="row-meta strong">{subjectName(s, d.subjectType, d.subjectId)}</span>}
+          <span className="row-title">{d.title}</span>
+          {showSubject && <span className="row-meta strong">{subjectName(s, d.subjectId)}</span>}
           {docMeta(s, d).map((line, i) => (
             <span key={i} className="row-meta">
               {line}
@@ -228,7 +234,7 @@ export function DocRow({ d, actions = true, showSubject = false }: { d: Document
               Restore
             </button>
           ) : (
-            <IconButton icon="archive" label={`Archive ${d.name}`} onClick={() => act.archive(d)} />
+            <IconButton icon="archive" label={`Archive ${d.title}`} onClick={() => act.archive(d)} />
           )}
         </span>
       )}
@@ -275,9 +281,12 @@ export function ArchiveSection({ docs, showSubject = false }: { docs: Document[]
   );
 }
 
-export function docSearch(q: string, d: Document, s: ReturnType<typeof useStore>['s']): boolean {
+export function docSearch(q: string, d: Document, s: CooState): boolean {
   if (!q.trim()) return true;
-  const hay = [d.name, d.type, d.about, d.episode, contactName(s, d.providerId), ...d.details.map((r) => r.value)].join(' ').toLowerCase();
+  const values = categoryFields(d.category, d.type).map((f) =>
+    f.type === 'contact' ? contactName(s, fieldText(d.fields, f.key) || null) : f.type === 'secret' ? '' : fieldText(d.fields, f.key),
+  );
+  const hay = [d.title, d.type, ...values, ...d.customFields.map((r) => r.value)].join(' ').toLowerCase();
   return q
     .toLowerCase()
     .split(/\s+/)

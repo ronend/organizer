@@ -1,9 +1,9 @@
 /** Routine templates by area. Steps are relative to the due date; follow-ups to completion. */
-import type { Area, DocTaskSpec, StepKind, StepPlan } from '../types/coo';
+import type { DocumentRequest, RoutineArea, StepKind, StepPlan } from '../types/coo';
 
 export interface RoutineTemplate {
   key: string;
-  area: Area;
+  area: RoutineArea;
   title: string;
   description: string;
   icon: string;
@@ -23,13 +23,13 @@ export function step(
   title: string,
   offsetDays: number,
   kind: StepKind = 'plain',
-  extra: { prep?: string; docTask?: DocTaskSpec } = {},
+  extra: { prep?: string; requestsDocument?: DocumentRequest } = {},
 ): StepPlan {
-  return { title, offsetDays, kind, prep: extra.prep ?? '', docTask: extra.docTask ?? null };
+  return { title, offsetDays, kind, prep: extra.prep ?? '', requestsDocument: extra.requestsDocument ?? null };
 }
 
 const visitSummary = step('File the visit summary', 1, 'plain', {
-  docTask: { docKind: 'health', docType: 'Visit summary' },
+  requestsDocument: { category: 'health', type: 'Visit summary' },
 });
 
 function bookable(
@@ -73,7 +73,7 @@ export const TEMPLATES: RoutineTemplate[] = [
     plan: [step('Compare insurance quotes', -30), step('Renew car insurance', -7, 'renew')],
     followUps: [
       step('Put the new insurance card in the glovebox', 0, 'plain', {
-        docTask: { docKind: 'car', docType: 'ID card' },
+        requestsDocument: { category: 'car', type: 'ID card' },
       }),
     ],
     doneVerb: 'Renewed',
@@ -90,7 +90,7 @@ export const TEMPLATES: RoutineTemplate[] = [
     countFrom: 'due',
     plan: [step('Schedule safety inspection', -14, 'schedule')],
     followUps: [
-      step('File the inspection report', 0, 'plain', { docTask: { docKind: 'car', docType: 'Inspection' } }),
+      step('File the inspection report', 0, 'plain', { requestsDocument: { category: 'car', type: 'Inspection' } }),
     ],
     doneVerb: 'Passed',
     summary: 'coo reminds you to schedule the inspection 14 days before it is due, then tracks the appointment.',
@@ -106,7 +106,7 @@ export const TEMPLATES: RoutineTemplate[] = [
     countFrom: 'due',
     plan: [step('Renew registration', -14, 'renew')],
     followUps: [
-      step('File the new registration', 0, 'plain', { docTask: { docKind: 'car', docType: 'Registration' } }),
+      step('File the new registration', 0, 'plain', { requestsDocument: { category: 'car', type: 'Registration' } }),
     ],
     doneVerb: 'Renewed',
     summary: 'coo reminds you to renew the registration 14 days before it expires.',
@@ -143,7 +143,7 @@ export const TEMPLATES: RoutineTemplate[] = [
     countFrom: 'done',
     plan: [step('Schedule lab tests', -14, 'schedule', { prep: 'Fast for 12 hours before the test' })],
     followUps: [
-      step('Upload the lab results', 3, 'plain', { docTask: { docKind: 'health', docType: 'Result' } }),
+      step('Upload the lab results', 3, 'plain', { requestsDocument: { category: 'health', type: 'Result' } }),
       step('Book the follow-up visit', 7),
     ],
     doneVerb: 'Tested',
@@ -182,7 +182,7 @@ export const TEMPLATES: RoutineTemplate[] = [
     ],
     followUps: [
       step('Add the new passport to documents', 0, 'plain', {
-        docTask: { docKind: 'identity', docType: 'Passport' },
+        requestsDocument: { category: 'identity', type: 'Passport' },
       }),
     ],
     doneVerb: 'Renewed',
@@ -201,7 +201,7 @@ export const TEMPLATES: RoutineTemplate[] = [
     plan: [step('Renew driver license', -60, 'renew')],
     followUps: [
       step('Add the new driver license to documents', 0, 'plain', {
-        docTask: { docKind: 'identity', docType: 'Driver license' },
+        requestsDocument: { category: 'identity', type: 'Driver license' },
       }),
     ],
     doneVerb: 'Renewed',
@@ -219,7 +219,7 @@ export const TEMPLATES: RoutineTemplate[] = [
     plan: [step('Renew ID card', -60, 'renew')],
     followUps: [
       step('Add the new ID card to documents', 0, 'plain', {
-        docTask: { docKind: 'identity', docType: 'City or state ID' },
+        requestsDocument: { category: 'identity', type: 'City or state ID' },
       }),
     ],
     doneVerb: 'Renewed',
@@ -227,7 +227,7 @@ export const TEMPLATES: RoutineTemplate[] = [
   },
 ];
 
-export function templatesFor(area: Area): RoutineTemplate[] {
+export function templatesFor(area: RoutineArea): RoutineTemplate[] {
   return TEMPLATES.filter((t) => t.area === area);
 }
 
@@ -235,8 +235,8 @@ export function templateByKey(key: string | null | undefined): RoutineTemplate |
   return key ? TEMPLATES.find((t) => t.key === key) : undefined;
 }
 
-export const AREA_LABEL: Record<Area, string> = { health: 'Health', identity: 'Identity', car: 'Car' };
-export const AREA_ICON: Record<Area, string> = { health: 'stethoscope', identity: 'idcard', car: 'car' };
+export const AREA_LABEL: Record<RoutineArea, string> = { health: 'Health', identity: 'Identity', car: 'Car' };
+export const AREA_ICON: Record<RoutineArea, string> = { health: 'stethoscope', identity: 'idcard', car: 'car' };
 
 export const REPEAT_OPTIONS: { value: number | null; label: string }[] = [
   { value: null, label: "Doesn't repeat" },
@@ -261,7 +261,7 @@ export function repeatText(months: number | null): string {
 
 /** Plan for a Blank routine with a date. */
 export function blankPlan(
-  area: Area,
+  area: RoutineArea,
   title: string,
   remindDays: number,
   needsBooking: boolean,
@@ -274,6 +274,6 @@ function lowerFirst(s: string): string {
   return s ? s[0].toLowerCase() + s.slice(1) : s;
 }
 
-export function defaultRemindDays(area: Area): number {
+export function defaultRemindDays(area: RoutineArea): number {
   return area === 'identity' ? 90 : 14;
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { FileRef, Reservation, ReservationType, Trip } from '../types/coo';
+import type { Document, FileRef, Reservation, ReservationType, Subject } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { useToast } from '../store/Toast';
@@ -9,21 +9,24 @@ import { uploadFile } from '../api/client';
 import { Chips, Dialog, Field, FileImage, Fieldset, FormActions, StatusText, Viewer, isImage, useBusy } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { addDays, datePart, fmtDate, fmtDateTime, timePart, today } from '../lib/dates';
-import { sortedPeople } from '../lib/model';
-import { RES_ORDER, RES_TYPES, cleanLink, mapsUrl, siteName } from '../lib/reservations';
-import { deleteReservation, deleteTrip, makeReservation, makeTrip, saveReservation, saveTrip } from '../lib/ops';
+import { attachmentsOf, findSubject, sortedPeople, tripInfo } from '../lib/model';
+import { RES_ORDER, RES_TYPES, cleanLink, mapsUrl, resField, siteName } from '../lib/reservations';
+import { compactFields } from '../lib/registry';
+import { deleteReservation, deleteTrip, makeDocument, makeReservation, makeSubject, saveReservation, saveTrip } from '../lib/ops';
 import { getFileUrl } from '../lib/files';
 
-export function TripDialog({ trip }: { trip?: Trip }) {
+/** A trip is a subject; its destination, dates and travelers are registry attributes. */
+export function TripDialog({ trip }: { trip?: Subject }) {
   const { s, apply } = useStore();
   const { closeDialog } = useUI();
   const toast = useToast();
   const navigate = useNavigate();
+  const info = trip ? tripInfo(trip) : null;
   const [name, setName] = useState(trip?.name ?? '');
-  const [destination, setDestination] = useState(trip?.destination ?? '');
-  const [start, setStart] = useState(trip?.start ?? addDays(today(), 30));
-  const [end, setEnd] = useState(trip?.end ?? addDays(today(), 37));
-  const [travelers, setTravelers] = useState<Set<string>>(new Set(trip?.travelers ?? []));
+  const [destination, setDestination] = useState(info?.destination ?? '');
+  const [start, setStart] = useState(info?.start || addDays(today(), 30));
+  const [end, setEnd] = useState(info?.end || addDays(today(), 37));
+  const [travelers, setTravelers] = useState<Set<string>>(new Set(info?.travelers ?? []));
   const [notes, setNotes] = useState(trip?.notes ?? '');
 
   const submit = () => {
@@ -32,12 +35,13 @@ export function TripDialog({ trip }: { trip?: Trip }) {
       toast.show({ text: 'The trip ends before it starts' });
       return;
     }
-    const data = { name: name.trim(), destination: destination.trim(), start, end, travelers: [...travelers], notes: notes.trim() };
+    const attributes = compactFields({ ...(trip?.attributes ?? {}), destination: destination.trim(), start, end, travelers: [...travelers] });
+    const data = { name: name.trim(), notes: notes.trim(), attributes };
     if (trip) {
       apply(saveTrip(s, { ...trip, ...data }), { toast: 'Trip saved' });
       closeDialog();
     } else {
-      const t = makeTrip(data);
+      const t = makeSubject({ subjectType: 'trip', ...data });
       apply(saveTrip(s, t), { toast: 'Trip created' });
       closeDialog();
       navigate(`/trips/${t.id}`);
@@ -73,7 +77,7 @@ export function TripDialog({ trip }: { trip?: Trip }) {
         <Field label="Ends">{(id) => <input id={id} type="date" value={end} onChange={(e) => setEnd(e.target.value)} required />}</Field>
       </div>
       <Fieldset legend="Who is going">
-        {s.people.length === 0 ? (
+        {sortedPeople(s).length === 0 ? (
           <div className="muted">Add people first to track their passports.</div>
         ) : (
           <div className="checklist">
@@ -119,20 +123,22 @@ export function ReservationFormDialog({
   const { closeDialog } = useUI();
   const toast = useToast();
   const { busy, run } = useBusy();
-  const trip = s.trips.find((t) => t.id === tripId);
+  const trip = findSubject(s, tripId);
   const r = reservation;
+  // Ticket files are attachment documents of the trip, attached to the reservation.
+  const existing: Document[] = r ? attachmentsOf(s, 'reservation', r.id) : [];
   const [type, setType] = useState<ReservationType>(r?.type ?? 'flight');
   const [title, setTitle] = useState(r?.title ?? '');
-  const [start, setStart] = useState(r?.start ?? initialStart ?? `${trip?.start ?? today()}T09:00`);
+  const [start, setStart] = useState(r?.start ?? initialStart ?? `${(trip && tripInfo(trip).start) || today()}T09:00`);
   const [end, setEnd] = useState(r?.end ?? '');
-  const [address, setAddress] = useState(r?.address ?? '');
-  const [confirmation, setConfirmation] = useState(r?.confirmation ?? '');
-  const [link, setLink] = useState(r?.link ?? '');
-  const [keep, setKeep] = useState<FileRef[]>(r?.files ?? []);
+  const [address, setAddress] = useState(r ? resField(r, 'address') : '');
+  const [confirmation, setConfirmation] = useState(r ? resField(r, 'confirmation') : '');
+  const [link, setLink] = useState(r ? resField(r, 'link') : '');
+  const [keep, setKeep] = useState<Document[]>(existing);
   const [newFiles, setNewFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<'booked' | 'planned'>(forceBooked ? 'booked' : r?.status ?? 'booked');
   const [bookBy, setBookBy] = useState(r?.bookBy ?? '');
-  const [details, setDetails] = useState(r?.details ?? '');
+  const [details, setDetails] = useState(r ? resField(r, 'details') : '');
   const [checkin, setCheckin] = useState(r?.checkinReminder ?? true);
   const meta = RES_TYPES[type];
 
@@ -151,22 +157,25 @@ export function ReservationFormDialog({
         return;
       }
       const data = {
-        tripId,
+        subjectId: tripId,
         type,
         title: title.trim(),
         start,
         end: end || null,
-        address: address.trim(),
-        confirmation: confirmation.trim(),
-        link: cleanLink(link),
-        files: [...keep, ...uploaded],
         status,
         bookBy: status === 'planned' && bookBy ? bookBy : null,
-        details: details.trim(),
         checkinReminder: type === 'flight' ? checkin : false,
+        fields: compactFields({ address: address.trim(), confirmation: confirmation.trim(), link: cleanLink(link), details: details.trim() }),
       };
       const res = r ? { ...r, ...data } : makeReservation(data);
-      apply(saveReservation(s, res, closeTaskId), { toast: r ? 'Reservation saved' : 'Reservation added' });
+      const attachments = uploaded.map((f) =>
+        makeDocument({
+          category: 'attachment', type: 'File', subjectId: tripId, title: f.name,
+          attachedTo: { kind: 'reservation', id: res.id }, files: [{ role: null, file: f }],
+        }),
+      );
+      const removeAttachments = existing.filter((d) => !keep.some((k) => k.id === d.id));
+      apply(saveReservation(s, res, { closeTaskId, attachments, removeAttachments }), { toast: r ? 'Reservation saved' : 'Reservation added' });
       closeDialog();
     });
 
@@ -198,16 +207,16 @@ export function ReservationFormDialog({
       <Field label="Tickets and confirmations" optional hint="PDFs or images. You can pick several.">
         {(id) => (
           <>
-            {keep.length + (r?.files.length ?? 0) > 0 && (
+            {existing.length > 0 && (
               <div className="file-list">
-                {(r?.files ?? []).map((f) => (
-                  <label key={f.key} className="check-row">
+                {existing.map((d) => (
+                  <label key={d.id} className="check-row">
                     <input
                       type="checkbox"
-                      checked={!keep.some((k) => k.key === f.key)}
-                      onChange={(e) => setKeep((cur) => (e.target.checked ? cur.filter((k) => k.key !== f.key) : [...cur, f]))}
+                      checked={!keep.some((k) => k.id === d.id)}
+                      onChange={(e) => setKeep((cur) => (e.target.checked ? cur.filter((k) => k.id !== d.id) : [...cur, d]))}
                     />
-                    <span>Remove {f.name}</span>
+                    <span>Remove {d.title}</span>
                   </label>
                 ))}
               </div>
@@ -248,8 +257,13 @@ export function ReservationDetailDialog({ reservationId }: { reservationId: stri
   const toast = useToast();
   const r = s.reservations.find((x) => x.id === reservationId);
   if (!r) return null;
-  const trip = s.trips.find((t) => t.id === r.tripId);
+  const trip = findSubject(s, r.subjectId);
   const meta = RES_TYPES[r.type];
+  const address = resField(r, 'address');
+  const confirmation = resField(r, 'confirmation');
+  const link = resField(r, 'link');
+  const details = resField(r, 'details');
+  const files = attachmentsOf(s, 'reservation', r.id).flatMap((d) => d.files.map((f) => f.file));
   const when = r.end
     ? datePart(r.start) === datePart(r.end)
       ? `${fmtDateTime(r.start)}–${timePart(r.end)}`
@@ -274,7 +288,7 @@ export function ReservationDetailDialog({ reservationId }: { reservationId: stri
       }
       actions={
         <>
-          <button type="button" className="btn secondary" onClick={() => ui.openDialog(<ReservationFormDialog tripId={r.tripId} reservation={r} />)}>
+          <button type="button" className="btn secondary" onClick={() => ui.openDialog(<ReservationFormDialog tripId={r.subjectId} reservation={r} />)}>
             Edit
           </button>
           <button type="button" className="btn primary" onClick={() => ui.openViewer(<TicketViewer reservationId={r.id} />)}>
@@ -287,53 +301,53 @@ export function ReservationDetailDialog({ reservationId }: { reservationId: stri
       <dl className="kv">
         <dt>When</dt>
         <dd>{when}</dd>
-        {r.address && (
+        {address && (
           <>
             <dt>Where</dt>
             <dd>
-              {r.address}{' '}
-              <a className="link" href={mapsUrl(r.address)} target="_blank" rel="noreferrer noopener">
+              {address}{' '}
+              <a className="link" href={mapsUrl(address)} target="_blank" rel="noreferrer noopener">
                 Open in Maps
               </a>
             </dd>
           </>
         )}
-        {r.confirmation && (
+        {confirmation && (
           <>
             <dt>Confirmation</dt>
             <dd>
-              <span className="mono">{r.confirmation}</span>{' '}
+              <span className="mono">{confirmation}</span>{' '}
               <button
                 type="button"
                 className="link"
-                onClick={() => copyText(r.confirmation).then((ok) => toast.show({ text: ok ? `Copied ${r.confirmation}` : 'Couldn’t copy. Select the text instead.' }))}
+                onClick={() => copyText(confirmation).then((ok) => toast.show({ text: ok ? `Copied ${confirmation}` : 'Couldn’t copy. Select the text instead.' }))}
               >
                 Copy
               </button>
             </dd>
           </>
         )}
-        {r.link && (
+        {link && (
           <>
             <dt>Link</dt>
             <dd>
-              <a className="link" href={r.link} target="_blank" rel="noreferrer noopener">
-                {siteName(r.link)}
+              <a className="link" href={link} target="_blank" rel="noreferrer noopener">
+                {siteName(link)}
               </a>{' '}
-              <span className="muted truncate">{r.link.length > 48 ? `${r.link.slice(0, 48)}…` : r.link}</span>
+              <span className="muted truncate">{link.length > 48 ? `${link.slice(0, 48)}…` : link}</span>
             </dd>
           </>
         )}
-        {r.files.length > 0 && (
+        {files.length > 0 && (
           <>
             <dt>Files</dt>
-            <dd>{r.files.map((f) => f.name).join(', ')}</dd>
+            <dd>{files.map((f) => f.name).join(', ')}</dd>
           </>
         )}
-        {r.details && (
+        {details && (
           <>
             <dt>Details</dt>
-            <dd className="pre">{r.details}</dd>
+            <dd className="pre">{details}</dd>
           </>
         )}
         {r.status === 'planned' && r.bookBy && (
@@ -354,6 +368,9 @@ export function TicketViewer({ reservationId }: { reservationId: string }) {
   const r = s.reservations.find((x) => x.id === reservationId);
   if (!r) return null;
   const meta = RES_TYPES[r.type];
+  const confirmation = resField(r, 'confirmation');
+  const address = resField(r, 'address');
+  const files: FileRef[] = attachmentsOf(s, 'reservation', r.id).flatMap((d) => d.files.map((f) => f.file));
   return (
     <Viewer title={r.title} white>
       <div className="ticket-card">
@@ -361,23 +378,23 @@ export function TicketViewer({ reservationId }: { reservationId: string }) {
           {meta.label} · {fmtDateTime(r.start)}
         </div>
         <h2 className="ticket-title">{r.title}</h2>
-        {r.confirmation && (
+        {confirmation && (
           <div className="ticket-conf">
             <span className="ticket-conf-label">Confirmation</span>
-            <span className="ticket-conf-value">{r.confirmation}</span>
+            <span className="ticket-conf-value">{confirmation}</span>
             <button
               type="button"
               className="btn secondary small"
-              onClick={() => copyText(r.confirmation).then((ok) => toast.show({ text: ok ? `Copied ${r.confirmation}` : 'Couldn’t copy. Select the text instead.' }))}
+              onClick={() => copyText(confirmation).then((ok) => toast.show({ text: ok ? `Copied ${confirmation}` : 'Couldn’t copy. Select the text instead.' }))}
             >
               <Icon name="copy" size={16} /> Copy
             </button>
           </div>
         )}
-        {r.files.filter(isImage).map((f) => (
+        {files.filter(isImage).map((f) => (
           <FileImage key={f.key} file={f} alt={f.name} className="ticket-image" />
         ))}
-        {r.files
+        {files
           .filter((f) => !isImage(f))
           .map((f) => (
             <button
@@ -392,8 +409,8 @@ export function TicketViewer({ reservationId }: { reservationId: string }) {
               <Icon name="document" /> Open {f.name}
             </button>
           ))}
-        {r.files.length === 0 && !r.confirmation && <p className="ticket-muted">No tickets attached yet.</p>}
-        {r.address && <p className="ticket-address">{r.address}</p>}
+        {files.length === 0 && !confirmation && <p className="ticket-muted">No tickets attached yet.</p>}
+        {address && <p className="ticket-address">{address}</p>}
       </div>
     </Viewer>
   );

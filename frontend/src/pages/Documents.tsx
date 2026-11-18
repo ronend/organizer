@@ -1,20 +1,20 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { DocKind, Document } from '../types/coo';
+import type { DocCategory, Document } from '../types/coo';
 import { useStore } from '../store/Store';
 import { Empty, PageHead, SectionHead, Segmented } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { ArchiveSection, DocList } from '../components/SubjectParts';
-import { allSubjects } from '../lib/model';
+import { allSubjects, subjectLabel, trips as tripsOf } from '../lib/model';
 import { CATEGORIES, CATEGORY_KEYS } from '../lib/registry';
 
 // One filter per registry category, in registry order.
-const KINDS: { value: DocKind; label: string }[] = CATEGORY_KEYS.map((k) => ({ value: k, label: CATEGORIES[k].short }));
+const KINDS: { value: DocCategory; label: string }[] = CATEGORY_KEYS.map((k) => ({ value: k, label: CATEGORIES[k].short }));
 
-type KindFilter = DocKind | 'all';
+type KindFilter = DocCategory | 'all';
 
 function titleMatches(q: string, d: Document) {
-  const name = d.name.toLowerCase();
+  const name = d.title.toLowerCase();
   return q
     .toLowerCase()
     .split(/\s+/)
@@ -29,6 +29,8 @@ export default function Documents() {
   // The title box keeps its own state so typing never waits on the router.
   const [q, setQ] = useState(() => params.get('q') ?? '');
   const forParam = params.get('for') ?? 'all';
+  // A subject id (older links were "<type>:<id>").
+  const forId = forParam.includes(':') ? forParam.split(':')[1] : forParam;
 
   // Build on the latest params: URL updates run as transitions, so the
   // `params` captured by this render can be stale.
@@ -47,21 +49,21 @@ export default function Documents() {
   const base = useMemo(
     () =>
       s.documents.filter((d) => {
-        if (forParam !== 'all' && `${d.subjectType}:${d.subjectId}` !== forParam) return false;
+        if (forParam !== 'all' && d.subjectId !== forId) return false;
         return titleMatches(q, d);
       }),
     [s.documents, forParam, q],
   );
   const live = base.filter((d) => !d.archived);
-  const count = (k: DocKind) => live.filter((d) => d.docKind === k).length;
+  const count = (k: DocCategory) => live.filter((d) => d.category === k).length;
   // Only offer kinds that exist at all, so the chips adapt to the household.
-  const kinds = KINDS.filter((k) => s.documents.some((d) => d.docKind === k.value));
+  const kinds = KINDS.filter((k) => s.documents.some((d) => d.category === k.value));
   const rawKind = params.get('kind') as KindFilter | null;
   const kind: KindFilter = rawKind && kinds.some((k) => k.value === rawKind) ? rawKind : 'all';
 
-  const byKind = (d: Document) => kind === 'all' || d.docKind === kind;
-  const shown = live.filter(byKind).sort((a, b) => a.name.localeCompare(b.name));
-  const archived = base.filter((d) => d.archived && byKind(d)).sort((a, b) => a.name.localeCompare(b.name));
+  const byKind = (d: Document) => kind === 'all' || d.category === kind;
+  const shown = live.filter(byKind).sort((a, b) => a.title.localeCompare(b.title));
+  const archived = base.filter((d) => d.archived && byKind(d)).sort((a, b) => a.title.localeCompare(b.title));
   const filtering = !!q.trim() || forParam !== 'all' || kind !== 'all';
 
   return (
@@ -81,9 +83,9 @@ export default function Documents() {
         )}
         <select aria-label="Whose documents" className="filter-select" value={forParam} onChange={(e) => setParam('for', e.target.value === 'all' ? null : e.target.value)}>
           <option value="all">Everyone</option>
-          {allSubjects(s).map((x) => (
-            <option key={x.entity.id} value={`${x.type}:${x.entity.id}`}>
-              {x.type === 'person' ? x.entity.name : `${x.entity.makeModel} · ${x.entity.plate}`}
+          {[...allSubjects(s), ...tripsOf(s)].map((x) => (
+            <option key={x.id} value={x.id}>
+              {subjectLabel(x)}
             </option>
           ))}
         </select>

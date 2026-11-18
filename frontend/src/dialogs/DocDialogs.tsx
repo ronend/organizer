@@ -1,60 +1,29 @@
+/**
+ * Documents: one form for every category, built from the registry
+ * (lib/registry.json) — the category's types, files (front/back roles or a
+ * single file), date, expiry, fields and per-type fields, custom fields,
+ * routine link, renewal reminders and pin. Saving goes through
+ * POST /api/documents, which applies the document rules server-side.
+ */
 import { useState, type KeyboardEvent } from 'react';
-import type { CooState, DetailRow, DocKind, Document, FileRef, SubjectType } from '../types/coo';
+import type { CooState, CustomField, DocCategory, Document, DocumentFile, FileRef, Fields } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { useToast } from '../store/Toast';
 import { saveDocument, uploadFile, type SaveDocumentRequest, type SaveDocumentResult } from '../api/client';
 import { Dialog, Field, FilePreview, Fieldset, FormActions, IconButton, StatusText, Viewer, isImage, isPdf, useBusy } from '../components/ui';
+import { FieldsEditor, fieldDisplay } from '../components/FieldInputs';
 import { copyText } from '../lib/clipboard';
 import { Icon } from '../components/Icon';
 import { fmtDate } from '../lib/dates';
-import { assignmentsFor, contactName, contactsFor, docValidity, routineOf, subjectName } from '../lib/model';
-import { category, detailFields, remindDefault as remindDefaultFor } from '../lib/registry';
+import { assignmentsFor, docValidity, fileOf, routineOf, subjectName, validUntil } from '../lib/model';
+import { CATEGORIES, category, categoryFields, compactFields, remindDefault, typeFields } from '../lib/registry';
 import { downloadOriginal, getFileUrl, safeFilename, saveBlob, summarySvg } from '../lib/files';
 
-// ── Constants ───────────────────────────────────────────────────────────────
+// ── Form ────────────────────────────────────────────────────────────────────
 
-// Types, detail fields and reminder defaults come from the registry (lib/registry.json).
-export const ID_TYPES = category('identity').types;
-export const HEALTH_TYPES = category('health').types;
-export const CAR_TYPES = category('car').types;
-
-export function remindDefault(type: string): number {
-  return remindDefaultFor('identity', type);
-}
-
-/** Swap suggested rows for the new type, keeping anything already typed. */
-function swapRows(rows: DetailRow[], from: string, to: string): DetailRow[] {
-  const oldNames = new Set(detailFields('identity', from));
-  const next = detailFields('identity', to).map((name) => ({ name, value: rows.find((r) => r.name === name)?.value ?? '' }));
-  const names = new Set(next.map((r) => r.name));
-  for (const r of rows) {
-    if (names.has(r.name)) continue;
-    if (oldNames.has(r.name) && !r.value) continue;
-    if (!r.name && !r.value) continue;
-    next.push(r);
-  }
-  return next;
-}
-
-// ── Dispatcher ──────────────────────────────────────────────────────────────
-
-export function DocFormFor(p: {
-  kind: DocKind;
-  subjectType: SubjectType;
-  subjectId: string;
-  assignmentId?: string | null;
-  docType?: string;
-  closeTaskId?: string;
-  doc?: Document;
-}) {
-  if (p.kind === 'identity') return <IdDialog {...p} />;
-  if (p.kind === 'health') return <HealthDocDialog {...p} />;
-  return <CarDocDialog {...p} />;
-}
-
-interface FormProps {
-  subjectType: SubjectType;
+export interface DocFormProps {
+  category: DocCategory;
   subjectId: string;
   assignmentId?: string | null;
   docType?: string;
@@ -62,43 +31,19 @@ interface FormProps {
   doc?: Document;
 }
 
-async function maybeUpload(f: File | null): Promise<FileRef | null> {
-  return f ? uploadFile(f, f.name) : null;
+/** Opens the form for a category (kept as the public entry point). */
+export function DocFormFor(p: DocFormProps) {
+  return <DocDialog {...p} />;
 }
 
-/**
- * Saves through POST /api/documents (the server applies the document rules)
- * and applies what it wrote. Returns null, after a toast, if it failed, so
- * the form stays open.
- */
-function useSaveDocument() {
-  const { commit } = useStore();
-  const toast = useToast();
-  return async (req: SaveDocumentRequest, message: (r: SaveDocumentResult) => string): Promise<SaveDocumentResult | null> => {
-    let result: SaveDocumentResult | null = null;
-    try {
-      await commit(async () => {
-        result = await saveDocument(req);
-        return result.changes;
-      });
-    } catch (e) {
-      toast.show({ text: `Couldn’t save: ${e instanceof Error ? e.message : 'error'}` });
-      return null;
-    }
-    toast.show({ text: message(result!) });
-    return result;
-  };
+/** On a type change, drop empty values of fields only the old type had. */
+function moveTypeFields(fields: Fields, kind: DocCategory, from: string, to: string): Fields {
+  const keep = new Set(categoryFields(kind, to).map((f) => f.key));
+  const dropped = new Set(typeFields(kind, from).map((f) => f.key).filter((k) => !keep.has(k)));
+  return Object.fromEntries(Object.entries(fields).filter(([k, v]) => !dropped.has(k) || (v !== '' && v != null)));
 }
 
-function savedText(r: SaveDocumentResult, first = 'Document saved.'): string {
-  const parts = [first];
-  if (r.summary.remindersPlannedFrom) parts.push(`Renewal reminders planned from ${fmtDate(r.summary.remindersPlannedFrom, true)}.`);
-  if (r.summary.archivedOlder?.length) parts.push('The older one was archived.');
-  if (r.summary.routineMovedTo) parts.push(`${r.summary.linkedRoutine ?? 'The routine'} moved to ${fmtDate(r.summary.routineMovedTo, true)}.`);
-  return parts.join(' ');
-}
-
-function ImagePicker({
+function FilePicker({
   label,
   current,
   onFile,
@@ -128,47 +73,107 @@ function ImagePicker({
   );
 }
 
-// ── ID ──────────────────────────────────────────────────────────────────────
+/**
+ * Saves through POST /api/documents and applies what it wrote. Returns null,
+ * after a toast, if it failed, so the form stays open.
+ */
+function useSaveDocument() {
+  const { commit } = useStore();
+  const toast = useToast();
+  return async (req: SaveDocumentRequest, message: (r: SaveDocumentResult) => string): Promise<SaveDocumentResult | null> => {
+    let result: SaveDocumentResult | null = null;
+    try {
+      await commit(async () => {
+        result = await saveDocument(req);
+        return result.changes;
+      });
+    } catch (e) {
+      toast.show({ text: `Couldn’t save: ${e instanceof Error ? e.message : 'error'}` });
+      return null;
+    }
+    toast.show({ text: message(result!) });
+    return result;
+  };
+}
 
-export function IdDialog({ subjectType, subjectId, assignmentId, docType, closeTaskId, doc }: FormProps) {
+function savedText(r: SaveDocumentResult): string {
+  const parts = ['Saved.'];
+  if (r.summary.remindersPlannedFrom) parts.push(`Renewal reminders planned from ${fmtDate(r.summary.remindersPlannedFrom, true)}.`);
+  if (r.summary.archivedOlder?.length) parts.push('The older one was archived.');
+  if (r.summary.routineMovedTo) parts.push(`${r.summary.linkedRoutine ?? 'The routine'} moved to ${fmtDate(r.summary.routineMovedTo, true)}.`);
+  return parts.join(' ');
+}
+
+const ROLE_LABEL: Record<string, string> = { front: 'Front', back: 'Back' };
+const roleKey = (r: string | null) => r ?? '';
+
+export function DocDialog({ category: kind, subjectId, assignmentId, docType, closeTaskId, doc }: DocFormProps) {
   const { s } = useStore();
   const save = useSaveDocument();
   const { closeDialog } = useUI();
   const toast = useToast();
   const { busy, run } = useBusy();
-  const person = s.people.find((p) => p.id === subjectId);
-  const initialType = doc?.type ?? docType ?? 'Passport';
-  const [name, setName] = useState(doc?.name ?? (person ? `${person.name}’s ${initialType.toLowerCase()}` : ''));
+  const cat = category(kind);
+  const subject = s.subjects.find((x) => x.id === subjectId);
+  const initialType = doc?.type ?? docType ?? cat.defaultType;
+  // Cards (front/back) of a person get "<Name>’s <type>" as a starting title.
+  const defaultTitle = (t: string) => (cat.fileRoles.length && subject?.subjectType === 'person' ? `${subject.name}’s ${t.toLowerCase()}` : '');
+
+  const [title, setTitle] = useState(doc?.title ?? defaultTitle(initialType));
   const [type, setType] = useState(initialType);
-  const [idNumber, setIdNumber] = useState(doc?.idNumber ?? '');
-  const [issuer, setIssuer] = useState(doc?.issuer ?? '');
-  const [issueDate, setIssueDate] = useState(doc?.issueDate ?? '');
-  const [expiry, setExpiry] = useState(doc?.validUntil ?? '');
-  const [rows, setRows] = useState<DetailRow[]>(doc?.details.length ? doc.details : detailFields('identity', initialType).map((n) => ({ name: n, value: '' })));
-  const [front, setFront] = useState<File | null>(null);
-  const [back, setBack] = useState<File | null>(null);
-  const [rmFront, setRmFront] = useState(false);
-  const [rmBack, setRmBack] = useState(false);
+  const [date, setDate] = useState(doc?.date ?? (cat.datedByDefault ? new Date().toISOString().slice(0, 10) : ''));
+  const [expiry, setExpiry] = useState((doc && validUntil(doc)) ?? '');
+  const [fields, setFields] = useState<Fields>(doc?.fields ?? {});
+  const [custom, setCustom] = useState<CustomField[]>(doc?.customFields ?? []);
+  const roles: (string | null)[] = cat.fileRoles.length ? cat.fileRoles : [null];
+  const [picked, setPicked] = useState<Record<string, File | null>>({});
+  const [removed, setRemoved] = useState<Record<string, boolean>>({});
   const [linked, setLinked] = useState(doc?.assignmentId ?? assignmentId ?? '');
-  const [remind, setRemind] = useState(!doc);
-  const [remindDays, setRemindDays] = useState(String(remindDefault(initialType)));
-  const [pinned, setPinned] = useState(doc?.pinned ?? false);
-  const routines = assignmentsFor(s, subjectType, subjectId, 'identity');
+  const [remind, setRemind] = useState(!doc && !!cat.rules.renewal);
+  const [remindDays, setRemindDays] = useState(String(remindDefault(kind, initialType)));
+  const [pinned, setPinned] = useState(doc?.pinned ?? cat.pin.default);
+  const routines = cat.area ? assignmentsFor(s, subjectId, cat.area) : [];
+  const defs = categoryFields(kind, type);
 
   const changeType = (t: string) => {
-    setRows((cur) => swapRows(cur, type, t));
-    setRemindDays(String(remindDefault(t)));
-    if (person && name === `${person.name}’s ${type.toLowerCase()}`) setName(`${person.name}’s ${t.toLowerCase()}`);
+    setFields((cur) => moveTypeFields(cur, kind, type, t));
+    setRemindDays(String(remindDefault(kind, t)));
+    if (title === defaultTitle(type)) setTitle(defaultTitle(t));
     setType(t);
   };
 
+  const suggestionsFor = (key: string) => [
+    ...new Set(
+      s.documents
+        .filter((d) => d.subjectId === subjectId && d.category === kind)
+        .map((d) => d.fields[key])
+        .filter((v): v is string => typeof v === 'string' && !!v),
+    ),
+  ];
+
   const submit = () =>
     run(async () => {
-      if (!name.trim()) return;
-      let f: FileRef | null = null;
-      let b: FileRef | null = null;
+      const firstPicked = Object.values(picked).find(Boolean);
+      const t = title.trim() || firstPicked?.name || '';
+      if (!t) {
+        toast.show({ text: 'Give the document a title' });
+        return;
+      }
+      const files: DocumentFile[] = [];
       try {
-        [f, b] = await Promise.all([maybeUpload(front), maybeUpload(back)]);
+        const uploads = await Promise.all(
+          roles.map(async (role) => {
+            const f = picked[roleKey(role)];
+            return [role, f ? await uploadFile(f, f.name) : null] as const;
+          }),
+        );
+        for (const [role, up] of uploads) {
+          const cur = doc ? fileOf(doc, role) : null;
+          const file = up ?? (removed[roleKey(role)] ? null : cur);
+          if (file) files.push({ role, file });
+        }
+        // Files beyond the form's roles (e.g. a second file added elsewhere) are kept.
+        for (const f of doc?.files ?? []) if (!roles.includes(f.role)) files.push(f);
       } catch (e) {
         toast.show({ text: `Upload failed: ${e instanceof Error ? e.message : 'error'}` });
         return;
@@ -177,89 +182,104 @@ export function IdDialog({ subjectType, subjectId, assignmentId, docType, closeT
         {
           document: {
             id: doc?.id,
-            subjectType,
             subjectId,
-            docKind: 'identity',
-            name: name.trim(),
+            category: kind,
+            title: t,
             type,
-            idNumber: idNumber.trim(),
-            issuer: issuer.trim(),
-            issueDate: issueDate || null,
-            validUntil: expiry || null,
-            details: rows.map((r) => ({ name: r.name.trim(), value: r.value.trim() })).filter((r) => r.name && r.value),
-            front: f ?? (rmFront ? null : (doc?.front ?? null)),
-            back: b ?? (rmBack ? null : (doc?.back ?? null)),
+            date: date || null,
+            expiry: cat.expiring && expiry ? { validUntil: expiry, outdated: doc?.expiry?.outdated ?? false } : null,
+            files,
+            fields: compactFields(Object.fromEntries(Object.entries(fields).filter(([k]) => defs.some((d) => d.key === k)))),
+            customFields: custom.map((r) => ({ label: r.label.trim(), value: r.value.trim() })).filter((r) => r.label && r.value),
             assignmentId: linked || null,
             pinned,
           },
-          renewal: !linked && remind && expiry ? { remindDays: Math.max(0, Number(remindDays) || remindDefault(type)) } : null,
+          renewal:
+            cat.rules.renewal && !linked && remind && expiry ? { remindDays: Math.max(0, Number(remindDays) || remindDefault(kind, type)) } : null,
           closeTaskId,
+          expectUpdatedAt: doc?.updatedAt,
         },
-        (r) => savedText(r, 'Saved.'),
+        savedText,
       );
       if (!result) return;
       closeDialog();
     });
 
+  const heading = kind === 'identity' ? 'Add an ID or document' : kind === 'attachment' ? 'Add a file' : `Add a ${cat.label.toLowerCase()} document`;
   return (
     <Dialog
-      eyebrow={`${subjectName(s, subjectType, subjectId)} · Identity`}
-      title={doc ? `Edit ${doc.name}` : 'Add an ID or document'}
+      eyebrow={`${subjectName(s, subjectId)} · ${cat.label}`}
+      title={doc ? `Edit ${doc.title}` : heading}
       wide
       onSubmit={submit}
       actions={<FormActions submit={busy ? 'Saving…' : 'Save'} disabled={busy} />}
     >
       <div className="fields">
-        <Field label="Name">{(id) => <input id={id} value={name} onChange={(e) => setName(e.target.value)} required />}</Field>
-        <Field label="Type">
+        <Field label="Title" hint={roles[0] === null && !doc ? 'Leave empty to use the file name.' : undefined}>
+          {(id) => <input id={id} value={title} onChange={(e) => setTitle(e.target.value)} />}
+        </Field>
+        {cat.types.length > 1 && (
+          <Field label="Type">
+            {(id) => (
+              <select id={id} value={type} onChange={(e) => changeType(e.target.value)}>
+                {cat.types.map((x) => (
+                  <option key={x}>{x}</option>
+                ))}
+              </select>
+            )}
+          </Field>
+        )}
+      </div>
+      {(cat.datedByDefault || cat.expiring) && (
+        <div className="fields">
+          {cat.datedByDefault && <Field label={cat.dateLabel}>{(id) => <input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} />}</Field>}
+          {cat.expiring && (
+            <Field label={cat.expiryLabel} optional>
+              {(id) => <input id={id} type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} />}
+            </Field>
+          )}
+        </div>
+      )}
+      <FieldsEditor s={s} defs={defs} values={fields} onChange={setFields} suggestionsFor={suggestionsFor} />
+      <Fieldset legend="More details">
+        {custom.map((r, i) => (
+          <div key={i} className="fields detail-row">
+            <input aria-label="Field name" placeholder="Field" value={r.label} onChange={(e) => setCustom((cur) => cur.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
+            <input aria-label={r.label || 'Value'} placeholder="Value" value={r.value} onChange={(e) => setCustom((cur) => cur.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} />
+          </div>
+        ))}
+        <button type="button" className="link" onClick={() => setCustom((cur) => [...cur, { label: '', value: '' }])}>
+          + Add a field
+        </button>
+      </Fieldset>
+      <div className="fields">
+        {roles.map((role) => (
+          <FilePicker
+            key={roleKey(role)}
+            label={role ? ROLE_LABEL[role] ?? role : 'File'}
+            current={doc ? fileOf(doc, role) : null}
+            onFile={(f) => setPicked((cur) => ({ ...cur, [roleKey(role)]: f }))}
+            remove={!!removed[roleKey(role)]}
+            onRemove={(v) => setRemoved((cur) => ({ ...cur, [roleKey(role)]: v }))}
+          />
+        ))}
+      </div>
+      {cat.fileRoles.includes('back') && <p className="muted small">Clicking a card anywhere flips it between front and back.</p>}
+      {cat.area && (
+        <Field label="Linked routine" optional>
           {(id) => (
-            <select id={id} value={type} onChange={(e) => changeType(e.target.value)}>
-              {ID_TYPES.map((t) => (
-                <option key={t}>{t}</option>
+            <select id={id} value={linked} onChange={(e) => setLinked(e.target.value)}>
+              <option value="">None</option>
+              {routines.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {routineOf(s, a)?.title}
+                </option>
               ))}
             </select>
           )}
         </Field>
-      </div>
-      <div className="fields">
-        <Field label="ID number" optional hint="Shown masked to the last four digits in lists.">
-          {(id) => <input id={id} value={idNumber} onChange={(e) => setIdNumber(e.target.value)} autoComplete="off" />}
-        </Field>
-        <Field label="Issued by" optional>{(id) => <input id={id} value={issuer} onChange={(e) => setIssuer(e.target.value)} />}</Field>
-      </div>
-      <div className="fields">
-        <Field label="Issue date" optional>{(id) => <input id={id} type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />}</Field>
-        <Field label="Expiry date" optional>{(id) => <input id={id} type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} />}</Field>
-      </div>
-      <Fieldset legend="More details">
-        {rows.map((r, i) => (
-          <div key={i} className="fields detail-row">
-            <input aria-label="Field name" placeholder="Field" value={r.name} onChange={(e) => setRows((cur) => cur.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
-            <input aria-label={r.name || 'Value'} placeholder="Value" value={r.value} onChange={(e) => setRows((cur) => cur.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} />
-          </div>
-        ))}
-        <button type="button" className="link" onClick={() => setRows((cur) => [...cur, { name: '', value: '' }])}>
-          + Add another field
-        </button>
-      </Fieldset>
-      <div className="fields">
-        <ImagePicker label="Front" current={doc?.front ?? null} onFile={setFront} remove={rmFront} onRemove={setRmFront} />
-        <ImagePicker label="Back" current={doc?.back ?? null} onFile={setBack} remove={rmBack} onRemove={setRmBack} />
-      </div>
-      <p className="muted small">Clicking a card anywhere flips it between front and back.</p>
-      <Field label="Linked renewal routine" optional>
-        {(id) => (
-          <select id={id} value={linked} onChange={(e) => setLinked(e.target.value)}>
-            <option value="">None</option>
-            {routines.map((a) => (
-              <option key={a.id} value={a.id}>
-                {routineOf(s, a)?.title}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
-      {!linked && (
+      )}
+      {cat.rules.renewal && !linked && (
         <Fieldset legend="Renewal reminder">
           <label className="check-row">
             <input type="checkbox" checked={remind} onChange={(e) => setRemind(e.target.checked)} />
@@ -274,242 +294,13 @@ export function IdDialog({ subjectType, subjectId, assignmentId, docType, closeT
       )}
       <label className="check-row">
         <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
-        <span>Keep handy</span>
+        <span>{cat.pin.label}</span>
       </label>
     </Dialog>
   );
 }
 
-// ── Health ──────────────────────────────────────────────────────────────────
-
-export function HealthDocDialog({ subjectType, subjectId, assignmentId, docType, closeTaskId, doc }: FormProps) {
-  const { s } = useStore();
-  const save = useSaveDocument();
-  const { closeDialog } = useUI();
-  const toast = useToast();
-  const { busy, run } = useBusy();
-  const [file, setFile] = useState<File | null>(null);
-  const [name, setName] = useState(doc?.name ?? '');
-  const [type, setType] = useState(doc?.type ?? docType ?? 'Result');
-  const [date, setDate] = useState(doc?.date ?? new Date().toISOString().slice(0, 10));
-  const [providerId, setProviderId] = useState(doc?.providerId ?? '');
-  const [about, setAbout] = useState(doc?.about ?? '');
-  const episodes = [...new Set(s.documents.filter((d) => d.subjectId === subjectId && d.episode).map((d) => d.episode))];
-  const [episode, setEpisode] = useState(doc?.episode ?? '');
-  const [newEpisode, setNewEpisode] = useState('');
-  const [linked, setLinked] = useState(doc?.assignmentId ?? assignmentId ?? '');
-  const [pinned, setPinned] = useState(doc?.pinned ?? false);
-  const routines = assignmentsFor(s, subjectType, subjectId, 'health');
-
-  const submit = () =>
-    run(async () => {
-      const n = name.trim() || file?.name || '';
-      if (!n) {
-        toast.show({ text: 'Give the document a name' });
-        return;
-      }
-      let up: FileRef | null = null;
-      try {
-        up = await maybeUpload(file);
-      } catch (e) {
-        toast.show({ text: `Upload failed: ${e instanceof Error ? e.message : 'error'}` });
-        return;
-      }
-      const result = await save(
-        {
-          document: {
-            id: doc?.id,
-            subjectType,
-            subjectId,
-            docKind: 'health',
-            name: n,
-            type,
-            date: date || null,
-            providerId: providerId || null,
-            about: about.trim(),
-            episode: newEpisode.trim() || episode,
-            assignmentId: linked || null,
-            pinned,
-            file: up ?? doc?.file ?? null,
-          },
-          closeTaskId,
-        },
-        (r) => savedText(r),
-      );
-      if (!result) return;
-      closeDialog();
-    });
-
-  return (
-    <Dialog
-      eyebrow={`${subjectName(s, subjectType, subjectId)} · Health`}
-      title={doc ? `Edit ${doc.name}` : 'Add a health document'}
-      wide
-      onSubmit={submit}
-      actions={<FormActions submit={busy ? 'Saving…' : 'Save'} disabled={busy} />}
-    >
-      <Field label="File" optional={!!doc}>
-        {(id) => <input id={id} type="file" accept="application/pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />}
-      </Field>
-      <div className="fields">
-        <Field label="Name">{(id) => <input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="MRI report, left knee" />}</Field>
-        <Field label="Type">
-          {(id) => (
-            <select id={id} value={type} onChange={(e) => setType(e.target.value)}>
-              {HEALTH_TYPES.map((t) => (
-                <option key={t}>{t}</option>
-              ))}
-            </select>
-          )}
-        </Field>
-      </div>
-      <div className="fields">
-        <Field label="Document date">{(id) => <input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} />}</Field>
-        <Field label="Provider" optional>
-          {(id) => (
-            <select id={id} value={providerId} onChange={(e) => setProviderId(e.target.value)}>
-              <option value="">None</option>
-              {contactsFor(s, 'health').map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-      </div>
-      <Field label="What this is about" optional>{(id) => <input id={id} value={about} onChange={(e) => setAbout(e.target.value)} placeholder="One line of context" />}</Field>
-      <div className="fields">
-        <Field label="Episode" optional>
-          {(id) => (
-            <select id={id} value={episode} onChange={(e) => setEpisode(e.target.value)} disabled={!!newEpisode.trim()}>
-              <option value="">None</option>
-              {episodes.map((e) => (
-                <option key={e}>{e}</option>
-              ))}
-            </select>
-          )}
-        </Field>
-        <Field label="Or start a new episode" optional>{(id) => <input id={id} value={newEpisode} onChange={(e) => setNewEpisode(e.target.value)} placeholder="Knee injury" />}</Field>
-      </div>
-      <Field label="Linked routine" optional>
-        {(id) => (
-          <select id={id} value={linked} onChange={(e) => setLinked(e.target.value)}>
-            <option value="">None</option>
-            {routines.map((a) => (
-              <option key={a.id} value={a.id}>
-                {routineOf(s, a)?.title}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
-      <label className="check-row">
-        <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
-        <span>Keep handy on this page</span>
-      </label>
-    </Dialog>
-  );
-}
-
-// ── Car ─────────────────────────────────────────────────────────────────────
-
-export function CarDocDialog({ subjectType, subjectId, assignmentId, docType, closeTaskId, doc }: FormProps) {
-  const { s } = useStore();
-  const save = useSaveDocument();
-  const { closeDialog } = useUI();
-  const toast = useToast();
-  const { busy, run } = useBusy();
-  const [file, setFile] = useState<File | null>(null);
-  const [name, setName] = useState(doc?.name ?? '');
-  const [type, setType] = useState(doc?.type ?? docType ?? category('car').defaultType);
-  const [validUntil, setValidUntil] = useState(doc?.validUntil ?? '');
-  const [linked, setLinked] = useState(doc?.assignmentId ?? assignmentId ?? '');
-  const [pinned, setPinned] = useState(doc?.pinned ?? category('car').pin.default);
-  const routines = assignmentsFor(s, subjectType, subjectId);
-
-  const submit = () =>
-    run(async () => {
-      const n = name.trim() || file?.name || '';
-      if (!n) {
-        toast.show({ text: 'Give the document a name' });
-        return;
-      }
-      let up: FileRef | null = null;
-      try {
-        up = await maybeUpload(file);
-      } catch (e) {
-        toast.show({ text: `Upload failed: ${e instanceof Error ? e.message : 'error'}` });
-        return;
-      }
-      const result = await save(
-        {
-          document: {
-            id: doc?.id,
-            subjectType,
-            subjectId,
-            docKind: 'car',
-            name: n,
-            type,
-            validUntil: validUntil || null,
-            assignmentId: linked || null,
-            pinned,
-            file: up ?? doc?.file ?? null,
-          },
-          closeTaskId,
-        },
-        (r) => savedText(r),
-      );
-      if (!result) return;
-      closeDialog();
-    });
-
-  return (
-    <Dialog
-      eyebrow={`${subjectName(s, subjectType, subjectId)} · Documents`}
-      title={doc ? `Edit ${doc.name}` : 'Add a car document'}
-      onSubmit={submit}
-      actions={<FormActions submit={busy ? 'Saving…' : 'Save'} disabled={busy} />}
-    >
-      <Field label="File" optional={!!doc}>
-        {(id) => <input id={id} type="file" accept="application/pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />}
-      </Field>
-      <div className="fields">
-        <Field label="Name">{(id) => <input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Insurance card" />}</Field>
-        <Field label="Type">
-          {(id) => (
-            <select id={id} value={type} onChange={(e) => setType(e.target.value)}>
-              {CAR_TYPES.map((t) => (
-                <option key={t}>{t}</option>
-              ))}
-            </select>
-          )}
-        </Field>
-      </div>
-      <div className="fields">
-        <Field label="Valid until" optional>{(id) => <input id={id} type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />}</Field>
-        <Field label="Linked routine" optional>
-          {(id) => (
-            <select id={id} value={linked} onChange={(e) => setLinked(e.target.value)}>
-              <option value="">None</option>
-              {routines.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {routineOf(s, a)?.title}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-      </div>
-      <label className="check-row">
-        <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
-        <span>Keep in the glovebox</span>
-      </label>
-    </Dialog>
-  );
-}
-
-// ── ID card flip ────────────────────────────────────────────────────────────
+// ── Card flip (categories with front/back files) ────────────────────────────
 
 export function IdFlipCard({ doc, large }: { doc: Document; large?: boolean }) {
   const { isFlipped, toggleFlip } = useUI();
@@ -525,7 +316,7 @@ export function IdFlipCard({ doc, large }: { doc: Document; large?: boolean }) {
       {f ? (
         <FilePreview
           file={f}
-          alt={`${doc.name}, ${which}`}
+          alt={`${doc.title}, ${which}`}
           className="flip-img"
           fallback={
             <div className="flip-placeholder">
@@ -548,13 +339,13 @@ export function IdFlipCard({ doc, large }: { doc: Document; large?: boolean }) {
       role="button"
       tabIndex={0}
       aria-pressed={flipped}
-      aria-label={`${doc.name}: showing the ${flipped ? 'back' : 'front'}. Press to flip.`}
+      aria-label={`${doc.title}: showing the ${flipped ? 'back' : 'front'}. Press to flip.`}
       onClick={() => toggleFlip(doc.id)}
       onKeyDown={onKey}
     >
       <div className="flip-inner">
-        {side(doc.front, 'front')}
-        {side(doc.back, 'back')}
+        {side(fileOf(doc, 'front'), 'front')}
+        {side(fileOf(doc, 'back'), 'back')}
       </div>
     </div>
   );
@@ -562,48 +353,35 @@ export function IdFlipCard({ doc, large }: { doc: Document; large?: boolean }) {
 
 // ── Viewer and download ─────────────────────────────────────────────────────
 
+/** Label/value rows: date, expiry, registry fields, custom fields, routine. */
 function docRows(s: CooState, d: Document, full: boolean): [string, string][] {
+  const cat = CATEGORIES[d.category];
   const rows: [string, string][] = [];
-  if (d.docKind === 'identity') {
-    rows.push(['ID number', full ? d.idNumber : d.idNumber ? `•••• ${d.idNumber.slice(-4)}` : '']);
-    rows.push(['Issued by', d.issuer]);
-    rows.push(['Issued', fmtDate(d.issueDate)]);
-    rows.push(['Expires', fmtDate(d.validUntil)]);
-    for (const r of d.details) rows.push([r.name, r.value]);
-  } else if (d.docKind === 'health') {
-    rows.push(['Date', fmtDate(d.date)]);
-    rows.push(['Provider', contactName(s, d.providerId)]);
-    rows.push(['About', d.about]);
-    rows.push(['Episode', d.episode]);
-  } else {
-    rows.push(['Valid until', fmtDate(d.validUntil)]);
-  }
-  const a = s.assignments.find((x) => x.id === d.assignmentId);
-  const r = routineOf(s, a);
+  if (d.date) rows.push([cat.dateLabel, fmtDate(d.date)]);
+  const until = validUntil(d);
+  if (until) rows.push([cat.expiryLabel === 'Expiry date' ? 'Expires' : cat.expiryLabel, fmtDate(until)]);
+  for (const f of categoryFields(d.category, d.type)) rows.push([f.label, fieldDisplay(s, f, d.fields, full)]);
+  for (const r of d.customFields) rows.push([r.label, r.value]);
+  const r = routineOf(s, s.assignments.find((a) => a.id === d.assignmentId));
   if (r) rows.push(['Routine', r.title]);
   return rows.filter(([, v]) => v);
 }
 
-export async function downloadDoc(s: CooState, d: Document) {
-  if (d.docKind === 'identity') {
-    const sides = [d.front, d.back].filter((x): x is FileRef => !!x);
-    const images = sides.filter((x) => isImage(x));
-    const blob = await summarySvg({ title: d.name, typeLabel: d.type, rows: docRows(s, d, true), images });
-    saveBlob(blob, `${safeFilename(d.name)}.svg`);
-    // PDFs can't be embedded in the SVG card, so save them alongside it.
-    for (const f of sides) if (!isImage(f)) await downloadOriginal(f);
-    return;
-  }
-  if (d.file) {
-    await downloadOriginal(d.file);
-    return;
-  }
-  const blob = await summarySvg({ title: d.name, typeLabel: d.type, rows: docRows(s, d, true), images: [] });
-  saveBlob(blob, `${safeFilename(d.name)}.svg`);
+function isCard(d: Document) {
+  return CATEGORIES[d.category].fileRoles.includes('front');
 }
 
-export function openDocViewer(ui: ReturnType<typeof useUI>, _s: CooState, d: Document) {
-  ui.openViewer(<DocViewer docId={d.id} />);
+export async function downloadDoc(s: CooState, d: Document) {
+  const files = d.files.map((f) => f.file);
+  if (!isCard(d) && files.length === 1) {
+    await downloadOriginal(files[0]);
+    return;
+  }
+  const images = files.filter((f) => isImage(f));
+  const blob = await summarySvg({ title: d.title, typeLabel: d.type, rows: docRows(s, d, true), images });
+  saveBlob(blob, `${safeFilename(d.title)}.svg`);
+  // PDFs can't be embedded in the SVG card, so save them alongside it.
+  for (const f of files) if (!isImage(f)) await downloadOriginal(f);
 }
 
 function OpenFileButton({ file, label }: { file: FileRef; label: string }) {
@@ -628,24 +406,29 @@ export function DocViewer({ docId }: { docId: string }) {
   const d = s.documents.find((x) => x.id === docId);
   if (!d) return null;
   const v = docValidity(d);
+  const card = isCard(d);
+  const first = d.files[0]?.file ?? null;
+  const until = validUntil(d);
   return (
     <Viewer
-      title={d.name}
+      title={d.title}
       onDownload={() => downloadDoc(s, d)}
-      onEdit={() => openDialog(<DocFormFor kind={d.docKind} subjectType={d.subjectType} subjectId={d.subjectId} doc={d} />)}
+      onEdit={() => openDialog(<DocFormFor category={d.category} subjectId={d.subjectId} doc={d} />)}
     >
       <div className="viewer-card">
         <div className="eyebrow">{d.type}</div>
-        <h2 className="viewer-heading">{d.name}</h2>
-        {d.docKind === 'identity' && (
+        <h2 className="viewer-heading">{d.title}</h2>
+        {card && (
           <>
             <IdFlipCard doc={d} large />
             <p className="muted small center">Click the card to flip it</p>
-            {[d.front, d.back].map((f, i) => f && isPdf(f) && <OpenFileButton key={i} file={f} label={`Open the ${i ? 'back' : 'front'} PDF`} />)}
+            {d.files.map(
+              (f) => isPdf(f.file) && <OpenFileButton key={f.file.key} file={f.file} label={f.role ? `Open the ${f.role} PDF` : `Open ${f.file.name}`} />,
+            )}
           </>
         )}
-        {d.docKind !== 'identity' && d.file && <FilePreview file={d.file} alt={d.name} className="viewer-image" />}
-        {d.docKind !== 'identity' && d.file && !isImage(d.file) && <OpenFileButton file={d.file} label={`Open ${d.file.name}`} />}
+        {!card && first && <FilePreview file={first} alt={d.title} className="viewer-image" />}
+        {!card && d.files.map((f) => !isImage(f.file) && <OpenFileButton key={f.file.key} file={f.file} label={`Open ${f.file.name}`} />)}
         <dl className="big-dl">
           {docRows(s, d, true).map(([k, val]) => (
             <div key={k} className="dl-row">
@@ -653,7 +436,7 @@ export function DocViewer({ docId }: { docId: string }) {
                 <dt>{k}</dt>
                 <dd>{val}</dd>
               </div>
-              {d.docKind === 'identity' && k !== 'Routine' && (
+              {k !== 'Routine' && (
                 <IconButton
                   icon="copy"
                   label={`Copy ${k}`}
@@ -663,11 +446,7 @@ export function DocViewer({ docId }: { docId: string }) {
             </div>
           ))}
         </dl>
-        {v && (
-          <div className={`banner tone-${v.tone}`}>
-            {v.tone === 'bad' && d.validUntil ? `Expired on ${fmtDate(d.validUntil)}` : v.text}
-          </div>
-        )}
+        {v && <div className={`banner tone-${v.tone}`}>{v.tone === 'bad' && until ? `Expired on ${fmtDate(until)}` : v.text}</div>}
       </div>
     </Viewer>
   );

@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import type { Contact, ContactGroup } from '../types/coo';
+import type { Contact } from '../types/coo';
+
+type ContactGroup = 'health' | 'cars' | 'other';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
 import { useToast } from '../store/Toast';
@@ -7,7 +9,7 @@ import { copyText } from '../lib/clipboard';
 import { Dialog, Empty, Field, FormActions, PageHead, SectionHead } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { deleteContact, makeContact, putEntity } from '../lib/ops';
-import { routineOf, subjectName } from '../lib/model';
+import { allSubjects, contactGroup, routineOf, subjectName } from '../lib/model';
 
 const GROUPS: { value: ContactGroup; label: string }[] = [
   { value: 'health', label: 'Health' },
@@ -21,11 +23,16 @@ export function ContactDialog({ contact }: { contact?: Contact }) {
   const [name, setName] = useState(contact?.name ?? '');
   const [role, setRole] = useState(contact?.role ?? '');
   const [phone, setPhone] = useState(contact?.phone ?? '');
-  const [group, setGroup] = useState<ContactGroup>(contact?.group ?? 'health');
+  const [group, setGroup] = useState<ContactGroup>(contact ? contactGroup(contact) : 'health');
+  const [email, setEmail] = useState(contact?.email ?? '');
   const [notes, setNotes] = useState(contact?.notes ?? '');
+  const [linked, setLinked] = useState<string[]>(contact?.links.map((l) => l.subjectId) ?? []);
   const submit = () => {
     if (!name.trim() || !phone.trim()) return;
-    const data = { name: name.trim(), role: role.trim(), phone: phone.trim(), group, notes: notes.trim() };
+    // The group is the contact's first tag; other tags are kept.
+    const others = (contact?.tags ?? []).filter((t) => !['health', 'cars', 'other'].includes(t));
+    const links = linked.map((id) => contact?.links.find((l) => l.subjectId === id) ?? { subjectId: id, role: role.trim() });
+    const data = { name: name.trim(), role: role.trim(), phone: phone.trim(), email: email.trim(), notes: notes.trim(), tags: [group, ...others], links };
     apply(putEntity(s, contact ? { ...contact, ...data } : makeContact(data)), { toast: contact ? 'Contact saved' : 'Contact added' });
     closeDialog();
   };
@@ -68,7 +75,24 @@ export function ContactDialog({ contact }: { contact?: Contact }) {
           )}
         </Field>
       </div>
+      <Field label="Email" optional>{(id) => <input id={id} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>
       <Field label="Notes" optional>{(id) => <textarea id={id} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />}</Field>
+      <Field label="For" optional hint="Who or what this contact serves.">
+        {(id) => (
+          <div className="check-list" id={id} role="group" aria-label="For">
+            {allSubjects(s).map((x) => (
+              <label key={x.id} className="check-row">
+                <input
+                  type="checkbox"
+                  checked={linked.includes(x.id)}
+                  onChange={(e) => setLinked((cur) => (e.target.checked ? [...cur, x.id] : cur.filter((i) => i !== x.id)))}
+                />
+                <span>{x.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </Field>
     </Dialog>
   );
 }
@@ -79,7 +103,7 @@ function ContactTile({ c }: { c: Contact }) {
   const toast = useToast();
   const used = s.assignments
     .filter((a) => a.contactId === c.id)
-    .map((a) => `${subjectName(s, a.subjectType, a.subjectId)} · ${routineOf(s, a)?.title ?? ''}`);
+    .map((a) => `${subjectName(s, a.subjectId)} · ${routineOf(s, a)?.title ?? ''}`);
   return (
     <div className="tile contact-tile">
       <div className="contact-head">
@@ -92,7 +116,9 @@ function ContactTile({ c }: { c: Contact }) {
         </button>
       </div>
       <div className="phone">{c.phone}</div>
+      {c.email && <div className="small">{c.email}</div>}
       {c.notes && <div className="small">{c.notes}</div>}
+      {c.links.length > 0 && <div className="muted small">For: {c.links.map((l) => subjectName(s, l.subjectId)).join(', ')}</div>}
       {used.length > 0 && <div className="muted small">Used for: {used.join(', ')}</div>}
       <div className="contact-actions">
         <a className="btn primary small" href={`tel:${c.phone.replace(/[^\d+]/g, '')}`}>
@@ -125,7 +151,7 @@ export default function Contacts() {
         }
       />
       {GROUPS.map((g) => {
-        const list = s.contacts.filter((c) => c.group === g.value).sort((a, b) => a.name.localeCompare(b.name));
+        const list = s.contacts.filter((c) => contactGroup(c) === g.value).sort((a, b) => a.name.localeCompare(b.name));
         return (
           <section key={g.value} className="section">
             <SectionHead title={g.label} count={list.length} />

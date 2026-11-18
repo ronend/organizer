@@ -55,9 +55,27 @@ async function mock() {
   return import('./mock');
 }
 
-export async function fetchState(): Promise<CooState> {
-  if (MOCK) return (await mock()).mockState();
-  return request<CooState>('/state');
+export interface StateResponse extends CooState {
+  schemaVersion: number;
+  /** Only data model version 1 rows exist: POST /api/migrate moves them to v2. */
+  needsMigration: boolean;
+}
+
+export async function fetchState(): Promise<StateResponse> {
+  if (MOCK) return { schemaVersion: 2, needsMigration: false, ...(await (await mock()).mockState()) };
+  return request<StateResponse>('/state');
+}
+
+export interface MigrationReport {
+  migrated: boolean;
+  counts: Record<string, number>;
+  notes: string[];
+  errors: string[];
+}
+
+/** POST /api/migrate — moves the caller's household to data model v2. */
+export async function migrate(dryRun = false): Promise<MigrationReport> {
+  return request<MigrationReport>('/migrate', { method: 'POST', body: JSON.stringify({ dryRun }) });
 }
 
 export async function sendBatch(changes: ChangeSet): Promise<void> {
@@ -88,6 +106,8 @@ export interface SaveDocumentRequest {
   closeTaskId?: string;
   duplicates?: 'allow' | 'reject';
   today?: ISODate;
+  /** When editing: the document's updatedAt as loaded (409 if it changed since). */
+  expectUpdatedAt?: string;
 }
 
 export interface SaveDocumentResult {

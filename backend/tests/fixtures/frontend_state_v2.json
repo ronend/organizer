@@ -1,0 +1,3034 @@
+[
+ {
+  "kind": "subject",
+  "id": "p_woex28pms",
+  "createdAt": "2026-11-18T02:34:18.608Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectType": "person",
+  "name": "Alex",
+  "notes": "",
+  "attributes": {
+   "birthYear": 1984
+  }
+ },
+ {
+  "kind": "subject",
+  "id": "p_s68tou51w",
+  "createdAt": "2026-11-18T02:34:18.618Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectType": "person",
+  "name": "Maya",
+  "notes": "",
+  "attributes": {
+   "birthYear": 1985
+  }
+ },
+ {
+  "kind": "subject",
+  "id": "p_yhdi9etw6",
+  "createdAt": "2026-11-18T02:34:18.628Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectType": "person",
+  "name": "Noa",
+  "notes": "",
+  "attributes": {
+   "birthYear": 2016
+  }
+ },
+ {
+  "kind": "subject",
+  "id": "c_0d8co1xrd",
+  "createdAt": "2026-11-18T02:34:18.648Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectType": "car",
+  "name": "Honda Civic",
+  "notes": "",
+  "attributes": {
+   "plate": "KDR 4821",
+   "odometer": 48210
+  }
+ },
+ {
+  "kind": "subject",
+  "id": "c_97re2vmge",
+  "createdAt": "2026-11-18T02:34:18.658Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectType": "car",
+  "name": "Toyota Yaris",
+  "notes": "",
+  "attributes": {
+   "plate": "LMN 7305",
+   "odometer": 31950
+  }
+ },
+ {
+  "kind": "contact",
+  "id": "k_lswt8wimq",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "name": "Eli’s Auto Service",
+  "role": "Garage",
+  "phone": "555-0142",
+  "email": "",
+  "notes": "Closed Sundays",
+  "tags": [
+   "cars"
+  ],
+  "links": [
+   {
+    "subjectId": "c_0d8co1xrd",
+    "role": "Garage"
+   },
+   {
+    "subjectId": "c_97re2vmge",
+    "role": "Garage"
+   }
+  ]
+ },
+ {
+  "kind": "contact",
+  "id": "k_i1e3nzxre",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "name": "Dana Brooks",
+  "role": "Insurance agent",
+  "phone": "555-0178",
+  "email": "",
+  "notes": "",
+  "tags": [
+   "cars"
+  ],
+  "links": [
+   {
+    "subjectId": "c_0d8co1xrd",
+    "role": "Insurance agent"
+   },
+   {
+    "subjectId": "c_97re2vmge",
+    "role": "Insurance agent"
+   }
+  ]
+ },
+ {
+  "kind": "contact",
+  "id": "k_5h6rphobu",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "name": "Roadside help",
+  "role": "Roadside assistance",
+  "phone": "555-0100",
+  "email": "",
+  "notes": "Member no. 88123",
+  "tags": [
+   "cars"
+  ],
+  "links": []
+ },
+ {
+  "kind": "contact",
+  "id": "k_ozh1drdsc",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "name": "Dr. Sarah Levi",
+  "role": "Family doctor",
+  "phone": "555-0111",
+  "email": "",
+  "notes": "",
+  "tags": [
+   "health"
+  ],
+  "links": [
+   {
+    "subjectId": "p_woex28pms",
+    "role": "Family doctor"
+   },
+   {
+    "subjectId": "p_s68tou51w",
+    "role": "Family doctor"
+   }
+  ]
+ },
+ {
+  "kind": "contact",
+  "id": "k_ubgp9ceg5",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:36:05.727Z",
+  "archived": false,
+  "name": "Dr. Omar Haddad",
+  "role": "Pediatrician",
+  "phone": "555-0123",
+  "email": "",
+  "notes": "Same-day sick visits before 10:00",
+  "tags": [
+   "health"
+  ],
+  "links": [
+   {
+    "subjectId": "p_yhdi9etw6",
+    "role": "Pediatrician"
+   }
+  ]
+ },
+ {
+  "kind": "contact",
+  "id": "k_jrzfbhyzc",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:36:05.727Z",
+  "archived": false,
+  "name": "Bright Smile Dental",
+  "role": "Dentist",
+  "phone": "555-0135",
+  "email": "",
+  "notes": "",
+  "tags": [
+   "health"
+  ],
+  "links": [
+   {
+    "subjectId": "p_s68tou51w",
+    "role": "Dentist"
+   }
+  ]
+ },
+ {
+  "kind": "contact",
+  "id": "k_hyqw798v9",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "name": "Dr. Paul Kim",
+  "role": "Orthopedist",
+  "phone": "555-0147",
+  "email": "",
+  "notes": "",
+  "tags": [
+   "health"
+  ],
+  "links": [
+   {
+    "subjectId": "p_woex28pms",
+    "role": "Orthopedist"
+   }
+  ]
+ },
+ {
+  "kind": "contact",
+  "id": "k_tqif9c0c0",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "name": "Clear View Optics",
+  "role": "Optician",
+  "phone": "555-0159",
+  "email": "",
+  "notes": "",
+  "tags": [
+   "health"
+  ],
+  "links": [
+   {
+    "subjectId": "p_s68tou51w",
+    "role": "Optician"
+   }
+  ]
+ },
+ {
+  "kind": "contact",
+  "id": "k_9lqqx79pl",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "name": "City Lab",
+  "role": "Lab",
+  "phone": "555-0161",
+  "email": "",
+  "notes": "Walk-ins 07:00–11:00",
+  "tags": [
+   "health"
+  ],
+  "links": [
+   {
+    "subjectId": "p_woex28pms",
+    "role": "Lab"
+   }
+  ]
+ },
+ {
+  "kind": "contact",
+  "id": "k_elpazradv",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "name": "Main St Pharmacy",
+  "role": "Pharmacy",
+  "phone": "555-0170",
+  "email": "",
+  "notes": "",
+  "tags": [
+   "health"
+  ],
+  "links": []
+ },
+ {
+  "kind": "routine",
+  "id": "r_8l3wa7t7j",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "car",
+  "template": "car-insurance",
+  "icon": "shield",
+  "title": "Car insurance",
+  "description": "Policy renewal. Compare quotes before it rolls over.",
+  "dateLabel": "Expires",
+  "plan": [
+   {
+    "title": "Compare insurance quotes",
+    "offsetDays": -30,
+    "kind": "plain",
+    "prep": "",
+    "requestsDocument": null
+   },
+   {
+    "title": "Renew car insurance",
+    "offsetDays": -7,
+    "kind": "renew",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [
+   {
+    "title": "Put the new insurance card in the glovebox",
+    "offsetDays": 0,
+    "kind": "plain",
+    "prep": "",
+    "requestsDocument": {
+     "category": "car",
+     "type": "ID card"
+    }
+   }
+  ],
+  "repeatMonths": 12,
+  "countFrom": "due",
+  "extension": null
+ },
+ {
+  "kind": "assignment",
+  "id": "a_qontw2yzm",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2027-01-01",
+  "repeatMonths": 12,
+  "done": false,
+  "contactId": "k_i1e3nzxre",
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_8l3wa7t7j",
+  "subjectId": "c_0d8co1xrd"
+ },
+ {
+  "kind": "task",
+  "id": "t_nq37dqku1",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "c_0d8co1xrd",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-12-02",
+  "order": 1794969358598,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_qontw2yzm",
+   "step": "plain"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Compare insurance quotes"
+ },
+ {
+  "kind": "task",
+  "id": "t_k8wg0ttle",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "c_0d8co1xrd",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-12-25",
+  "order": 1794969358599,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_qontw2yzm",
+   "step": "renew"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Renew car insurance"
+ },
+ {
+  "kind": "assignment",
+  "id": "a_6a2bhgts0",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2027-03-17",
+  "repeatMonths": 12,
+  "done": false,
+  "contactId": "k_i1e3nzxre",
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_8l3wa7t7j",
+  "subjectId": "c_97re2vmge"
+ },
+ {
+  "kind": "task",
+  "id": "t_noycsjkhg",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "c_97re2vmge",
+  "parentId": null,
+  "notes": "",
+  "date": "2027-02-15",
+  "order": 1794969358600,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_6a2bhgts0",
+   "step": "plain"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Compare insurance quotes"
+ },
+ {
+  "kind": "task",
+  "id": "t_1bh5024ij",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "c_97re2vmge",
+  "parentId": null,
+  "notes": "",
+  "date": "2027-03-10",
+  "order": 1794969358601,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_6a2bhgts0",
+   "step": "renew"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Renew car insurance"
+ },
+ {
+  "kind": "routine",
+  "id": "r_7s718pg8n",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "car",
+  "template": "safety-inspection",
+  "icon": "stamp",
+  "title": "Safety inspection",
+  "description": "Yearly state safety inspection.",
+  "dateLabel": "Due",
+  "plan": [
+   {
+    "title": "Schedule safety inspection",
+    "offsetDays": -14,
+    "kind": "schedule",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [
+   {
+    "title": "File the inspection report",
+    "offsetDays": 0,
+    "kind": "plain",
+    "prep": "",
+    "requestsDocument": {
+     "category": "car",
+     "type": "Inspection"
+    }
+   }
+  ],
+  "repeatMonths": 12,
+  "countFrom": "due",
+  "extension": null
+ },
+ {
+  "kind": "assignment",
+  "id": "a_4dasnpymu",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2026-11-27",
+  "repeatMonths": 12,
+  "done": false,
+  "contactId": "k_lswt8wimq",
+  "supply": null,
+  "history": [
+   {
+    "date": "2025-11-27",
+    "text": "Passed at Eli’s Auto Service"
+   }
+  ],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_7s718pg8n",
+  "subjectId": "c_0d8co1xrd"
+ },
+ {
+  "kind": "task",
+  "id": "t_9z08a58q0",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "c_0d8co1xrd",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-13",
+  "order": 1794969358602,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_4dasnpymu",
+   "step": "schedule"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Schedule safety inspection"
+ },
+ {
+  "kind": "assignment",
+  "id": "a_z0wdr57lx",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2027-06-05",
+  "repeatMonths": 12,
+  "done": false,
+  "contactId": "k_lswt8wimq",
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_7s718pg8n",
+  "subjectId": "c_97re2vmge"
+ },
+ {
+  "kind": "task",
+  "id": "t_stdvpnwt0",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "c_97re2vmge",
+  "parentId": null,
+  "notes": "",
+  "date": "2027-05-22",
+  "order": 1794969358603,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_z0wdr57lx",
+   "step": "schedule"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Schedule safety inspection"
+ },
+ {
+  "kind": "routine",
+  "id": "r_yfw4m606w",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "car",
+  "template": "registration",
+  "icon": "document",
+  "title": "State registration",
+  "description": "Registration renewal with the DMV.",
+  "dateLabel": "Valid until",
+  "plan": [
+   {
+    "title": "Renew registration",
+    "offsetDays": -14,
+    "kind": "renew",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [
+   {
+    "title": "File the new registration",
+    "offsetDays": 0,
+    "kind": "plain",
+    "prep": "",
+    "requestsDocument": {
+     "category": "car",
+     "type": "Registration"
+    }
+   }
+  ],
+  "repeatMonths": 12,
+  "countFrom": "due",
+  "extension": null
+ },
+ {
+  "kind": "assignment",
+  "id": "a_ijapr3tcq",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2027-04-16",
+  "repeatMonths": 12,
+  "done": false,
+  "contactId": null,
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_yfw4m606w",
+  "subjectId": "c_0d8co1xrd"
+ },
+ {
+  "kind": "task",
+  "id": "t_sumwzlttj",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "c_0d8co1xrd",
+  "parentId": null,
+  "notes": "",
+  "date": "2027-04-02",
+  "order": 1794969358604,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_ijapr3tcq",
+   "step": "renew"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Renew registration"
+ },
+ {
+  "kind": "assignment",
+  "id": "a_qlzbakgyk",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2026-12-07",
+  "repeatMonths": 12,
+  "done": false,
+  "contactId": null,
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_yfw4m606w",
+  "subjectId": "c_97re2vmge"
+ },
+ {
+  "kind": "task",
+  "id": "t_9vm1vi4tt",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "c_97re2vmge",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-23",
+  "order": 1794969358605,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_qlzbakgyk",
+   "step": "renew"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Renew registration"
+ },
+ {
+  "kind": "routine",
+  "id": "r_6s70u7f3q",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "car",
+  "template": "car-service",
+  "icon": "wrench",
+  "title": "Regular service",
+  "description": "Oil, filters and a general check.",
+  "dateLabel": "Next due",
+  "plan": [
+   {
+    "title": "Book car service",
+    "offsetDays": -21,
+    "kind": "schedule",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [],
+  "repeatMonths": 12,
+  "countFrom": "done",
+  "extension": null
+ },
+ {
+  "kind": "assignment",
+  "id": "a_wfytd1jvm",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2027-01-16",
+  "repeatMonths": 12,
+  "done": false,
+  "contactId": "k_lswt8wimq",
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_6s70u7f3q",
+  "subjectId": "c_0d8co1xrd"
+ },
+ {
+  "kind": "task",
+  "id": "t_hiw0ix8u0",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "c_0d8co1xrd",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-12-26",
+  "order": 1794969358606,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_wfytd1jvm",
+   "step": "schedule"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Book car service"
+ },
+ {
+  "kind": "assignment",
+  "id": "a_oq92qpkez",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2026-11-29",
+  "repeatMonths": 12,
+  "done": false,
+  "contactId": "k_lswt8wimq",
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_6s70u7f3q",
+  "subjectId": "c_97re2vmge"
+ },
+ {
+  "kind": "task",
+  "id": "t_y91e1330u",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "c_97re2vmge",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-17",
+  "order": 1794969358607,
+  "done": true,
+  "doneAt": "2026-11-18T02:35:58.598Z",
+  "source": {
+   "kind": "assignment",
+   "id": "a_oq92qpkez",
+   "step": "schedule"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Book car service"
+ },
+ {
+  "kind": "task",
+  "id": "t_08zkimmxy",
+  "createdAt": "2026-11-18T02:35:58.598Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "c_97re2vmge",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-22",
+  "order": 1794969358608,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_oq92qpkez",
+   "step": "renew"
+  },
+  "appointment": {
+   "time": "08:30",
+   "providerId": "k_lswt8wimq",
+   "providerNote": "",
+   "prep": ""
+  },
+  "requestsDocument": null,
+  "title": "Regular service"
+ },
+ {
+  "kind": "routine",
+  "id": "r_g89n3w3fu",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "car",
+  "template": null,
+  "icon": "car",
+  "title": "Emergency kit",
+  "description": "First aid kit, warning triangle, jumper cables and a flashlight. Check it twice a year.",
+  "dateLabel": "Due",
+  "plan": [
+   {
+    "title": "Emergency kit",
+    "offsetDays": -14,
+    "kind": "renew",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [],
+  "repeatMonths": null,
+  "countFrom": "done",
+  "extension": null
+ },
+ {
+  "kind": "assignment",
+  "id": "a_o9rp7h2gb",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": null,
+  "repeatMonths": null,
+  "done": false,
+  "contactId": null,
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_g89n3w3fu",
+  "subjectId": "c_0d8co1xrd"
+ },
+ {
+  "kind": "assignment",
+  "id": "a_q50ooid49",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": null,
+  "repeatMonths": null,
+  "done": false,
+  "contactId": null,
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_g89n3w3fu",
+  "subjectId": "c_97re2vmge"
+ },
+ {
+  "kind": "routine",
+  "id": "r_0wbirptw9",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "health",
+  "template": "annual-checkup",
+  "icon": "stethoscope",
+  "title": "Annual checkup",
+  "description": "Yearly physical with the family doctor.",
+  "dateLabel": "Next due",
+  "plan": [
+   {
+    "title": "Book annual checkup",
+    "offsetDays": -21,
+    "kind": "schedule",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [
+   {
+    "title": "File the visit summary",
+    "offsetDays": 1,
+    "kind": "plain",
+    "prep": "",
+    "requestsDocument": {
+     "category": "health",
+     "type": "Visit summary"
+    }
+   }
+  ],
+  "repeatMonths": 12,
+  "countFrom": "done",
+  "extension": null
+ },
+ {
+  "kind": "assignment",
+  "id": "a_ep7g139sw",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2027-02-05",
+  "repeatMonths": 12,
+  "done": false,
+  "contactId": "k_ozh1drdsc",
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_0wbirptw9",
+  "subjectId": "p_woex28pms"
+ },
+ {
+  "kind": "task",
+  "id": "t_pnruvim1y",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_woex28pms",
+  "parentId": null,
+  "notes": "",
+  "date": "2027-01-15",
+  "order": 1794969358609,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_ep7g139sw",
+   "step": "schedule"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Book annual checkup"
+ },
+ {
+  "kind": "assignment",
+  "id": "a_y1hlqdy0l",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2026-12-12",
+  "repeatMonths": 12,
+  "done": false,
+  "contactId": "k_ubgp9ceg5",
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_0wbirptw9",
+  "subjectId": "p_yhdi9etw6"
+ },
+ {
+  "kind": "task",
+  "id": "t_gul75uxjf",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_yhdi9etw6",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-21",
+  "order": 1794969358610,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_y1hlqdy0l",
+   "step": "schedule"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Book annual checkup"
+ },
+ {
+  "kind": "routine",
+  "id": "r_fo8g5zrtw",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "health",
+  "template": "dental-cleaning",
+  "icon": "tooth",
+  "title": "Dental cleaning",
+  "description": "Cleaning and checkup every six months.",
+  "dateLabel": "Next due",
+  "plan": [
+   {
+    "title": "Book dental cleaning",
+    "offsetDays": -21,
+    "kind": "schedule",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [],
+  "repeatMonths": 6,
+  "countFrom": "done",
+  "extension": null
+ },
+ {
+  "kind": "assignment",
+  "id": "a_3pvuovrv5",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2026-12-02",
+  "repeatMonths": 6,
+  "done": false,
+  "contactId": "k_jrzfbhyzc",
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_fo8g5zrtw",
+  "subjectId": "p_s68tou51w"
+ },
+ {
+  "kind": "task",
+  "id": "t_y2j4zbtr9",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_s68tou51w",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-17",
+  "order": 1794969358612,
+  "done": true,
+  "doneAt": "2026-11-18T02:35:58.599Z",
+  "source": {
+   "kind": "assignment",
+   "id": "a_3pvuovrv5",
+   "step": "schedule"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Book dental cleaning"
+ },
+ {
+  "kind": "task",
+  "id": "t_shdkh7394",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_s68tou51w",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-26",
+  "order": 1794969358613,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_3pvuovrv5",
+   "step": "renew"
+  },
+  "appointment": {
+   "time": "16:00",
+   "providerId": "k_jrzfbhyzc",
+   "providerNote": "",
+   "prep": ""
+  },
+  "requestsDocument": null,
+  "title": "Dental cleaning"
+ },
+ {
+  "kind": "routine",
+  "id": "r_xntunb61s",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "health",
+  "template": "lab-tests",
+  "icon": "flask",
+  "title": "Recurring lab tests",
+  "description": "Blood work ordered by the doctor.",
+  "dateLabel": "Next due",
+  "plan": [
+   {
+    "title": "Schedule lab tests",
+    "offsetDays": -14,
+    "kind": "schedule",
+    "prep": "Fast for 12 hours before the test",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [
+   {
+    "title": "Upload the lab results",
+    "offsetDays": 3,
+    "kind": "plain",
+    "prep": "",
+    "requestsDocument": {
+     "category": "health",
+     "type": "Result"
+    }
+   },
+   {
+    "title": "Book the follow-up visit",
+    "offsetDays": 7,
+    "kind": "plain",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "repeatMonths": 6,
+  "countFrom": "done",
+  "extension": null
+ },
+ {
+  "kind": "assignment",
+  "id": "a_hw1uhqu3o",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2026-12-17",
+  "repeatMonths": 6,
+  "done": false,
+  "contactId": "k_9lqqx79pl",
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_xntunb61s",
+  "subjectId": "p_woex28pms"
+ },
+ {
+  "kind": "task",
+  "id": "t_d6tg7z219",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_woex28pms",
+  "parentId": null,
+  "notes": "Prep: Fast for 12 hours before the test",
+  "date": "2026-12-03",
+  "order": 1794969358615,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_hw1uhqu3o",
+   "step": "schedule"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Schedule lab tests"
+ },
+ {
+  "kind": "routine",
+  "id": "r_lb26yo5wl",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "health",
+  "template": "specialist",
+  "icon": "bone",
+  "title": "Orthopedist follow-up",
+  "description": "Knee check after physical therapy.",
+  "dateLabel": "Next due",
+  "plan": [
+   {
+    "title": "Book specialist follow-up",
+    "offsetDays": -21,
+    "kind": "schedule",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [
+   {
+    "title": "File the visit summary",
+    "offsetDays": 1,
+    "kind": "plain",
+    "prep": "",
+    "requestsDocument": {
+     "category": "health",
+     "type": "Visit summary"
+    }
+   }
+  ],
+  "repeatMonths": null,
+  "countFrom": "done",
+  "extension": null
+ },
+ {
+  "kind": "assignment",
+  "id": "a_kjriamgs7",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2026-11-21",
+  "repeatMonths": null,
+  "done": false,
+  "contactId": "k_hyqw798v9",
+  "supply": null,
+  "history": [
+   {
+    "date": "2026-10-18",
+    "text": "Visit at Dr. Paul Kim"
+   }
+  ],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_lb26yo5wl",
+  "subjectId": "p_woex28pms"
+ },
+ {
+  "kind": "task",
+  "id": "t_ucxeiu7lu",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_woex28pms",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-17",
+  "order": 1794969358616,
+  "done": true,
+  "doneAt": "2026-11-18T02:35:58.599Z",
+  "source": {
+   "kind": "assignment",
+   "id": "a_kjriamgs7",
+   "step": "schedule"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Book specialist follow-up"
+ },
+ {
+  "kind": "task",
+  "id": "t_k91luz6cq",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_woex28pms",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-20",
+  "order": 1794969358617,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_kjriamgs7",
+   "step": "renew"
+  },
+  "appointment": {
+   "time": "11:15",
+   "providerId": "k_hyqw798v9",
+   "providerNote": "",
+   "prep": "Bring the MRI report"
+  },
+  "requestsDocument": null,
+  "title": "Orthopedist follow-up"
+ },
+ {
+  "kind": "task",
+  "id": "t_d6s6jm0sb",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_woex28pms",
+  "parentId": null,
+  "notes": "Physical therapy twice a week for six weeks.",
+  "date": "2026-10-18",
+  "order": 1794969358618,
+  "done": true,
+  "doneAt": "2026-10-19T02:35:58.599Z",
+  "source": {
+   "kind": "assignment",
+   "id": "a_kjriamgs7",
+   "step": "renew"
+  },
+  "appointment": {
+   "time": "10:00",
+   "providerId": "k_hyqw798v9",
+   "providerNote": "",
+   "prep": ""
+  },
+  "requestsDocument": null,
+  "title": "Orthopedist follow-up"
+ },
+ {
+  "kind": "routine",
+  "id": "r_l35nglrq2",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "health",
+  "template": "eye-exam",
+  "icon": "eye",
+  "title": "Eye exam",
+  "description": "Vision check with the optician.",
+  "dateLabel": "Next due",
+  "plan": [
+   {
+    "title": "Book eye exam",
+    "offsetDays": -21,
+    "kind": "schedule",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [],
+  "repeatMonths": 24,
+  "countFrom": "done",
+  "extension": null
+ },
+ {
+  "kind": "assignment",
+  "id": "a_tm0c66ucf",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2027-02-25",
+  "repeatMonths": 24,
+  "done": false,
+  "contactId": "k_tqif9c0c0",
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_l35nglrq2",
+  "subjectId": "p_s68tou51w"
+ },
+ {
+  "kind": "task",
+  "id": "t_2h2wmvvxi",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_s68tou51w",
+  "parentId": null,
+  "notes": "",
+  "date": "2027-02-04",
+  "order": 1794969358619,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_tm0c66ucf",
+   "step": "schedule"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Book eye exam"
+ },
+ {
+  "kind": "routine",
+  "id": "r_tr11g60r3",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "health",
+  "template": "medication",
+  "icon": "pill",
+  "title": "Inhaler",
+  "description": "Rescue inhaler. Keep one at school.",
+  "dateLabel": "Runs out",
+  "plan": [],
+  "followUps": [],
+  "repeatMonths": null,
+  "countFrom": "done",
+  "extension": {
+   "medication": true
+  }
+ },
+ {
+  "kind": "assignment",
+  "id": "a_k1urvnw17",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2026-11-23",
+  "repeatMonths": null,
+  "done": false,
+  "contactId": "k_ubgp9ceg5",
+  "supply": {
+   "onHand": 12,
+   "asOf": "2026-11-17",
+   "perDay": 2,
+   "unit": "puffs",
+   "perRefill": 200,
+   "refillsLeft": 0,
+   "orderLeadDays": 7
+  },
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_tr11g60r3",
+  "subjectId": "p_yhdi9etw6"
+ },
+ {
+  "kind": "task",
+  "id": "t_o30ys6bb5",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_yhdi9etw6",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-16",
+  "order": 1794969358621,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_k1urvnw17",
+   "step": "plain"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Get a new prescription: Inhaler"
+ },
+ {
+  "kind": "task",
+  "id": "t_kiuy8zilc",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_yhdi9etw6",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-18",
+  "order": 1794969358622,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_k1urvnw17",
+   "step": "pickup"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Pick up refill: Inhaler"
+ },
+ {
+  "kind": "routine",
+  "id": "r_13w3w374s",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "health",
+  "template": "medication",
+  "icon": "pill",
+  "title": "Allergy tablets",
+  "description": "Daily during spring.",
+  "dateLabel": "Runs out",
+  "plan": [],
+  "followUps": [],
+  "repeatMonths": null,
+  "countFrom": "done",
+  "extension": {
+   "medication": true
+  }
+ },
+ {
+  "kind": "assignment",
+  "id": "a_86tcgu5kx",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2026-12-27",
+  "repeatMonths": null,
+  "done": false,
+  "contactId": null,
+  "supply": {
+   "onHand": 40,
+   "asOf": "2026-11-17",
+   "perDay": 1,
+   "unit": "tablets",
+   "perRefill": 30,
+   "refillsLeft": 2,
+   "orderLeadDays": 7
+  },
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_13w3w374s",
+  "subjectId": "p_s68tou51w"
+ },
+ {
+  "kind": "task",
+  "id": "t_54y2drw7c",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_s68tou51w",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-12-20",
+  "order": 1794969358623,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_86tcgu5kx",
+   "step": "plain"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Order a refill: Allergy tablets"
+ },
+ {
+  "kind": "task",
+  "id": "t_seu9gspzp",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_s68tou51w",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-12-22",
+  "order": 1794969358624,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_86tcgu5kx",
+   "step": "pickup"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Pick up refill: Allergy tablets"
+ },
+ {
+  "kind": "routine",
+  "id": "r_cj7buew0q",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "health",
+  "template": null,
+  "icon": "document",
+  "title": "School medical forms",
+  "description": "Health form and vaccination record for the new school year.",
+  "dateLabel": "Due",
+  "plan": [
+   {
+    "title": "School medical forms",
+    "offsetDays": -14,
+    "kind": "renew",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [],
+  "repeatMonths": 12,
+  "countFrom": "due",
+  "extension": null
+ },
+ {
+  "kind": "assignment",
+  "id": "a_qjjugghjz",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": null,
+  "repeatMonths": 12,
+  "done": false,
+  "contactId": null,
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_cj7buew0q",
+  "subjectId": "p_yhdi9etw6"
+ },
+ {
+  "kind": "routine",
+  "id": "r_k67eys9r3",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "identity",
+  "template": "passport",
+  "icon": "idcard",
+  "title": "Passport renewal",
+  "description": "Renew well before travel. Many countries require 6 months of validity.",
+  "dateLabel": "Expires",
+  "plan": [
+   {
+    "title": "Check renewal requirements and get a photo",
+    "offsetDays": -210,
+    "kind": "plain",
+    "prep": "",
+    "requestsDocument": null
+   },
+   {
+    "title": "Submit passport renewal",
+    "offsetDays": -180,
+    "kind": "renew",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [
+   {
+    "title": "Add the new passport to documents",
+    "offsetDays": 0,
+    "kind": "plain",
+    "prep": "",
+    "requestsDocument": {
+     "category": "identity",
+     "type": "Passport"
+    }
+   }
+  ],
+  "repeatMonths": 120,
+  "countFrom": "due",
+  "extension": null
+ },
+ {
+  "kind": "routine",
+  "id": "r_9l8ese48d",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "identity",
+  "template": "driver-license",
+  "icon": "idcard",
+  "title": "Driver license renewal",
+  "description": "Renew the driver license before it expires.",
+  "dateLabel": "Expires",
+  "plan": [
+   {
+    "title": "Renew driver license",
+    "offsetDays": -60,
+    "kind": "renew",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [
+   {
+    "title": "Add the new driver license to documents",
+    "offsetDays": 0,
+    "kind": "plain",
+    "prep": "",
+    "requestsDocument": {
+     "category": "identity",
+     "type": "Driver license"
+    }
+   }
+  ],
+  "repeatMonths": 96,
+  "countFrom": "due",
+  "extension": null
+ },
+ {
+  "kind": "routine",
+  "id": "r_29j1xals0",
+  "createdAt": "2026-11-18T02:35:58.599Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "area": "identity",
+  "template": "city-id",
+  "icon": "idcard",
+  "title": "City or state ID renewal",
+  "description": "Renew the ID card before it expires.",
+  "dateLabel": "Expires",
+  "plan": [
+   {
+    "title": "Renew ID card",
+    "offsetDays": -60,
+    "kind": "renew",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [
+   {
+    "title": "Add the new ID card to documents",
+    "offsetDays": 0,
+    "kind": "plain",
+    "prep": "",
+    "requestsDocument": {
+     "category": "identity",
+     "type": "City or state ID"
+    }
+   }
+  ],
+  "repeatMonths": 60,
+  "countFrom": "due",
+  "extension": null
+ },
+ {
+  "kind": "assignment",
+  "id": "a_wmgqusss8",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2027-06-10",
+  "repeatMonths": 120,
+  "done": false,
+  "contactId": null,
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_k67eys9r3",
+  "subjectId": "p_woex28pms"
+ },
+ {
+  "kind": "task",
+  "id": "t_8drdvp953",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_woex28pms",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-17",
+  "order": 1794969358625,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_wmgqusss8",
+   "step": "plain"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Check renewal requirements and get a photo"
+ },
+ {
+  "kind": "task",
+  "id": "t_tp8fil2qk",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_woex28pms",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-12-12",
+  "order": 1794969358626,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_wmgqusss8",
+   "step": "renew"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Submit passport renewal"
+ },
+ {
+  "kind": "document",
+  "id": "d_pbnlkpv3t",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": null,
+  "files": [
+   {
+    "role": "front",
+    "file": {
+     "key": "u/mock/a43ef151-b01f-4d74-b1ce-3bd426ad5e9d/alex-passport-front.svg",
+     "name": "alex-passport-front.svg",
+     "contentType": "image/svg+xml",
+     "size": 1081
+    }
+   }
+  ],
+  "fields": {
+   "idNumber": "584934492",
+   "issuer": "U.S. Department of State",
+   "issueDate": "2017-06-10",
+   "fullName": "Alex Morgan",
+   "nationality": "United States of America",
+   "placeOfBirth": "New York, U.S.A.",
+   "dateOfBirth": "1984-04-12"
+  },
+  "customFields": [],
+  "assignmentId": "a_wmgqusss8",
+  "pinned": true,
+  "expiry": {
+   "validUntil": "2027-06-10",
+   "outdated": false
+  },
+  "category": "identity",
+  "subjectId": "p_woex28pms",
+  "title": "Alex’s passport",
+  "type": "Passport"
+ },
+ {
+  "kind": "assignment",
+  "id": "a_om87niwxg",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2030-09-17",
+  "repeatMonths": 120,
+  "done": false,
+  "contactId": null,
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_k67eys9r3",
+  "subjectId": "p_s68tou51w"
+ },
+ {
+  "kind": "task",
+  "id": "t_e9f7e5fta",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_s68tou51w",
+  "parentId": null,
+  "notes": "",
+  "date": "2030-02-19",
+  "order": 1794969358627,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_om87niwxg",
+   "step": "plain"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Check renewal requirements and get a photo"
+ },
+ {
+  "kind": "task",
+  "id": "t_np8cr2xg6",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_s68tou51w",
+  "parentId": null,
+  "notes": "",
+  "date": "2030-03-21",
+  "order": 1794969358628,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_om87niwxg",
+   "step": "renew"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Submit passport renewal"
+ },
+ {
+  "kind": "document",
+  "id": "d_zromj3zib",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": null,
+  "files": [],
+  "fields": {
+   "idNumber": "573118820",
+   "issuer": "U.S. Department of State",
+   "issueDate": "2020-09-17",
+   "fullName": "Maya Morgan",
+   "nationality": "United States of America",
+   "placeOfBirth": "New York, U.S.A.",
+   "dateOfBirth": "1985-04-12"
+  },
+  "customFields": [],
+  "assignmentId": "a_om87niwxg",
+  "pinned": false,
+  "expiry": {
+   "validUntil": "2030-09-17",
+   "outdated": false
+  },
+  "category": "identity",
+  "subjectId": "p_s68tou51w",
+  "title": "Maya’s passport",
+  "type": "Passport"
+ },
+ {
+  "kind": "assignment",
+  "id": "a_qi5tqsu2d",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2029-05-05",
+  "repeatMonths": 120,
+  "done": false,
+  "contactId": null,
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_k67eys9r3",
+  "subjectId": "p_yhdi9etw6"
+ },
+ {
+  "kind": "task",
+  "id": "t_n1hkvfw63",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_yhdi9etw6",
+  "parentId": null,
+  "notes": "",
+  "date": "2028-10-07",
+  "order": 1794969358629,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_qi5tqsu2d",
+   "step": "plain"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Check renewal requirements and get a photo"
+ },
+ {
+  "kind": "task",
+  "id": "t_l26ougpb0",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_yhdi9etw6",
+  "parentId": null,
+  "notes": "",
+  "date": "2028-11-06",
+  "order": 1794969358630,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_qi5tqsu2d",
+   "step": "renew"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Submit passport renewal"
+ },
+ {
+  "kind": "document",
+  "id": "d_ewl7vp88a",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": null,
+  "files": [],
+  "fields": {
+   "idNumber": "590227341",
+   "issuer": "U.S. Department of State",
+   "issueDate": "2024-05-05",
+   "fullName": "Noa Morgan",
+   "nationality": "United States of America",
+   "placeOfBirth": "New York, U.S.A.",
+   "dateOfBirth": "2016-04-12"
+  },
+  "customFields": [],
+  "assignmentId": "a_qi5tqsu2d",
+  "pinned": false,
+  "expiry": {
+   "validUntil": "2029-05-05",
+   "outdated": false
+  },
+  "category": "identity",
+  "subjectId": "p_yhdi9etw6",
+  "title": "Noa’s passport",
+  "type": "Passport"
+ },
+ {
+  "kind": "assignment",
+  "id": "a_7pvhlb0ns",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2028-07-09",
+  "repeatMonths": 96,
+  "done": false,
+  "contactId": null,
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_9l8ese48d",
+  "subjectId": "p_woex28pms"
+ },
+ {
+  "kind": "task",
+  "id": "t_xb1si914a",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_woex28pms",
+  "parentId": null,
+  "notes": "",
+  "date": "2028-05-10",
+  "order": 1794969358633,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_7pvhlb0ns",
+   "step": "renew"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Renew driver license"
+ },
+ {
+  "kind": "document",
+  "id": "d_mgt5j7syz",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": null,
+  "files": [
+   {
+    "role": "front",
+    "file": {
+     "key": "u/mock/117a63da-aeaa-42b7-b728-936f1b1009d9/alex-license-front.svg",
+     "name": "alex-license-front.svg",
+     "contentType": "image/svg+xml",
+     "size": 1090
+    }
+   },
+   {
+    "role": "back",
+    "file": {
+     "key": "u/mock/acd1a9f0-a09f-4f56-8f13-bd32b281f138/alex-license-back.svg",
+     "name": "alex-license-back.svg",
+     "contentType": "image/svg+xml",
+     "size": 4530
+    }
+   }
+  ],
+  "fields": {
+   "idNumber": "D12345678901",
+   "issuer": "New York State DMV",
+   "issueDate": "2020-07-09",
+   "fullName": "Alex Morgan",
+   "licenseClass": "D",
+   "restrictions": "Corrective lenses",
+   "dateOfBirth": "1984-04-12"
+  },
+  "customFields": [],
+  "assignmentId": "a_7pvhlb0ns",
+  "pinned": true,
+  "expiry": {
+   "validUntil": "2028-07-09",
+   "outdated": false
+  },
+  "category": "identity",
+  "subjectId": "p_woex28pms",
+  "title": "Alex’s driver license",
+  "type": "Driver license"
+ },
+ {
+  "kind": "assignment",
+  "id": "a_gpupr353w",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "date": "2027-09-13",
+  "repeatMonths": 60,
+  "done": false,
+  "contactId": null,
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_29j1xals0",
+  "subjectId": "p_s68tou51w"
+ },
+ {
+  "kind": "task",
+  "id": "t_j7q11uonu",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "p_s68tou51w",
+  "parentId": null,
+  "notes": "",
+  "date": "2027-07-15",
+  "order": 1794969358634,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_gpupr353w",
+   "step": "renew"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Renew ID card"
+ },
+ {
+  "kind": "document",
+  "id": "d_zzur9tngf",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": null,
+  "files": [
+   {
+    "role": "front",
+    "file": {
+     "key": "u/mock/07710b7c-35e5-44a1-9094-9156dc9d9481/maya-id-front.svg",
+     "name": "maya-id-front.svg",
+     "contentType": "image/svg+xml",
+     "size": 1082
+    }
+   },
+   {
+    "role": "back",
+    "file": {
+     "key": "u/mock/8c92b86b-75e6-413e-b61b-1e12243b50a9/maya-id-back.svg",
+     "name": "maya-id-back.svg",
+     "contentType": "image/svg+xml",
+     "size": 4530
+    }
+   }
+  ],
+  "fields": {
+   "idNumber": "552011870",
+   "issuer": "City of New York",
+   "issueDate": "2022-09-13",
+   "fullName": "Maya Morgan",
+   "dateOfBirth": "1985-09-30"
+  },
+  "customFields": [],
+  "assignmentId": "a_gpupr353w",
+  "pinned": false,
+  "expiry": {
+   "validUntil": "2027-09-13",
+   "outdated": false
+  },
+  "category": "identity",
+  "subjectId": "p_s68tou51w",
+  "title": "Maya’s city ID",
+  "type": "City or state ID"
+ },
+ {
+  "kind": "document",
+  "id": "d_uwex8malt",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": "2026-09-16",
+  "files": [],
+  "fields": {
+   "providerId": "k_ozh1drdsc",
+   "about": "Left knee pain after running, three weeks",
+   "episode": "Knee injury"
+  },
+  "customFields": [],
+  "assignmentId": null,
+  "pinned": false,
+  "expiry": null,
+  "category": "health",
+  "subjectId": "p_woex28pms",
+  "title": "Referral to orthopedics",
+  "type": "Referral"
+ },
+ {
+  "kind": "document",
+  "id": "d_8eyph7ro7",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": "2026-09-30",
+  "files": [],
+  "fields": {
+   "providerId": "k_9lqqx79pl",
+   "about": "Mild meniscus strain, no tear",
+   "episode": "Knee injury"
+  },
+  "customFields": [],
+  "assignmentId": null,
+  "pinned": false,
+  "expiry": null,
+  "category": "health",
+  "subjectId": "p_woex28pms",
+  "title": "MRI report, left knee",
+  "type": "Imaging"
+ },
+ {
+  "kind": "document",
+  "id": "d_tiosumf19",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": "2026-10-18",
+  "files": [],
+  "fields": {
+   "providerId": "k_hyqw798v9",
+   "about": "Physical therapy for six weeks, then follow-up",
+   "episode": "Knee injury"
+  },
+  "customFields": [],
+  "assignmentId": null,
+  "pinned": true,
+  "expiry": null,
+  "category": "health",
+  "subjectId": "p_woex28pms",
+  "title": "Orthopedist summary",
+  "type": "Visit summary"
+ },
+ {
+  "kind": "document",
+  "id": "d_ty3zivlaf",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": "2026-05-31",
+  "files": [],
+  "fields": {
+   "providerId": "k_9lqqx79pl",
+   "about": "Cholesterol slightly high, recheck in six months"
+  },
+  "customFields": [],
+  "assignmentId": null,
+  "pinned": false,
+  "expiry": null,
+  "category": "health",
+  "subjectId": "p_woex28pms",
+  "title": "Blood panel results",
+  "type": "Result"
+ },
+ {
+  "kind": "document",
+  "id": "d_mse665y63",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": "2026-05-01",
+  "files": [],
+  "fields": {
+   "providerId": "k_ubgp9ceg5",
+   "about": "Rescue inhaler as needed"
+  },
+  "customFields": [],
+  "assignmentId": null,
+  "pinned": false,
+  "expiry": null,
+  "category": "health",
+  "subjectId": "p_yhdi9etw6",
+  "title": "Inhaler prescription",
+  "type": "Prescription"
+ },
+ {
+  "kind": "document",
+  "id": "d_hlqkfbibw",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": "2026-05-01",
+  "files": [],
+  "fields": {
+   "providerId": "k_ubgp9ceg5",
+   "about": "What to do during a flare-up. A copy is at school."
+  },
+  "customFields": [],
+  "assignmentId": null,
+  "pinned": true,
+  "expiry": null,
+  "category": "health",
+  "subjectId": "p_yhdi9etw6",
+  "title": "Asthma action plan",
+  "type": "Other"
+ },
+ {
+  "kind": "document",
+  "id": "d_txzmyksl9",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": "2026-08-19",
+  "files": [],
+  "fields": {
+   "providerId": "k_ozh1drdsc",
+   "about": "Daily antihistamine in spring"
+  },
+  "customFields": [],
+  "assignmentId": null,
+  "pinned": false,
+  "expiry": null,
+  "category": "health",
+  "subjectId": "p_s68tou51w",
+  "title": "Allergy prescription",
+  "type": "Prescription"
+ },
+ {
+  "kind": "document",
+  "id": "d_0uw8rs74p",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": null,
+  "files": [],
+  "fields": {},
+  "customFields": [],
+  "assignmentId": "a_qontw2yzm",
+  "pinned": true,
+  "expiry": {
+   "validUntil": "2027-01-01",
+   "outdated": false
+  },
+  "category": "car",
+  "subjectId": "c_0d8co1xrd",
+  "title": "Insurance card",
+  "type": "ID card"
+ },
+ {
+  "kind": "document",
+  "id": "d_7nfkc22vf",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": null,
+  "files": [],
+  "fields": {},
+  "customFields": [],
+  "assignmentId": "a_ijapr3tcq",
+  "pinned": true,
+  "expiry": {
+   "validUntil": "2027-04-16",
+   "outdated": false
+  },
+  "category": "car",
+  "subjectId": "c_0d8co1xrd",
+  "title": "Registration",
+  "type": "Registration"
+ },
+ {
+  "kind": "document",
+  "id": "d_gp4b90j7d",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": null,
+  "files": [],
+  "fields": {},
+  "customFields": [],
+  "assignmentId": "a_4dasnpymu",
+  "pinned": false,
+  "expiry": {
+   "validUntil": "2026-11-27",
+   "outdated": false
+  },
+  "category": "car",
+  "subjectId": "c_0d8co1xrd",
+  "title": "Inspection report",
+  "type": "Inspection"
+ },
+ {
+  "kind": "document",
+  "id": "d_yzbav4j9u",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": null,
+  "files": [],
+  "fields": {},
+  "customFields": [],
+  "assignmentId": "a_6a2bhgts0",
+  "pinned": true,
+  "expiry": {
+   "validUntil": "2027-03-17",
+   "outdated": false
+  },
+  "category": "car",
+  "subjectId": "c_97re2vmge",
+  "title": "Insurance card",
+  "type": "ID card"
+ },
+ {
+  "kind": "document",
+  "id": "d_p2q6o1ij3",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": null,
+  "files": [],
+  "fields": {},
+  "customFields": [],
+  "assignmentId": "a_qlzbakgyk",
+  "pinned": true,
+  "expiry": {
+   "validUntil": "2026-12-07",
+   "outdated": false
+  },
+  "category": "car",
+  "subjectId": "c_97re2vmge",
+  "title": "Registration",
+  "type": "Registration"
+ },
+ {
+  "kind": "document",
+  "id": "d_ivfbszeka",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": null,
+  "files": [],
+  "fields": {},
+  "customFields": [],
+  "assignmentId": null,
+  "pinned": false,
+  "expiry": null,
+  "category": "car",
+  "subjectId": "c_97re2vmge",
+  "title": "Purchase receipt",
+  "type": "Receipt"
+ },
+ {
+  "kind": "subject",
+  "id": "tr_4ce4k4rdv",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:36:05.727Z",
+  "archived": false,
+  "subjectType": "trip",
+  "name": "Lisbon and Sintra",
+  "notes": "Kids’ spring break",
+  "attributes": {
+   "destination": "Portugal",
+   "start": "2026-12-08",
+   "end": "2026-12-15",
+   "travelers": [
+    "p_woex28pms",
+    "p_s68tou51w",
+    "p_yhdi9etw6"
+   ]
+  }
+ },
+ {
+  "kind": "reservation",
+  "id": "res_724qn3fuh",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "tr_4ce4k4rdv",
+  "type": "stay",
+  "title": "Hotel Baixa Boutique",
+  "start": "2026-12-09T14:00",
+  "end": "2026-12-12T11:00",
+  "status": "booked",
+  "bookBy": null,
+  "checkinReminder": false,
+  "fields": {
+   "address": "Rua Augusta 100, Lisbon",
+   "confirmation": "HB-55821",
+   "link": "https://www.booking.com/hotel/pt/baixa-boutique.html",
+   "details": "Family room, breakfast included."
+  }
+ },
+ {
+  "kind": "reservation",
+  "id": "res_gzmqy2upy",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "tr_4ce4k4rdv",
+  "type": "other",
+  "title": "Dinner at Taberna da Rua",
+  "start": "2026-12-09T20:00",
+  "end": null,
+  "status": "booked",
+  "bookBy": null,
+  "checkinReminder": false,
+  "fields": {
+   "address": "Rua das Flores 32, Lisbon",
+   "details": "Table for 4, ask for the terrace."
+  }
+ },
+ {
+  "kind": "reservation",
+  "id": "res_h02wrcaf4",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "tr_4ce4k4rdv",
+  "type": "car",
+  "title": "Compact SUV rental",
+  "start": "2026-12-12T10:00",
+  "end": "2026-12-15T09:00",
+  "status": "booked",
+  "bookBy": null,
+  "checkinReminder": false,
+  "fields": {
+   "address": "Avenida da Liberdade 210, Lisbon",
+   "confirmation": "EU-7731",
+   "details": "Two child seats requested."
+  }
+ },
+ {
+  "kind": "reservation",
+  "id": "res_0bc7ctop9",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "tr_4ce4k4rdv",
+  "type": "stay",
+  "title": "Quinta guesthouse in Sintra",
+  "start": "2026-12-12T15:00",
+  "end": "2026-12-15T08:00",
+  "status": "planned",
+  "bookBy": "2026-11-22",
+  "checkinReminder": false,
+  "fields": {
+   "address": "Rua Visconde de Monserrate, Sintra",
+   "link": "https://www.airbnb.com/"
+  }
+ },
+ {
+  "kind": "task",
+  "id": "t_s8msof9g4",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "tr_4ce4k4rdv",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-22",
+  "order": 1794969358636,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "reservation",
+   "id": "res_0bc7ctop9",
+   "step": "book"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Book: Quinta guesthouse in Sintra"
+ },
+ {
+  "kind": "reservation",
+  "id": "res_pbyoh32dy",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "tr_4ce4k4rdv",
+  "type": "activity",
+  "title": "Pena Palace tickets",
+  "start": "2026-12-13T10:00",
+  "end": "2026-12-13T13:00",
+  "status": "booked",
+  "bookBy": null,
+  "checkinReminder": false,
+  "fields": {
+   "address": "Estrada da Pena, Sintra",
+   "confirmation": "PENA-3341",
+   "link": "https://www.parquesdesintra.pt/"
+  }
+ },
+ {
+  "kind": "document",
+  "id": "d_4ngbpdriz",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "attachedTo": {
+   "kind": "reservation",
+   "id": "res_pbyoh32dy"
+  },
+  "date": null,
+  "files": [
+   {
+    "role": null,
+    "file": {
+     "key": "u/mock/8bba3fcd-dc13-4bb9-a1ef-7dee6eda57dd/pena-tickets.svg",
+     "name": "pena-tickets.svg",
+     "contentType": "image/svg+xml",
+     "size": 20639
+    }
+   }
+  ],
+  "fields": {},
+  "customFields": [],
+  "assignmentId": null,
+  "pinned": false,
+  "expiry": null,
+  "category": "attachment",
+  "type": "File",
+  "subjectId": "tr_4ce4k4rdv",
+  "title": "pena-tickets.svg"
+ },
+ {
+  "kind": "reservation",
+  "id": "res_1x8zio5lz",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "tr_4ce4k4rdv",
+  "type": "hike",
+  "title": "Sintra ridge loop",
+  "start": "2026-12-14T09:00",
+  "end": "2026-12-14T13:00",
+  "status": "planned",
+  "bookBy": null,
+  "checkinReminder": false,
+  "fields": {
+   "address": "Trailhead at Monserrate parking",
+   "link": "https://www.alltrails.com/trail/portugal/lisboa/sintra-ridge-loop"
+  }
+ },
+ {
+  "kind": "reservation",
+  "id": "res_67c5arc9b",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "tr_4ce4k4rdv",
+  "type": "flight",
+  "title": "TAP 201 · Lisbon to Newark",
+  "start": "2026-12-15T12:15",
+  "end": "2026-12-15T15:20",
+  "status": "booked",
+  "bookBy": null,
+  "checkinReminder": true,
+  "fields": {
+   "address": "Lisbon Humberto Delgado, Terminal 1",
+   "confirmation": "XK7P2Q"
+  }
+ },
+ {
+  "kind": "task",
+  "id": "t_797s7zk5z",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "tr_4ce4k4rdv",
+  "parentId": null,
+  "notes": "",
+  "date": "2026-12-14",
+  "order": 1794969358637,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "reservation",
+   "id": "res_67c5arc9b",
+   "step": "checkin"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Check in online: TAP 201 · Lisbon to Newark"
+ },
+ {
+  "kind": "subject",
+  "id": "tr_94fmxm6t0",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectType": "trip",
+  "name": "Boston long weekend",
+  "notes": "",
+  "attributes": {
+   "destination": "Massachusetts",
+   "start": "2026-09-18",
+   "end": "2026-09-21",
+   "travelers": [
+    "p_woex28pms",
+    "p_s68tou51w"
+   ]
+  }
+ },
+ {
+  "kind": "reservation",
+  "id": "res_s3mw1s02h",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "tr_94fmxm6t0",
+  "type": "train",
+  "title": "Acela to Boston",
+  "start": "2026-09-18T08:00",
+  "end": "2026-09-18T11:45",
+  "status": "booked",
+  "bookBy": null,
+  "checkinReminder": false,
+  "fields": {
+   "address": "Penn Station",
+   "confirmation": "AM-20931"
+  }
+ },
+ {
+  "kind": "reservation",
+  "id": "res_f5g1kb17p",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": "tr_94fmxm6t0",
+  "type": "stay",
+  "title": "Harborview Inn",
+  "start": "2026-09-18T15:00",
+  "end": "2026-09-21T11:00",
+  "status": "booked",
+  "bookBy": null,
+  "checkinReminder": false,
+  "fields": {
+   "address": "12 Atlantic Ave, Boston",
+   "confirmation": "HVI-4410"
+  }
+ },
+ {
+  "kind": "task",
+  "id": "t_bciya372n",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": null,
+  "parentId": null,
+  "notes": "Second installment",
+  "date": "2026-11-14",
+  "order": 1794969358638,
+  "done": false,
+  "doneAt": null,
+  "source": null,
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Pay property tax"
+ },
+ {
+  "kind": "task",
+  "id": "t_zkofx0d3y",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": null,
+  "parentId": null,
+  "notes": "Kitchen sink drips",
+  "date": "2026-11-17",
+  "order": 1794969358639,
+  "done": false,
+  "doneAt": null,
+  "source": null,
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Call the plumber"
+ },
+ {
+  "kind": "task",
+  "id": "t_jracnp5my",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": null,
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-26",
+  "order": 1794969358640,
+  "done": false,
+  "doneAt": null,
+  "source": null,
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Renew gym membership"
+ },
+ {
+  "kind": "task",
+  "id": "t_h2k5jxbxr",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": null,
+  "parentId": null,
+  "notes": "",
+  "date": "2026-12-03",
+  "order": 1794969358641,
+  "done": false,
+  "doneAt": null,
+  "source": null,
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Book flights for the holiday"
+ },
+ {
+  "kind": "task",
+  "id": "t_fvrj3q3z0",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": null,
+  "parentId": "t_h2k5jxbxr",
+  "notes": "",
+  "date": null,
+  "order": 1,
+  "done": true,
+  "doneAt": "2026-11-18T02:35:58.612Z",
+  "source": null,
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Agree on dates with the grandparents"
+ },
+ {
+  "kind": "task",
+  "id": "t_gs60rqzzv",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": null,
+  "parentId": "t_h2k5jxbxr",
+  "notes": "",
+  "date": null,
+  "order": 2,
+  "done": false,
+  "doneAt": null,
+  "source": null,
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Compare fares"
+ },
+ {
+  "kind": "task",
+  "id": "t_ozgab9cen",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": null,
+  "parentId": "t_h2k5jxbxr",
+  "notes": "",
+  "date": "2026-11-27",
+  "order": 3,
+  "done": false,
+  "doneAt": null,
+  "source": null,
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Check everyone’s passport dates"
+ },
+ {
+  "kind": "task",
+  "id": "t_5njfrcr10",
+  "createdAt": "2026-11-18T02:35:58.612Z",
+  "updatedAt": "2026-11-18T02:35:58.685Z",
+  "archived": false,
+  "subjectId": null,
+  "parentId": "t_h2k5jxbxr",
+  "notes": "",
+  "date": null,
+  "order": 4,
+  "done": false,
+  "doneAt": null,
+  "source": null,
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Book seats together"
+ },
+ {
+  "kind": "routine",
+  "id": "r_pebntp900",
+  "createdAt": "2026-11-18T02:36:01.896Z",
+  "updatedAt": "2026-11-18T02:36:01.957Z",
+  "archived": false,
+  "area": "identity",
+  "template": null,
+  "icon": "idcard",
+  "title": "Driver license renewal",
+  "description": "Renewal reminders for Maya’s driver license.",
+  "dateLabel": "Expires",
+  "plan": [
+   {
+    "title": "Renew driver license",
+    "offsetDays": -60,
+    "kind": "renew",
+    "prep": "",
+    "requestsDocument": null
+   }
+  ],
+  "followUps": [
+   {
+    "title": "Add the new driver license to documents",
+    "offsetDays": 0,
+    "kind": "plain",
+    "prep": "",
+    "requestsDocument": {
+     "category": "identity",
+     "type": "Driver license"
+    }
+   }
+  ],
+  "repeatMonths": null,
+  "countFrom": "due",
+  "extension": null
+ },
+ {
+  "kind": "assignment",
+  "id": "a_x3g02ytw8",
+  "createdAt": "2026-11-18T02:36:01.896Z",
+  "updatedAt": "2026-11-18T02:36:01.957Z",
+  "archived": false,
+  "date": "2030-03-01",
+  "repeatMonths": null,
+  "done": false,
+  "contactId": null,
+  "supply": null,
+  "history": [],
+  "plan": null,
+  "countFrom": null,
+  "routineId": "r_pebntp900",
+  "subjectId": "p_s68tou51w"
+ },
+ {
+  "kind": "task",
+  "id": "t_1m1nz6c56",
+  "createdAt": "2026-11-18T02:36:01.896Z",
+  "updatedAt": "2026-11-18T02:36:01.957Z",
+  "archived": false,
+  "subjectId": "p_s68tou51w",
+  "parentId": null,
+  "notes": "",
+  "date": "2029-12-31",
+  "order": 1794969361896,
+  "done": false,
+  "doneAt": null,
+  "source": {
+   "kind": "assignment",
+   "id": "a_x3g02ytw8",
+   "step": "renew"
+  },
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Renew driver license"
+ },
+ {
+  "kind": "document",
+  "id": "d_jt4n81gso",
+  "createdAt": "2026-11-18T02:36:01.895Z",
+  "updatedAt": "2026-11-18T02:36:01.957Z",
+  "archived": false,
+  "attachedTo": null,
+  "date": null,
+  "files": [],
+  "fields": {
+   "idNumber": "M999",
+   "licenseClass": "D"
+  },
+  "customFields": [],
+  "assignmentId": "a_x3g02ytw8",
+  "pinned": false,
+  "expiry": {
+   "validUntil": "2030-03-01",
+   "outdated": false
+  },
+  "subjectId": "p_s68tou51w",
+  "category": "identity",
+  "title": "Maya’s driver license",
+  "type": "Driver license"
+ },
+ {
+  "kind": "task",
+  "id": "t_rk8qv1nev",
+  "createdAt": "2026-11-18T02:36:02.868Z",
+  "updatedAt": "2026-11-18T02:36:02.945Z",
+  "archived": false,
+  "subjectId": null,
+  "parentId": null,
+  "notes": "",
+  "date": "2026-11-17",
+  "order": 1794969362868,
+  "done": false,
+  "doneAt": null,
+  "source": null,
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Plan the garage clean-out"
+ },
+ {
+  "kind": "task",
+  "id": "t_r2r49pxjm",
+  "createdAt": "2026-11-18T02:36:02.868Z",
+  "updatedAt": "2026-11-18T02:36:02.945Z",
+  "archived": false,
+  "subjectId": null,
+  "parentId": "t_rk8qv1nev",
+  "notes": "",
+  "date": null,
+  "order": 1,
+  "done": false,
+  "doneAt": null,
+  "source": null,
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Sort the tools"
+ },
+ {
+  "kind": "task",
+  "id": "t_kn4pmby9f",
+  "createdAt": "2026-11-18T02:36:02.868Z",
+  "updatedAt": "2026-11-18T02:36:04.138Z",
+  "archived": false,
+  "subjectId": null,
+  "parentId": "t_rk8qv1nev",
+  "notes": "",
+  "date": "2026-11-18",
+  "order": 2,
+  "done": true,
+  "doneAt": "2026-11-18T02:36:04.061Z",
+  "source": null,
+  "appointment": null,
+  "requestsDocument": null,
+  "title": "Call the recycling center"
+ }
+]
