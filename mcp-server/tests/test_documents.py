@@ -1,61 +1,24 @@
-"""add_document / list_document_types: requests built from the household
-captured from the frontend (backend/tests/fixtures/frontend_state.json) and
-the shared registry (backend/src/registry.json), then run through the
-backend's own document rules and model validation."""
+"""add_document / list_document_types on data model v2: requests built from
+the migrated household and the shared registry, run through the backend's
+document rules, models and household checks."""
 
 import asyncio
 import json
-import subprocess
-import sys
 from datetime import date, timedelta
-from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "mcp-server"))
-
-from src import documents  # noqa: E402
-from src.logic import ToolError  # noqa: E402
-
-COLL = {
-    "person": "people", "car": "cars", "contact": "contacts", "routine": "routines",
-    "assignment": "assignments", "task": "tasks", "document": "documents",
-    "trip": "trips", "reservation": "reservations",
-}
-REG = json.loads((ROOT / "backend/src/registry.json").read_text())
-
-
-@pytest.fixture()
-def state():
-    ents = json.loads((ROOT / "backend/tests/fixtures/frontend_state.json").read_text())
-    st = {v: [] for v in COLL.values()}
-    for e in ents:
-        st[COLL[e["kind"]]].append(e)
-    return st
+from src import documents
+from src.logic import ToolError
+from tests.conftest import REG, backend_error, run_backend
 
 
 def build(state, subject, **kw):
     return documents.build_request(state, REG, subject, **kw)
 
 
-def run_backend(state, body):
-    """Apply a request with the backend's save_document and validate every record it writes."""
-    code = (
-        "import json,sys; from pydantic import TypeAdapter;"
-        "from src import documents; from src.models import Entity;"
-        "inp=json.loads(sys.stdin.read()); b=inp['body'];"
-        "puts,dels,doc,summary=documents.save_document(inp['state'], b['document'], renewal=b.get('renewal'),"
-        " duplicates=b.get('duplicates','allow'), today=b.get('today'));"
-        "ta=TypeAdapter(Entity); [ta.validate_python(p) for p in puts];"
-        "print(json.dumps({'document':doc,'summary':summary,'kinds':[p['kind'] for p in puts]}))"
-    )
-    out = subprocess.run(
-        [sys.executable, "-c", code], input=json.dumps({"state": state, "body": body}),
-        capture_output=True, text=True, cwd=ROOT / "backend",
-    )
-    assert out.returncode == 0, out.stderr[-3000:]
-    return json.loads(out.stdout)
+def subject(state, name):
+    return next(s for s in state["subjects"] if s["name"] == name)
 
 
 # ── car ─────────────────────────────────────────────────────────────────────
@@ -63,10 +26,9 @@ def run_backend(state, body):
 
 def test_car_insurance_card(state):
     body, ctx = build(state, "yaris", name="GEICO insurance card", doc_type="insurance card", valid_until="2027-04-25")
-    yaris = next(c for c in state["cars"] if c["makeModel"] == "Toyota Yaris")
     assert body["document"] == {
-        "subjectType": "car", "subjectId": yaris["id"], "docKind": "car", "type": "ID card",
-        "name": "GEICO insurance card", "validUntil": "2027-04-25",
+        "subjectId": subject(state, "Toyota Yaris")["id"], "category": "car", "type": "ID card",
+        "title": "GEICO insurance card", "expiry": {"validUntil": "2027-04-25", "outdated": False},
     }
     assert "renewal" not in body and ctx["subject"] == "Toyota Yaris (LMN 7305)"
     got = run_backend(state, body)
@@ -75,33 +37,34 @@ def test_car_insurance_card(state):
 
 def test_car_by_plate_and_routine(state):
     body, ctx = build(state, "kdr 4821", name="Insurance card 2027", routine="insurance")
-    assert body["document"]["docKind"] == "car" and ctx["routine"] == "Car insurance"
+    assert body["document"]["category"] == "car" and ctx["routine"] == "Car insurance"
     got = run_backend(state, body)
     assert got["summary"]["archivedOlder"] == ["Insurance card"] and got["summary"]["linkedRoutine"] == "Car insurance"
 
 
-def test_car_fields_outside_category_are_refused_by_the_api(state):
-    body, _ = build(state, "Civic", name="Card", id_number="123")
-    code = (
-        "import json,sys; from src import documents;"
-        "inp=json.loads(sys.stdin.read());"
-        "\ntry:\n documents.save_document(inp['state'], inp['body']['document'])\n"
-        "except documents.DocumentError as e:\n print(e)"
-    )
-    out = subprocess.run([sys.executable, "-c", code], input=json.dumps({"state": state, "body": body}),
-                         capture_output=True, text=True, cwd=ROOT / "backend")
-    assert "don't use: idNumber" in out.stdout, out.stderr
+def test_parameters_the_category_doesnt_use_are_refused(state):
+    with pytest.raises(ToolError, match="Car documents don't use `id_number`"):
+        build(state, "Civic", name="Card", id_number="123")
+    with pytest.raises(ToolError, match="don't expire"):
+        build(state, "Alex", name="Blood panel", category="health", valid_until="2030-01-01")
+
+
+def test_files_on_a_trip(state):
+    body, _ = build(state, "Lisbon", name="Itinerary")
+    assert body["document"]["category"] == "attachment" and body["document"]["type"] == "File"
+    assert run_backend(state, body)["document"]["subjectId"] == subject(state, "Lisbon and Sintra")["id"]
 
 
 # ── people: category inference ──────────────────────────────────────────────
 
 
 def test_person_category_from_type(state):
-    assert build(state, "Maya", doc_type="passport")[0]["document"]["docKind"] == "identity"
-    assert build(state, "Maya", name="Blood panel", doc_type="lab results")[0]["document"]["docKind"] == "health"
+    assert build(state, "Maya", doc_type="passport")[0]["document"]["category"] == "identity"
+    assert build(state, "Maya", name="Blood panel", doc_type="lab results")[0]["document"]["category"] == "health"
     with pytest.raises(ToolError, match="Say which kind of document"):
-        build(state, "Maya", name="Thing", doc_type="Other")  # both categories have Other
-    assert build(state, "Maya", name="Thing", category="Health", doc_type="Other")[0]["document"]["docKind"] == "health"
+        build(state, "Maya", name="Thing", doc_type="Other")  # identity and health both have Other
+    assert build(state, "Maya", name="Thing", category="Health", doc_type="Other")[0]["document"]["category"] == "health"
+    assert build(state, "Maya", name="Scan", category="files")[0]["document"]["category"] == "attachment"
 
 
 def test_category_must_fit_subject(state):
@@ -112,13 +75,14 @@ def test_category_must_fit_subject(state):
 # ── identity ────────────────────────────────────────────────────────────────
 
 
-def test_passport_request_and_reminders(state):
+def test_passport_fields_details_and_reminders(state):
     expiry = (date.today() + timedelta(days=400)).isoformat()
-    body, _ = build(state, "Noa", doc_type="passport", id_number="X1234567", valid_until=expiry,
-                    details={"nationality": "United States", "Hair": "Brown"}, pin=True, keep_both=True)
+    body, _ = build(state, "Noa", doc_type="passport", id_number="X1234567", issuer="U.S. Department of State",
+                    valid_until=expiry, details={"nationality": "United States", "Hair": "Brown"}, pin=True, keep_both=True)
     doc = body["document"]
-    assert doc["name"] == "Noa’s passport" and doc["pinned"] is True
-    assert doc["details"] == [{"name": "Nationality", "value": "United States"}, {"name": "Hair", "value": "Brown"}]
+    assert doc["title"] == "Noa’s passport" and doc["pinned"] is True
+    assert doc["fields"] == {"idNumber": "X1234567", "issuer": "U.S. Department of State", "nationality": "United States"}
+    assert doc["customFields"] == [{"label": "Hair", "value": "Brown"}]
     assert body["renewal"] == {} and body["duplicates"] == "allow"
     got = run_backend(state, body)
     steps = {s["title"]: s["date"] for s in got["summary"]["steps"]}
@@ -129,15 +93,8 @@ def test_passport_request_and_reminders(state):
 def test_duplicate_id_is_refused_with_instructions(state):
     body, _ = build(state, "Noa", doc_type="Passport", valid_until="2034-01-01")
     assert body["duplicates"] == "reject"
-    code = (
-        "import json,sys; from src import documents;"
-        "inp=json.loads(sys.stdin.read()); b=inp['body'];"
-        "\ntry:\n documents.save_document(inp['state'], b['document'], renewal=b.get('renewal'), duplicates=b['duplicates'])\n"
-        "except documents.Duplicate as e:\n print(json.dumps({'detail': str(e), 'existing': e.existing}))"
-    )
-    out = subprocess.run([sys.executable, "-c", code], input=json.dumps({"state": state, "body": body}),
-                         capture_output=True, text=True, cwd=ROOT / "backend")
-    err = json.loads(out.stdout)
+    err = backend_error(state, body)
+    assert err["kind"] == "Duplicate"
     msg = documents.duplicate_message(err["detail"], err["existing"])
     assert "already has an active passport" in msg and "renewal routine 'Passport renewal'" in msg
     assert "`routine`" in msg and "keep_both" in msg
@@ -163,10 +120,10 @@ def test_health_document(state):
     body, ctx = build(state, "alex", name="Physio progress note", doc_type="visit", provider="kim",
                       about="Knee range of motion improved", episode="knee INJURY", on="2026-03-02")
     doc = body["document"]
-    assert doc["docKind"] == "health" and doc["type"] == "Visit summary" and doc["episode"] == "Knee injury"
-    assert doc["date"] == "2026-03-02" and ctx["provider"] == "Dr. Paul Kim" and "renewal" not in body
+    assert doc["category"] == "health" and doc["type"] == "Visit summary" and doc["date"] == "2026-03-02"
+    assert doc["fields"]["episode"] == "Knee injury" and ctx["provider"] == "Dr. Paul Kim" and "renewal" not in body
     got = run_backend(state, body)
-    assert got["document"]["providerId"] == doc["providerId"]
+    assert got["document"]["fields"]["providerId"] == doc["fields"]["providerId"]
 
 
 # ── errors and registry view ────────────────────────────────────────────────
@@ -181,6 +138,7 @@ def test_health_document(state):
         ({"subject": "Alex", "doc_type": "Passport", "routine": "Dental"}, "no identity routine"),
         ({"subject": "Alex", "name": "X", "category": "health", "provider": "Dr. Nobody"}, "No contact"),
         ({"subject": "Alex", "doc_type": "Passport", "remind_days": 5000}, "remind_days"),
+        ({"subject": "Lisbon", "name": "X", "routine": "anything"}, "aren't linked to routines"),
     ],
 )
 def test_errors(state, kw, msg):
@@ -192,21 +150,13 @@ def test_errors(state, kw, msg):
 def test_describe_registry():
     d = documents.describe_registry(REG)
     assert set(d) == set(REG["subjectTypes"])
-    assert set(d["person"]["categories"]) == {"identity", "health"}
+    assert set(d["person"]["categories"]) == {"identity", "health", "attachment"}
     car = d["car"]["categories"]["car"]
-    assert car["parameters"] == ["valid_until"] and car["pin"] == "Keep in the glovebox (default on)"
-    assert "Passport 180" in d["person"]["categories"]["identity"]["renewalReminders"]
-
-
-def test_tools_registered():
-    from mcp.server.fastmcp import FastMCP
-    from src.tools import register_tools
-
-    mcp = FastMCP("coo-test")
-    register_tools(mcp)
-    names = {t.name for t in asyncio.run(mcp.list_tools())}
-    assert {"add_document", "list_document_types"} <= names
-    assert not names & {"add_id_document", "add_health_document", "add_car_document"}
+    assert car["parameters"] == ["date", "valid_until"] and car["pin"] == "Keep in the glovebox (default on)"
+    ident = d["person"]["categories"]["identity"]
+    assert "id_number" in ident["parameters"] and "Nationality" in ident["detailsPerType"]["Passport"]
+    assert "Passport 180" in ident["renewalReminders"]
+    assert d["car"]["attributes"] == ["Plate", "Odometer"]
 
 
 def test_add_document_tool_end_to_end(state, monkeypatch):
@@ -225,9 +175,9 @@ def test_add_document_tool_end_to_end(state, monkeypatch):
 
     async def save_document(token, body):
         sent.append(body)
-        if body["document"]["docKind"] == "identity":
+        if body["document"]["category"] == "identity":
             raise client.ApiError("409", 409, "Noa already has an active passport",
-                                  {"existing": [{"name": "Noa’s passport", "validUntil": "2029-05-04", "routine": "Passport renewal"}]})
+                                  {"existing": [{"title": "Noa’s passport", "validUntil": "2029-05-04", "routine": "Passport renewal"}]})
         doc = {**body["document"], "id": "d_new", "pinned": True}
         return {"document": doc, "changes": {"put": [doc], "delete": []}, "summary": {}}
 
@@ -240,8 +190,8 @@ def test_add_document_tool_end_to_end(state, monkeypatch):
     out = asyncio.run(mcp.call_tool("add_document", {"subject": "Yaris", "name": "GEICO card", "type": "insurance card", "valid_until": "2027-04-25"}))
     text = out[0][0].text if isinstance(out, tuple) else out[0].text
     reply = json.loads(text)
-    assert reply["document"]["subject"] == "Toyota Yaris (LMN 7305)" and reply["document"]["type"] == "ID card"
-    assert sent[0]["document"]["docKind"] == "car"
+    assert reply["document"]["subject"] == "Toyota Yaris (LMN 7305)" and reply["document"]["validUntil"] == "2027-04-25"
+    assert sent[0]["document"]["category"] == "car"
 
     with pytest.raises(Exception) as e:
         asyncio.run(mcp.call_tool("add_document", {"subject": "Noa", "type": "Passport"}))

@@ -4,7 +4,7 @@ A standalone [Model Context Protocol](https://modelcontextprotocol.io) server (n
 `coo`) that wraps the coo household app's API (`GET /api/state`, `POST /api/batch`,
 `POST /api/documents`, `GET /api/registry`).
 It lets Claude — via Claude Code, Claude.ai connectors, or the Claude API — read
-the household agenda, people, cars, routines and trips, and make small changes to
+the household agenda, subjects (people, cars, trips, ...), routines and trips, and make small changes to
 tasks.
 
 **Auth is per-user pass-through.** The caller's Cognito access token flows through
@@ -23,13 +23,13 @@ upserts). `add_document` only resolves names to ids and posts to
 
 | Tool                    | Purpose |
 |-------------------------|---------|
-| `get_agenda(filter?)`   | Open tasks in `overdue` / `today` / `next_7_days` (1–7 days) / `later` (8+ days or no date), sorted by date then manual order. Each row: id, title, date, who (person, car "makeModel (plate)", "Trip: name" or "General"), routine title, `appointment` flag. Dated open sub-tasks are rows of their own (id `<task id>~<sub-task id>`, with `subtaskOf` = the parent's title). `filter`: `everything` (default), `general`, or a person / car (name or plate) / trip name. |
-| `list_people_and_cars()`| People and cars with ids |
+| `get_agenda(filter?)`   | Open tasks in `overdue` / `today` / `next_7_days` (1–7 days) / `later` (8+ days or no date), sorted by date then manual order. Each row: id, title, date, who (a person, a car "name (plate)", "Trip: name", any other subject, or "General"), routine title, `appointment` flag, `stepKind` / `tripTask`, and the task's `subtasks`. Sub-tasks are ordinary tasks (data model v2): dated open ones of open tasks are rows of their own with `subtaskOf` = the parent's title. `filter`: `everything` (default), `general`, or any subject (name, plate, trip name). |
+| `list_subjects()`       | Every subject grouped by type (people, cars, trips, ...) with ids and attributes (references such as travelers shown as names) |
 | `list_routines()`       | Routines with their assignees (subject name, date, done) |
 | `list_trips()`          | Trips, soonest first, with travelers and reservation counts |
 | `get_trip(name_or_id)`  | One trip with its reservations (sorted by start) and open trip tasks |
-| `add_task(title, date?, who?, notes?, subtasks?)` | New plain task; `date` defaults to today, `who` is a person name, car name/plate, or `general` (default); `subtasks` is an optional list of checklist titles |
-| `complete_task(task_id)` | Marks a plain task (or a `<task>~<sub-task>` sub-task) done. Refuses routine steps that need input (`schedule` / `renew` / `pickup`) and trip booking tasks — those are finished in the app |
+| `add_task(title, date?, who?, notes?, subtasks?)` | New plain task; `date` defaults to today, `who` is any subject (person, car name/plate, trip, ...) or `general` (default); each of `subtasks` becomes its own task under it |
+| `complete_task(task_id)` | Marks a plain task or sub-task done (old `<task>~<sub-task>` ids from before v2 still resolve). Refuses routine steps that need input (`schedule` / `renew` / `pickup`) and trip booking tasks — those are finished in the app |
 | `reschedule_task(task_id, date)` | Moves a task to a new date. Refuses booked appointments |
 | `list_document_types()` | Which documents each subject type (person, car, ...) can hold, from the API's registry: categories, types, which `add_document` parameters each uses, detail fields per type, pin label/default, renewal reminder defaults |
 | `add_document(subject, name?, category?, type?, valid_until?, date?, id_number?, issuer?, issue_date?, details?, provider?, about?, episode?, routine?, pin?, remind?, remind_days?, keep_both?)` | Adds a document to any subject (person name, car make/model or plate). `category` is inferred when the subject holds one kind or the type settles it. Posts to `POST /api/documents`, which applies the rules: `routine` links a routine (IDs and car documents archive the older one of that type on it; IDs move it to the new expiry; open "add the document" tasks close); IDs with an expiry get renewal reminders unless `remind` is false; a second active ID of a type is refused until you pass `routine` (replace) or `keep_both`. No files over MCP |
@@ -42,8 +42,9 @@ upserts). `add_document` only resolves names to ids and posts to
 - `coo://state` — the full state as JSON
 - `coo://agenda` — the current agenda (same shape as `get_agenda`)
 
-> **Data model:** see [frontend/src/types/coo.ts](../frontend/src/types/coo.ts)
-> (the contract) and [data-structure.md](../data-structure.md) (storage + API).
+> **Data model (v2):** see [frontend/src/types/coo.ts](../frontend/src/types/coo.ts)
+> (the contract) and [data-structure.md](../data-structure.md) (storage, API,
+> registry). Everything the tools write passes the API's household checks.
 > The pure projection/mutation logic lives in [src/logic.py](src/logic.py).
 
 Implemented in Python with the [`mcp`](https://pypi.org/project/mcp/) SDK

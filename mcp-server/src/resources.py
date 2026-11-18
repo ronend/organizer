@@ -20,7 +20,7 @@ def register_resources(mcp: FastMCP) -> None:
     @mcp.resource(
         "coo://state",
         name="state",
-        description="Every coo record (people, cars, contacts, routines, assignments, tasks, documents, trips, reservations)",
+        description="Every coo record (subjects, tasks, documents, reservations, routines, assignments, contacts) — data model v2",
         mime_type="application/json",
     )
     async def state() -> str:

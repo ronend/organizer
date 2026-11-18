@@ -38,32 +38,40 @@ def register_tools(mcp: FastMCP) -> None:
             "The household agenda: open tasks bucketed into overdue, today, "
             "next_7_days (1-7 days ahead) and later (8+ days ahead or no date), "
             "sorted by date then the user's manual order. Each task has its id, "
-            "title, date, who it is for (a person, a car, a trip or 'General'), the "
-            "routine it belongs to (if any) and whether it is a booked appointment. "
+            "title, date, who it is for (a person, a car, a trip, any other subject, or "
+            "'General'), the routine it belongs to (if any), whether it is a booked "
+            "appointment, and its sub-tasks. Dated open sub-tasks are also rows of "
+            "their own (with `subtaskOf`); a sub-task id is a normal task id. "
             "Use for 'what do I have to do', 'what's due', 'what's overdue'. "
-            "Optionally filter to 'general' or to one person / car (name or plate) / trip."
+            "Optionally filter to 'general' or to one subject (name, plate or trip)."
         )
     )
     async def get_agenda(
         ctx: Context,
         filter: Annotated[
             Optional[str],
-            Field(description="'everything' (default), 'general', or a person name, car name/plate, or trip name"),
+            Field(description="'everything' (default), 'general', or a subject: person name, car name/plate, trip name, ..."),
         ] = None,
     ) -> str:
         state = await client.get_state(token_from_context(ctx))
         return _dumps(logic.agenda(state, filter))
 
-    @mcp.tool(description="List the household's people and cars (ids, names, plates).")
-    async def list_people_and_cars(ctx: Context) -> str:
+    @mcp.tool(
+        description=(
+            "List the household's subjects grouped by type — people, cars, trips and any other "
+            "kind coo knows (see list_document_types) — with ids, names and attributes "
+            "(e.g. a car's plate, a trip's dates and travelers)."
+        )
+    )
+    async def list_subjects(ctx: Context) -> str:
         state = await client.get_state(token_from_context(ctx))
-        return _dumps(logic.people_and_cars(state))
+        return _dumps(logic.subjects_view(state))
 
     @mcp.tool(
         description=(
             "List routines (recurring obligations such as passport renewal, car "
             "inspection, dental checkups, medication refills) with each assignee: "
-            "the person or car, their due/expiry date, and whether it is done."
+            "the subject (person, car, ...), their due/expiry date, and whether it is done."
         )
     )
     async def list_routines(ctx: Context) -> str:
@@ -93,10 +101,10 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(
         description=(
-            "Add a plain task to the agenda. `who` is a person's name, a car's "
-            "make/model or plate, or 'general' (the default) for household tasks. "
-            "`date` is YYYY-MM-DD and defaults to today. `subtasks` is an "
-            "optional checklist of sub-task titles."
+            "Add a plain task to the agenda. `who` is any subject — a person's name, a car's "
+            "make/model or plate, a trip's name — or 'general' (the default) for household "
+            "tasks. `date` is YYYY-MM-DD and defaults to today. `subtasks` is an optional "
+            "checklist of sub-task titles (each becomes its own task under this one)."
         )
     )
     async def add_task(
@@ -105,7 +113,7 @@ def register_tools(mcp: FastMCP) -> None:
         date: Annotated[Optional[str], Field(description="Due date YYYY-MM-DD (default today)")] = None,
         who: Annotated[
             Optional[str],
-            Field(description="Who/what it is for: person name, car name or plate, or 'general' (default)"),
+            Field(description="Who/what it is for: a subject (person, car name or plate, trip, ...) or 'general' (default)"),
         ] = None,
         notes: Annotated[Optional[str], Field(description="Optional notes")] = None,
         subtasks: Annotated[
@@ -114,9 +122,10 @@ def register_tools(mcp: FastMCP) -> None:
     ) -> str:
         token = token_from_context(ctx)
         state = await client.get_state(token)
-        task = logic.new_task(state, title, date, who, notes, subtasks)
-        await client.batch(token, put=[task])
-        return _dumps({"created": task})
+        records = logic.new_task(state, title, date, who, notes, subtasks)
+        await client.batch(token, put=records)
+        parent, *kids = records
+        return _dumps({"created": {**parent, "subtasks": [{"id": k["id"], "title": k["title"]} for k in kids]}})
 
     @mcp.tool(
         description=(
@@ -127,17 +136,14 @@ def register_tools(mcp: FastMCP) -> None:
     )
     async def complete_task(
         ctx: Context,
-        task_id: Annotated[str, Field(description="Task id from get_agenda (sub-tasks look like <task id>~<sub-task id>)")],
+        task_id: Annotated[str, Field(description="Task or sub-task id from get_agenda")],
     ) -> str:
         token = token_from_context(ctx)
         state = await client.get_state(token)
-        if logic.SUB_SEP in task_id:
-            parent, sub = logic.find_subtask(state, task_id)
-            await client.batch(token, put=[logic.completed_subtask(parent, sub)])
-            return f"Done: {sub['title']} (sub-task of {parent['title']!r})"
         task = logic.completed_task(logic.find_task(state, task_id))
         await client.batch(token, put=[task])
-        return f"Done: {task['title']}"
+        parent = next((t for t in state.get("tasks", []) if t["id"] == task.get("parentId")), None)
+        return f"Done: {task['title']}" + (f" (sub-task of {parent['title']!r})" if parent else "")
 
     @mcp.tool(
         description=(
@@ -147,17 +153,11 @@ def register_tools(mcp: FastMCP) -> None:
     )
     async def reschedule_task(
         ctx: Context,
-        task_id: Annotated[str, Field(description="Task id from get_agenda (sub-tasks look like <task id>~<sub-task id>)")],
+        task_id: Annotated[str, Field(description="Task or sub-task id from get_agenda")],
         date: Annotated[str, Field(description="New date YYYY-MM-DD")],
     ) -> str:
         token = token_from_context(ctx)
         state = await client.get_state(token)
-        if logic.SUB_SEP in task_id:
-            parent, sub = logic.find_subtask(state, task_id)
-            updated = logic.rescheduled_subtask(parent, sub, date)
-            await client.batch(token, put=[updated])
-            new_date = next(s["date"] for s in updated["subtasks"] if s["id"] == sub["id"])
-            return f"Moved sub-task {sub['title']!r} to {new_date}."
         task = logic.rescheduled_task(logic.find_task(state, task_id), date)
         await client.batch(token, put=[task])
         return f"Moved {task['title']!r} to {task['date']}."
@@ -180,10 +180,12 @@ def register_tools(mcp: FastMCP) -> None:
         description=(
             "Add a document to any subject: a person (Identity: passport, driver license, ...; Health: "
             "results, referrals, prescriptions, ...), a car (insurance ID card, policy, registration, "
-            "inspection, receipt, ...) or any other subject type coo knows (see list_document_types). "
-            "`subject` is the person's name, the car's make/model or plate. `category` is only needed "
-            "when the subject holds several kinds and `type` doesn't settle it (e.g. a person: identity "
-            "or health). Only pass the fields the category uses; the API refuses others. "
+            "inspection, receipt, ...), a trip (files such as itineraries) or any other subject type coo "
+            "knows (see list_document_types). `subject` is a name, a car's plate or a trip's name. "
+            "`category` is only needed when the subject holds several kinds and `type` doesn't settle "
+            "it (e.g. a person: identity or health). Only pass the parameters the category uses "
+            "(list_document_types); others are refused. `details` holds any further fields: the "
+            "type's known ones (e.g. Nationality) are stored as such, the rest as custom fields. "
             "`routine` links one of the subject's routines in the category's area: for IDs and car "
             "documents the older document of the same type on it is archived, and its open \"add the "
             "document\" task is closed; for IDs the routine moves to the new expiry. IDs with an expiry "
@@ -203,7 +205,7 @@ def register_tools(mcp: FastMCP) -> None:
         id_number: Annotated[Optional[str], Field(description="Document number (identity; shown masked in lists)")] = None,
         issuer: Annotated[Optional[str], Field(description="Issued by (identity), e.g. U.S. Department of State")] = None,
         issue_date: Annotated[Optional[str], Field(description="Issue date YYYY-MM-DD (identity)")] = None,
-        details: Annotated[Optional[dict[str, str]], Field(description="Extra fields (identity), e.g. {\"Nationality\": \"Portugal\"}")] = None,
+        details: Annotated[Optional[dict[str, str]], Field(description="Further fields by label, e.g. {\"Nationality\": \"Portugal\"}")] = None,
         provider: Annotated[Optional[str], Field(description="Provider: a contact's name (health)")] = None,
         about: Annotated[Optional[str], Field(description="One line on what it's about (health)")] = None,
         episode: Annotated[Optional[str], Field(description="Episode grouping related documents (health), e.g. \"Knee injury\"")] = None,

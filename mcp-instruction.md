@@ -3,9 +3,10 @@
 > **Historical scaffold prompt — superseded.** This was the original brief for
 > the MCP server (written for a TypeScript/Express "todo" app). The implemented server
 > is Python/FastMCP, named `coo`, and wraps the coo API (`GET /api/state`,
-> `POST /api/batch`). Its tools are `get_agenda`, `list_people_and_cars`,
-> `list_routines`, `list_trips`, `get_trip`, `add_task`, `complete_task` and
-> `reschedule_task`, and its env vars are `COO_API_URL` / `COO_API_KEY` /
+> `POST /api/batch`, `POST /api/documents`, `GET /api/registry`). Its tools are
+> `get_agenda`, `list_subjects`, `list_routines`, `list_trips`, `get_trip`,
+> `add_task`, `complete_task`, `reschedule_task`, `list_document_types` and
+> `add_document` (see mcp-server/README.md), and its env vars are `COO_API_URL` / `COO_API_KEY` /
 > `COO_ORIGIN_SECRET` (formerly `TODO_*`; the env var names below have been
 > updated). The tool names and code samples below describe the old design. For
 > the current behavior see [mcp-server/README.md](mcp-server/README.md); for the
