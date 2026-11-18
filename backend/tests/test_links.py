@@ -115,5 +115,7 @@ def test_requires_auth():
 def test_long_task_notes_accepted(client, sub):
     from tests.samples import samples
 
-    task = {**samples(sub)["task"], "notes": "<p>" + "x" * 15000 + "</p>"}
+    # A general task: no subject, source or appointment to reference.
+    task = {**samples(sub)["task"], "subjectId": None, "source": None, "appointment": None,
+            "notes": "<p>" + "x" * 15000 + "</p>"}
     assert client.post("/api/batch", json={"put": [task], "delete": []}).status_code == 200

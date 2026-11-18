@@ -1,21 +1,33 @@
-"""Pydantic models for the coo data model.
+"""Pydantic models for the coo data model, version 2.
 
-Mirrors ``frontend/src/types/coo.ts`` exactly — same camelCase field names, same
-nullability, extra fields forbidden. Every stored record carries a ``kind``
-discriminator and an ``id``; ``Entity`` is the discriminated union over ``kind``.
+Seven record kinds, all hanging off generic subjects:
 
-Validation is deliberately light (shapes, enums, date formats, sizes). Ownership
-checks that need the caller's identity (e.g. FileRef keys under ``u/<sub>/``)
-live in the routes, not here.
+    subject      a container: person, car, trip, ... (type from the registry)
+    task         belongs to a subject (or none = general); ``parentId`` makes
+                 it a subtask (one level only)
+    document     any file(s) + metadata ``fields``; ``expiry`` only for
+                 expiring categories
+    reservation  belongs to a subject whose type allows reservations (trip)
+    routine      a reusable template
+    assignment   a routine applied to one subject
+    contact      household-wide; ``links`` tie it to subjects with a role
+
+These models fix the SHAPES (extra fields forbidden, dates, sizes, enums).
+Everything the registry defines (subject attributes, document fields, which
+kinds a subject allows, ...) and every cross-record rule (references exist,
+subtask depth, same subject, uniqueness) is checked in ``integrity.py``
+against the whole household. See data-structure.md.
 """
 
 from __future__ import annotations
 
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, model_validator
 
 from src import registry
+
+SCHEMA_VERSION = 2
 
 # ── Scalar types ────────────────────────────────────────────────────────────
 
@@ -25,58 +37,44 @@ LocalDateTime = Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")
 Timestamp = Annotated[str, Field(min_length=1, max_length=40)]
 Id = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")]
 
-Title = Annotated[str, Field(max_length=300)]
+Title = Annotated[str, Field(min_length=1, max_length=300)]
 Short = Annotated[str, Field(max_length=300)]
 Long = Annotated[str, Field(max_length=5000)]
-# Task notes are rich text (sanitized HTML from the editor) or legacy plain text.
+# Task notes are rich text (sanitized HTML from the editor) or plain text.
 RichText = Annotated[str, Field(max_length=20000)]
 Tiny = Annotated[str, Field(max_length=100)]
 
-# Subject types, document categories and routine areas come from the registry
-# (src/registry.json), so a new subject type needs no change here.
 SubjectType = Annotated[str, AfterValidator(registry.check_subject_type)]
-ContactGroup = Literal["health", "cars", "other"]
+Category = Annotated[str, AfterValidator(registry.check_category)]
 Area = Annotated[str, AfterValidator(registry.check_area)]
+ReservationType = Annotated[str, AfterValidator(registry.check_reservation_type)]
 StepKind = Literal["plain", "schedule", "renew", "pickup"]
-DocKind = Annotated[str, AfterValidator(registry.check_doc_kind)]
-TripTaskKind = Literal["book", "checkin"]
-ReservationType = Literal["flight", "stay", "car", "activity", "hike", "train", "other"]
 
-EntityKind = Literal[
-    "person",
-    "car",
-    "contact",
-    "routine",
-    "assignment",
-    "task",
-    "document",
-    "trip",
-    "reservation",
+# Registry-defined field values. Which keys exist and what each holds is
+# checked against the field definitions in integrity.py.
+FieldKey = Annotated[str, Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,63}$")]
+FieldValue = Union[
+    None,
+    StrictBool,
+    StrictInt,
+    StrictFloat,
+    Annotated[str, Field(max_length=5000)],
+    Annotated[list[Annotated[str, Field(max_length=300)]], Field(max_length=100)],
 ]
+Fields = Annotated[dict[FieldKey, FieldValue], Field(max_length=100)]
 
-ENTITY_KINDS: tuple[str, ...] = (
-    "person",
-    "car",
-    "contact",
-    "routine",
-    "assignment",
-    "task",
-    "document",
-    "trip",
-    "reservation",
-)
+EntityKind = Literal["subject", "task", "document", "reservation", "routine", "assignment", "contact"]
+ENTITY_KINDS: tuple[str, ...] = ("subject", "task", "document", "reservation", "routine", "assignment", "contact")
 
-# kind → CooState collection key
+# kind → collection key in GET /api/state
 STATE_KEYS: dict[str, str] = {
-    "person": "people",
-    "car": "cars",
-    "contact": "contacts",
-    "routine": "routines",
-    "assignment": "assignments",
+    "subject": "subjects",
     "task": "tasks",
     "document": "documents",
-    "trip": "trips",
     "reservation": "reservations",
+    "routine": "routines",
+    "assignment": "assignments",
+    "contact": "contacts",
 }
 
 
@@ -94,17 +92,26 @@ class FileRef(_Strict):
     size: Annotated[int, Field(ge=0)]
 
 
-class DocTaskSpec(_Strict):
-    docKind: DocKind
-    docType: Short
+class DocumentFile(_Strict):
+    """One file of a document; ``role`` is one of the category's fileRoles (front/back) or null."""
+
+    role: Optional[Tiny]
+    file: FileRef
+
+
+class DocumentRequest(_Strict):
+    """A task or routine step that asks for a document to be added."""
+
+    category: Category
+    type: Short
 
 
 class StepPlan(_Strict):
-    title: Title
+    title: Annotated[str, Field(max_length=300)]
     offsetDays: int
     kind: StepKind
     prep: Long
-    docTask: Optional[DocTaskSpec]
+    requestsDocument: Optional[DocumentRequest]
 
 
 class MedicationSupply(_Strict):
@@ -122,18 +129,6 @@ class HistoryEntry(_Strict):
     text: Long
 
 
-class Subtask(_Strict):
-    id: Id
-    title: Annotated[str, Field(min_length=1, max_length=300)]
-    done: bool
-    # Optional due date; missing on sub-tasks saved before dates existed.
-    # A dated sub-task is also its own row on the Agenda, so it carries the
-    # same ordering and completion stamp as a task.
-    date: Optional[ISODate] = None
-    order: Optional[float] = None
-    doneAt: Optional[Timestamp] = None
-
-
 class AppointmentInfo(_Strict):
     time: Annotated[str, Field(pattern=r"^(\d{2}:\d{2})?$")]
     providerId: Optional[Id]
@@ -141,9 +136,44 @@ class AppointmentInfo(_Strict):
     prep: Long
 
 
-class DetailRow(_Strict):
-    name: Short
+class CustomField(_Strict):
+    label: Short
     value: Long
+
+
+class AssignmentSource(_Strict):
+    kind: Literal["assignment"]
+    id: Id
+    step: StepKind
+
+
+class ReservationSource(_Strict):
+    kind: Literal["reservation"]
+    id: Id
+    step: Literal["book", "checkin"]
+
+
+TaskSource = Annotated[Union[AssignmentSource, ReservationSource], Field(discriminator="kind")]
+
+
+class AttachedTo(_Strict):
+    kind: Literal["task", "reservation"]
+    id: Id
+
+
+class Expiry(_Strict):
+    validUntil: ISODate
+    # Replaced by a newer document; its expiry no longer drives anything.
+    outdated: bool = False
+
+
+class ContactLink(_Strict):
+    subjectId: Id
+    role: Short
+
+
+class RoutineExtension(_Strict):
+    medication: bool = False
 
 
 # ── Entities ────────────────────────────────────────────────────────────────
@@ -153,28 +183,74 @@ class _Base(_Strict):
     id: Id
     createdAt: Timestamp
     updatedAt: Timestamp
+    archived: bool = False
 
 
-class Person(_Base):
-    kind: Literal["person"]
+class Subject(_Base):
+    kind: Literal["subject"]
+    subjectType: SubjectType
     name: Title
-    birthYear: Optional[int]
+    notes: Long = ""
+    attributes: Fields = Field(default_factory=dict)
 
 
-class Car(_Base):
-    kind: Literal["car"]
-    makeModel: Title
-    plate: Tiny
-    odometer: Optional[float]
+class Task(_Base):
+    kind: Literal["task"]
+    subjectId: Optional[Id]
+    parentId: Optional[Id] = None
+    title: Title
+    notes: RichText = ""
+    date: Optional[ISODate]
+    order: float
+    done: bool
+    doneAt: Optional[Timestamp]
+    source: Optional[TaskSource] = None
+    appointment: Optional[AppointmentInfo] = None
+    requestsDocument: Optional[DocumentRequest] = None
+
+    @model_validator(mode="after")
+    def _subtask_is_plain(self) -> "Task":
+        if self.parentId is not None:
+            if self.parentId == self.id:
+                raise ValueError("a task can't be its own parent")
+            if self.source is not None or self.appointment is not None:
+                raise ValueError("a subtask can't have a source or an appointment")
+        return self
 
 
-class Contact(_Base):
-    kind: Literal["contact"]
-    name: Title
-    role: Short
-    phone: Tiny
-    group: ContactGroup
-    notes: Long
+class Document(_Base):
+    kind: Literal["document"]
+    subjectId: Id
+    attachedTo: Optional[AttachedTo] = None
+    category: Category
+    type: Short
+    title: Title
+    date: Optional[ISODate] = None
+    files: Annotated[list[DocumentFile], Field(max_length=20)] = Field(default_factory=list)
+    fields: Fields = Field(default_factory=dict)
+    customFields: Annotated[list[CustomField], Field(max_length=100)] = Field(default_factory=list)
+    assignmentId: Optional[Id] = None
+    pinned: bool = False
+    expiry: Optional[Expiry] = None
+
+
+class Reservation(_Base):
+    kind: Literal["reservation"]
+    subjectId: Id
+    type: ReservationType
+    title: Title
+    start: LocalDateTime
+    end: Optional[LocalDateTime]
+    status: Literal["booked", "planned"]
+    bookBy: Optional[ISODate]
+    checkinReminder: bool
+    fields: Fields = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _end_after_start(self) -> "Reservation":
+        if self.end is not None and self.end < self.start:
+            raise ValueError("reservation end must be on or after start")
+        return self
 
 
 class Routine(_Base):
@@ -189,13 +265,12 @@ class Routine(_Base):
     followUps: Annotated[list[StepPlan], Field(max_length=100)]
     repeatMonths: Optional[int]
     countFrom: Literal["done", "due"]
-    medication: bool
+    extension: Optional[RoutineExtension] = None
 
 
 class Assignment(_Base):
     kind: Literal["assignment"]
     routineId: Id
-    subjectType: SubjectType
     subjectId: Id
     date: Optional[ISODate]
     repeatMonths: Optional[int]
@@ -204,104 +279,23 @@ class Assignment(_Base):
     supply: Optional[MedicationSupply]
     history: Annotated[list[HistoryEntry], Field(max_length=1000)]
     # Per-assignee overrides of the routine's rules. None = use the routine's.
-    # Defaults keep assignments saved before overrides existed valid.
     plan: Optional[Annotated[list[StepPlan], Field(max_length=50)]] = None
     countFrom: Optional[Literal["done", "due"]] = None
 
 
-class Task(_Base):
-    kind: Literal["task"]
-    title: Title
-    notes: RichText
-    date: Optional[ISODate]
-    order: float
-    done: bool
-    doneAt: Optional[Timestamp]
-    subjectType: Optional[SubjectType]
-    subjectId: Optional[Id]
-    assignmentId: Optional[Id]
-    stepKind: StepKind
-    appointment: Optional[AppointmentInfo]
-    tripId: Optional[Id]
-    reservationId: Optional[Id]
-    tripTask: Optional[TripTaskKind]
-    docTask: Optional[DocTaskSpec]
-    # Checklist inside the task. Defaults to [] so tasks saved before
-    # sub-tasks existed stay valid.
-    subtasks: Annotated[list[Subtask], Field(max_length=100)] = Field(default_factory=list)
-
-
-class Document(_Base):
-    kind: Literal["document"]
-    docKind: DocKind
-    subjectType: SubjectType
-    subjectId: Id
+class Contact(_Base):
+    kind: Literal["contact"]
     name: Title
-    type: Short
-    date: Optional[ISODate]
-    validUntil: Optional[ISODate]
-    idNumber: Short
-    issuer: Short
-    issueDate: Optional[ISODate]
-    details: Annotated[list[DetailRow], Field(max_length=100)]
-    front: Optional[FileRef]
-    back: Optional[FileRef]
-    providerId: Optional[Id]
-    about: Long
-    episode: Short
-    file: Optional[FileRef]
-    assignmentId: Optional[Id]
-    pinned: bool
-    archived: bool
-    outdated: bool
-
-    @model_validator(mode="after")
-    def _kind_fits_subject(self) -> "Document":
-        registry.check_doc_for_subject(self.docKind, self.subjectType)
-        return self
-
-
-class Trip(_Base):
-    kind: Literal["trip"]
-    name: Title
-    destination: Short
-    start: ISODate
-    end: ISODate
-    travelers: Annotated[list[Id], Field(max_length=100)]
-    notes: Long
-
-    @model_validator(mode="after")
-    def _end_after_start(self) -> "Trip":
-        if self.end < self.start:
-            raise ValueError("trip end must be on or after start")
-        return self
-
-
-class Reservation(_Base):
-    kind: Literal["reservation"]
-    tripId: Id
-    type: ReservationType
-    title: Title
-    start: LocalDateTime
-    end: Optional[LocalDateTime]
-    address: Long
-    confirmation: Short
-    link: Annotated[str, Field(max_length=2000)]
-    files: Annotated[list[FileRef], Field(max_length=50)]
-    status: Literal["booked", "planned"]
-    bookBy: Optional[ISODate]
-    details: Long
-    checkinReminder: bool
-
-    @model_validator(mode="after")
-    def _end_after_start(self) -> "Reservation":
-        if self.end is not None and self.end < self.start:
-            raise ValueError("reservation end must be on or after start")
-        return self
+    role: Short = ""            # the contact's own title, e.g. "Orthopedist"
+    phone: Tiny = ""
+    email: Short = ""
+    notes: Long = ""
+    tags: Annotated[list[Tiny], Field(max_length=20)] = Field(default_factory=list)
+    links: Annotated[list[ContactLink], Field(max_length=200)] = Field(default_factory=list)
 
 
 Entity = Annotated[
-    Union[Person, Car, Contact, Routine, Assignment, Task, Document, Trip, Reservation],
+    Union[Subject, Task, Document, Reservation, Routine, Assignment, Contact],
     Field(discriminator="kind"),
 ]
 
@@ -314,17 +308,25 @@ class EntityRef(_Strict):
     id: Id
 
 
+class Expectation(_Strict):
+    """Optimistic concurrency: the write only applies if the stored record's
+    ``updatedAt`` still equals this (null = the record must not exist yet)."""
+
+    kind: EntityKind
+    id: Id
+    updatedAt: Optional[Timestamp]
+
+
 class ChangeSet(_Strict):
     """POST /api/batch body. Puts are full records (upserts); deletes by ref."""
 
     put: list[Entity] = Field(default_factory=list)
     delete: list[EntityRef] = Field(default_factory=list)
+    expect: list[Expectation] = Field(default_factory=list)
 
 
 def file_refs(entity: BaseModel) -> list[FileRef]:
-    """Every FileRef embedded in an entity (documents and reservations)."""
+    """Every FileRef embedded in an entity (only documents hold files)."""
     if isinstance(entity, Document):
-        return [f for f in (entity.front, entity.back, entity.file) if f is not None]
-    if isinstance(entity, Reservation):
-        return list(entity.files)
+        return [f.file for f in entity.files]
     return []

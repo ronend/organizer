@@ -1,28 +1,30 @@
 """Document routes — one API for every document on every subject.
 
 POST /api/documents
-    body {document, renewal?, closeTaskId?, duplicates?, today?}
+    body {document, renewal?, closeTaskId?, duplicates?, today?, expectUpdatedAt?}
       document     the fields to set. Without an existing ``id`` it creates a
-                   document (``subjectType``, ``subjectId``, ``docKind`` and
-                   ``name`` required; ``type`` defaults to the category's);
-                   with one, it updates only the fields given.
+                   document (``subjectId``, ``category`` and ``title``
+                   required; ``type``, ``pinned`` and ``date`` default from the
+                   category); with one, it updates only the fields given.
       renewal      {remindDays?} — create renewal reminders from the expiry
-                   (categories with ``renewal`` in the registry)
-      closeTaskId  a task to mark done (e.g. the "add the document" task the
-                   form was opened from)
+                   (categories with a ``renewal`` rule)
+      closeTaskId  a task to mark done (e.g. the one the form was opened from)
       duplicates   "allow" (default) or "reject": with "reject", a second
                    active document of a one-per-type category is a 409 whose
-                   detail lists the current ones
+                   body lists the current ones
       today        the caller's local date, for planning steps (default: server)
+      expectUpdatedAt  when editing: the document's updatedAt as last read;
+                   409 if it changed since
     → {document, changes: {put, delete}, summary}
-      ``changes`` is everything written (already stamped), so the app can apply
-      it locally without re-sending it.
+      ``changes`` is everything written (already stamped), so the app can
+      apply it locally without re-sending it.
 
-    Files are attached by FileRef (``file``, ``front``, ``back``) after uploading
-    them through POST /api/files/upload-url, the one upload path for all files.
+    Files are uploaded first through POST /api/files/upload-url (the one
+    upload path for every file); the request carries the returned FileRefs in
+    ``files: [{role, file}]``.
 
 GET /api/registry
-    → the subject/document registry (src/registry.json)
+    → the registry (src/registry.json)
 """
 
 from __future__ import annotations
@@ -37,52 +39,44 @@ from src import documents, registry
 from src.db import dynamo
 from src.middleware.auth import require_auth
 from src.models import (
-    DetailRow,
-    DocKind,
+    AttachedTo,
+    Category,
+    CustomField,
+    DocumentFile,
     Entity,
-    FileRef,
+    Expiry,
+    Fields,
     Id,
     ISODate,
-    Long,
     Short,
-    SubjectType,
-    Title,
+    Timestamp,
     _Strict,
-    file_refs,
 )
-from src.routes.state import user_prefix
+from src.routes.state import user_prefix, write
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_auth)])
 _entity = TypeAdapter(Entity)
 
 
-class DocumentFields(_Strict):
+class DocumentInput(_Strict):
     id: Optional[Id] = None
-    subjectType: Optional[SubjectType] = None
     subjectId: Optional[Id] = None
-    docKind: Optional[DocKind] = None
-    name: Optional[Title] = None
+    category: Optional[Category] = None
     type: Optional[Short] = None
+    title: Optional[Annotated[str, Field(max_length=300)]] = None
     date: Optional[ISODate] = None
-    validUntil: Optional[ISODate] = None
-    idNumber: Optional[Short] = None
-    issuer: Optional[Short] = None
-    issueDate: Optional[ISODate] = None
-    details: Optional[Annotated[list[DetailRow], Field(max_length=100)]] = None
-    front: Optional[FileRef] = None
-    back: Optional[FileRef] = None
-    providerId: Optional[Id] = None
-    about: Optional[Long] = None
-    episode: Optional[Short] = None
-    file: Optional[FileRef] = None
+    files: Optional[Annotated[list[DocumentFile], Field(max_length=20)]] = None
+    fields: Optional[Fields] = None
+    customFields: Optional[Annotated[list[CustomField], Field(max_length=100)]] = None
     assignmentId: Optional[Id] = None
     pinned: Optional[bool] = None
     archived: Optional[bool] = None
-    outdated: Optional[bool] = None
+    attachedTo: Optional[AttachedTo] = None
+    expiry: Optional[Expiry] = None
 
 
 # Fields where null is a real value (clear it) rather than "not given".
-_NULLABLE = {"date", "validUntil", "issueDate", "front", "back", "providerId", "file", "assignmentId"}
+_NULLABLE = set(documents.NULLABLE)
 
 
 class RenewalOptions(_Strict):
@@ -90,11 +84,12 @@ class RenewalOptions(_Strict):
 
 
 class SaveDocumentRequest(_Strict):
-    document: DocumentFields
+    document: DocumentInput
     renewal: Optional[RenewalOptions] = None
     closeTaskId: Optional[Id] = None
     duplicates: Literal["allow", "reject"] = "allow"
     today: Optional[ISODate] = None
+    expectUpdatedAt: Optional[Timestamp] = None
 
 
 @router.get("/registry")
@@ -107,10 +102,10 @@ def save_document(body: SaveDocumentRequest, claims: dict = Depends(require_auth
     user_id = claims["sub"]
     given = body.document.model_dump(exclude_unset=True)
     fields = {k: v for k, v in given.items() if v is not None or k in _NULLABLE}
-    # Defaults for strings/lists that a caller "cleared" with null.
-    for k in ("idNumber", "issuer", "about", "episode"):
-        if k in given and given[k] is None:
-            fields[k] = ""
+
+    prefix = user_prefix(user_id)
+    if any(not f["file"]["key"].startswith(prefix) for f in fields.get("files") or []):
+        raise HTTPException(status_code=403, detail="File key outside your storage")
 
     state = dynamo.load_state(user_id)
     try:
@@ -129,17 +124,17 @@ def save_document(body: SaveDocumentRequest, claims: dict = Depends(require_auth
     except documents.DocumentError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Everything written must be a valid record, with files in the caller's storage.
-    prefix = user_prefix(user_id)
-    for p in puts:
-        try:
-            entity = _entity.validate_python(p)
-        except ValidationError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid {p['kind']}: {e.errors()[0]['msg']}")
-        if any(not ref.key.startswith(prefix) for ref in file_refs(entity)):
-            raise HTTPException(status_code=403, detail="File key outside your storage")
+    # Same shape + household checks as every batch, then one write.
+    try:
+        puts = [_entity.validate_python(p).model_dump() for p in puts]
+    except ValidationError as e:
+        err = e.errors()[0]
+        raise HTTPException(status_code=400, detail=f"{'.'.join(str(x) for x in err['loc'])}: {err['msg']}")
+    expect = []
+    if body.expectUpdatedAt and fields.get("id"):
+        expect = [{"kind": "document", "id": fields["id"], "updatedAt": body.expectUpdatedAt}]
+    stamp = write(user_id, state, puts, deletes, expect)
 
-    stamp = dynamo.apply_changes(user_id, puts, deletes)
     stamped = [{**p, "updatedAt": stamp} for p in puts]
     doc = next(p for p in stamped if p["kind"] == "document" and p["id"] == doc["id"])
     return {"document": doc, "changes": {"put": stamped, "delete": deletes}, "summary": summary}

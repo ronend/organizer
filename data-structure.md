@@ -1,127 +1,150 @@
 # coo — Data Structure (storage + API reference)
 
-> **Contract:** [frontend/src/types/coo.ts](frontend/src/types/coo.ts) defines
-> every field. The backend mirrors it exactly in
-> [backend/src/models.py](backend/src/models.py) (pydantic v2, camelCase field
-> names, extra fields forbidden). This document covers how those records are
-> stored and moved; it does not repeat the field lists.
+Data model **version 2**. Shapes are defined in `backend/src/models.py`
+(pydantic, extra fields forbidden); everything extensible — subject types,
+their attributes, document categories and fields, reservation types, routine
+areas — is defined in **`backend/src/registry.json`**; household-level rules
+are enforced by `backend/src/integrity.py`. The frontend keeps a verbatim copy
+of the registry (`frontend/src/lib/registry.json`).
 
----
+## Model
 
-## Entity kinds
+```
+Subject (person | car | trip | …  — subjectType from the registry)
+ ├─ Task          subjectId (null = general); parentId → subtask (one level)
+ ├─ Document      subjectId; files[]; fields{}; expiry (expiring categories)
+ ├─ Reservation   subjectId (types that allow reservations: trip)
+ ├─ Assignment    subjectId → Routine (reusable template)
+ └─ Contact       household-wide; links[] → subjects, with a role
+```
 
-Every record carries a `kind` discriminator, an `id`, `createdAt` and `updatedAt`.
+Every record: `kind`, `id` (`[A-Za-z0-9_-]{1,64}`), `createdAt`, `updatedAt`
+(server-stamped), `archived`. Records point at a subject by `subjectId` only.
 
-| `kind`        | CooState key   | What it is |
-|---------------|----------------|------------|
-| `person`      | `people`       | A household member |
-| `car`         | `cars`         | A car (`plate` stored uppercase, unique) |
-| `contact`     | `contacts`     | Doctor, garage, ... grouped `health` / `cars` / `other` |
-| `routine`     | `routines`     | A template, written once: default steps (`plan`), follow-ups, default `repeatMonths` and `countFrom` |
-| `assignment`  | `assignments`  | One routine applied to one person or car: its own `date`, `repeatMonths`, status, supply and history, plus optional overrides `plan` and `countFrom` (`null` = use the routine's) |
-| `task`        | `tasks`        | An agenda item. Optional links: subject (person/car), `assignmentId` (routine step), `tripId` / `reservationId` (trip task), `appointment`, `docTask`. `notes` is rich text (HTML from the editor: paragraphs, bold, italic, lists, http/https/mailto links; up to 20,000 characters) or legacy plain text. `subtasks` is a checklist of `{id, title, done, date, order, doneAt}`. A sub-task with a `date` is its own Agenda row (id `<task id>~<sub-task id>`, bucketed by its date, ordered by `order`) while its parent is open; undated ones live only inside the task. Missing on older tasks, read as `[]` |
-| `document`    | `documents`    | A stored document (`docKind` car / health / identity) with optional files |
-| `trip`        | `trips`        | A trip (`start`..`end`, travelers = person ids) |
-| `reservation` | `reservations` | A flight / stay / car / ... belonging to a trip, with optional files |
+| kind | Key fields |
+|------|------------|
+| `subject` | `subjectType`, `name`, `notes`, `attributes{}` (registry `subjectTypes.<type>.attributes`) |
+| `task` | `subjectId?`, `parentId?`, `title`, `notes` (rich text), `date?`, `order`, `done`, `doneAt?`, `source?` (`{kind:"assignment", id, step: plain/schedule/renew/pickup}` or `{kind:"reservation", id, step: book/checkin}`), `appointment?`, `requestsDocument?` (`{category, type}`) |
+| `document` | `subjectId`, `attachedTo?` (`{kind: task/reservation, id}`), `category`, `type`, `title`, `date?`, `files[]` (`{role?, file: FileRef}`), `fields{}`, `customFields[]` (`{label, value}`), `assignmentId?`, `pinned`, `expiry?` (`{validUntil, outdated}`) |
+| `reservation` | `subjectId`, `type` (registry), `title`, `start`, `end?` (local `YYYY-MM-DDTHH:mm`), `status` (booked/planned), `bookBy?`, `checkinReminder`, `fields{}` (address, confirmation, link, details) |
+| `routine` | `area` (registry), `template?`, `icon`, `title`, `description`, `dateLabel`, `plan[]`, `followUps[]` (StepPlan), `repeatMonths?`, `countFrom`, `extension?` (`{medication}`) |
+| `assignment` | `routineId`, `subjectId`, `date?`, `repeatMonths?`, `done`, `contactId?`, `supply?`, `history[]`, overrides `plan?`, `countFrom?` |
+| `contact` | `name`, `role`, `phone`, `email`, `notes`, `tags[]` (e.g. health, cars, other), `links[]` (`{subjectId, role}`) |
 
-References between records are plain ids (e.g. `assignment.routineId`,
-`task.subjectId`). The server does **not** enforce referential integrity; the app
-keeps references consistent and deletes dependants in the same batch.
+### Registry
+
+- `subjectTypes.<type>`: `attributes` (field definitions), `allows` (task,
+  document, assignment, reservation), `documentCategories`, `routineAreas`,
+  `rules` (e.g. `dateOrder`).
+- `documentCategories.<cat>`: `types`, `defaultType`, `fields` + per-type
+  `typeFields`, `fileRoles`, `expiring`, `area`, `datedByDefault`, `pin`, and
+  save `rules` (`replaceOnLink`, `expiryDrivesRoutine`, `onePerType`, `renewal`).
+- `reservationTypes`, `reservationFields`, `routineAreas`.
+
+**Field definitions** (`{key, label, type, required?, unique?, …}`), types:
+`text`, `secret` (masked in the UI), `longtext`, `url`, `number`
+(`integer`?), `date`, `boolean`, `select` (`options`), `contact` (`tags`
+filter), `subject` / `subjects` (`subjectType` filter). Unknown keys are
+refused; ad-hoc document metadata goes in `customFields`.
+
+A new subject type, category, field or reservation type is a registry edit —
+no model change, no migration. Never delete a field definition that stored
+records use; mark it `"deprecated": true`.
 
 ### Validation (server side)
 
-- Shapes, enums and nullability exactly as in `coo.ts`; unknown fields → `422`.
-- `ISODate` = `YYYY-MM-DD`, `LocalDateTime` = `YYYY-MM-DDTHH:mm`,
-  `AppointmentInfo.time` = `HH:mm` or `''`.
-- ids match `^[A-Za-z0-9_-]{1,64}$`.
-- Lengths: titles/names ≤ 300, notes/descriptions/details ≤ 5000.
-- `trip.end >= trip.start`; `reservation.end >= reservation.start` when set.
-- Every `FileRef.key` in a put must start with the caller's prefix
-  `u/<sub>/` → otherwise `403`.
-
----
+1. **Shape** (`models.py`) → `422`: extra fields, types, enums, dates, sizes,
+   registry keys (subjectType, category, area, reservation type); a subtask
+   can't have a `source` or `appointment`.
+2. **Household** (`integrity.py`, on every write, against the state the write
+   would produce) → `400` listing the problems:
+   - registry fields match their definitions (required, unique per subject
+     type, select options, references to contacts/subjects of the right type)
+   - the subject type allows the object; documents use one of its categories,
+     assignments one of its routine areas; the document type, file roles and
+     `expiry` fit the category
+   - references exist and agree: `subjectId`, `parentId`, `source` (same
+     subject), `attachedTo` (same subject), `assignmentId` (same subject,
+     category's area), `routineId`, `contactId`, providers, contact `links`
+   - subtasks: the parent exists and isn't a subtask, same subject; a task
+     with subtasks can't become one, and moving it requires moving them
+   - **deletes**: a record still referenced can't be deleted — delete or
+     update the referencing records in the same batch
+3. **Files**: every `FileRef.key` must be under `u/<sub>/` → `403`.
+4. **Concurrency**: optional expectations (`expect`) → `409` when stale.
 
 ## Storage — DynamoDB single table
 
-Table `OrganizerTable` (physical name generated by CloudFormation, passed to the
-Lambda as `DYNAMO_TABLE`). Partition key `userId` = the Cognito `sub`; sort key
-`SK`.
+Table `DYNAMO_TABLE`, `PAY_PER_REQUEST`, partition key `userId` (Cognito
+`sub`), sort key `SK`:
 
 ```
-SK = COO#<kind>#<id>      one item per record; attributes = the record's fields (camelCase)
+SK = V2#<kind>#<id>       one item per v2 record, fields verbatim (camelCase)
+SK = COO#<kind>#<id>      version 1 records — read only by the migration,
+                          kept untouched for rollback
+SK = ITEM#… / REMIDX#…    the model before that — ignored
 ```
 
-- **Load**: one paginated `Query` with `begins_with(SK, "COO#")`, grouped by
-  `kind` into the CooState shape. Unknown kinds are skipped.
-- **Write**: `TransactWriteItems` in chunks of ≤ 100 operations (DynamoDB's
-  limit). A batch of ≤ 100 operations is atomic; a larger batch is atomic per
-  chunk.
+Writes are `TransactWriteItems` in chunks of ≤100 (atomic per chunk);
+expectations become conditions in the same transaction.
+
 - **Numbers**: floats are stored as `Decimal`; on read, integral values come
   back as ints and the rest as floats.
 - **Timestamps**: on every put the server sets `updatedAt` to the current UTC
   time (`2026-11-08T10:00:00.000Z`) and keeps the client's `createdAt`.
 
-### Legacy rows
-
-Rows from the previous model (`ITEM#<id>` entities and `REMIDX#...` reminder
-index rows) live in the same partitions. They are **left in place and ignored**:
-nothing reads, writes or deletes them, because every query is scoped to the
-`COO#` prefix.
-
----
-
 ## API
 
-All routes sit under `/api/*` behind CloudFront (same origin as the SPA, no
-CORS). Every request must carry CloudFront's `x-origin-verify` header (`403`
-otherwise). The data routes also need `Authorization: Bearer <Cognito access
-token>` (`401` otherwise); `userId` always comes from the token's `sub`, never
-from the body.
+All data routes require a Cognito access token (`Authorization: Bearer …`) and
+come through CloudFront (`x-origin-verify`).
 
-### `GET /api/state` → `CooState`
+### `GET /api/state`
 
 ```jsonc
-{
-  "people": [], "cars": [], "contacts": [], "routines": [], "assignments": [],
-  "tasks": [], "documents": [], "trips": [], "reservations": []
-}
+{ "schemaVersion": 2,
+  "subjects": [], "tasks": [], "documents": [], "reservations": [],
+  "routines": [], "assignments": [], "contacts": [],
+  "needsMigration": false }   // true: only version 1 rows exist → POST /api/migrate
 ```
 
 ### `POST /api/batch`
 
 ```jsonc
-// request (ChangeSet) — puts are FULL records (upserts); deletes are refs
+// request — puts are FULL records (upserts); deletes are refs
 { "put": [ { "kind": "task", "id": "t_…", … } ],
-  "delete": [ { "kind": "task", "id": "t_…" } ] }
+  "delete": [ { "kind": "task", "id": "t_…" } ],
+  "expect": [ { "kind": "task", "id": "t_…", "updatedAt": "2026-11-08T10:00:00.000Z" } ] }  // optional
 
 // response
 { "ok": true, "updatedAt": "2026-11-08T10:00:00.000Z" }
 ```
 
-- At most **500** operations (`put` + `delete`) per batch → `400` beyond.
-- The same `(kind, id)` may appear only once per batch (no put + delete, no
-  duplicate puts) → `400`.
+- At most **500** operations per batch; a record may appear once.
+- `expect`: the write only applies if each listed record's stored `updatedAt`
+  still matches (`null` = must not exist) → `409` otherwise. Records listed
+  but not written are checked too.
 - Deleting a record that doesn't exist is a no-op.
-- `updatedAt` in the response is the stamp written onto every put record.
 
 ### `POST /api/documents`
 
-The one way to create or update a document of any category on any subject; the
-app and the MCP server both use it. The server applies the document rules
-(`backend/src/documents.py`) and writes everything in one batch.
+The one way to create or update a document of any category on any subject;
+the app and the MCP server both use it. The server applies the document rules
+(`backend/src/documents.py`), then the same household checks as a batch.
 
 ```jsonc
 // request
 {
   "document": {                 // fields to set; without an existing id → create
-    "subjectType": "car", "subjectId": "c_…", "docKind": "car",
-    "name": "GEICO insurance card", "type": "ID card", "validUntil": "2027-04-25",
-    "file": { "key": "u/<sub>/…", "name": "card.pdf", "contentType": "application/pdf", "size": 1234 }
+    "subjectId": "c_…", "category": "car", "title": "GEICO insurance card",
+    "type": "ID card", "expiry": { "validUntil": "2027-04-25" },
+    "files": [ { "role": null, "file": { "key": "u/<sub>/…", "name": "card.pdf", "contentType": "application/pdf", "size": 1234 } } ],
+    "fields": { }
   },
   "renewal": { "remindDays": 60 },   // optional: renewal reminders from the expiry
   "closeTaskId": "t_…",               // optional: a task to mark done
-  "duplicates": "allow",              // or "reject" (409 for a 2nd active ID of a type)
-  "today": "2026-11-16"               // caller's local date for step planning
+  "duplicates": "allow",              // or "reject" (409 for a 2nd active doc of a one-per-type category)
+  "today": "2026-11-17",              // caller's local date for step planning
+  "expectUpdatedAt": "…"              // optional when editing → 409 if it changed
 }
 
 // response — `changes` is everything written, already stamped
@@ -130,28 +153,54 @@ app and the MCP server both use it. The server applies the document rules
                "renewalRoutine": "…", "remindersPlannedFrom": "…", "routineMovedTo": "…" } }
 ```
 
-- New: `subjectType`, `subjectId`, `docKind`, `name` required; `type` defaults
-  to the category's, `pinned` to the category's pin default, `date` to today
-  for categories that use it. Only the category's fields (registry `features`)
-  may be filled → `400` otherwise.
-- Update (existing `id`): only the given fields change; `subjectType`,
-  `subjectId` and `docKind` can't. `null` clears nullable fields.
-- `400` invalid (type not in the category, routine of another subject or area,
-  …), `404` missing subject/contact/routine/task, `403` file outside your
-  storage, `409` duplicate with `{detail, existing: [{id, name, validUntil,
-  assignmentId, routine}]}`.
-- Files are uploaded first with `/api/files/upload-url` (below), the single
-  upload path for every file; the request carries the returned `FileRef`s.
+- New: `subjectId`, `category`, `title` required; `type` defaults to the
+  category's, `pinned` to its pin default, `date` to today when
+  `datedByDefault`. Update (existing `id`): only the given fields change;
+  `subjectId` and `category` can't. `null` clears `date`, `expiry`,
+  `assignmentId`, `attachedTo`.
+- `400` invalid, `404` missing subject/assignment/task, `403` file outside your
+  storage, `409` duplicate (`{detail, existing: [{id, title, validUntil,
+  assignmentId, routine}]}`) or stale.
 
 ### `GET /api/registry`
 
-The subject/document registry (`backend/src/registry.json`, copied verbatim to
-`frontend/src/lib/registry.json`): `subjectTypes` (person, car, … → state
-collection, name field, document categories) and `categories` (identity,
-health, car, … → types, fields used, detail fields per type, routine area, pin
-label/default, rules). `subjectType`, `docKind` and routine `area` are validated
-against it everywhere, so a new subject type is a new record kind plus a
-registry entry.
+The registry (`backend/src/registry.json`).
+
+### `POST /api/migrate`
+
+```jsonc
+// request
+{ "dryRun": true }
+// response
+{ "migrated": false, "counts": { "subject": 8, … }, "notes": [], "errors": [] }
+```
+
+Maps the caller's version 1 rows to version 2 (`backend/src/migration.py`),
+validates every result (shape + household checks) and only then writes them.
+Version 1 rows stay untouched. `409` if the caller already has v2 rows; `422`
+with `errors` (nothing written) if anything fails validation. Operators can run
+the same thing with `scripts/migrate_to_v2.py` (offline over an export, or for
+one user).
+
+#### Version 1 → 2 mapping
+
+| Version 1 | Version 2 |
+|---|---|
+| `person` / `car` / `trip` | `subject` (`person`: birthYear; `car`: name = makeModel, plate, odometer; `trip`: destination, start, end, travelers, notes) |
+| `subjectType` + `subjectId` | `subjectId` (ids are kept) |
+| `task.subtasks[]` | tasks with `parentId` (id `<task>-<subtask>`), the parent's subject |
+| `task.assignmentId` + `stepKind` | `source {kind:"assignment", id, step}` |
+| `task.tripId` / `reservationId` / `tripTask` | `subjectId` = the trip, `source {kind:"reservation", id, step}` |
+| `docTask` | `requestsDocument {category, type}` |
+| `document.docKind` / `name` | `category` / `title` |
+| `front` / `back` / `file` | `files[]` with role front / back / null |
+| `idNumber`, `issuer`, `issueDate`, `providerId`, `about`, `episode` | `fields.*` (custom field if the category doesn't define it) |
+| `details[]` | registry field when the label matches, else `customFields` |
+| `validUntil` + `outdated` | `expiry` (expiring categories; else a custom field) |
+| `reservation.files[]` | `attachment` documents `attachedTo` the reservation (id `<reservation>-f<n>`) |
+| `reservation` address / confirmation / link / details | `fields` (a non-URL link moves to details) |
+| `contact.group` | `tags`; `links` from assignments, appointments and health providers |
+| `routine.medication` | `extension.medication` |
 
 ### Files
 
@@ -183,9 +232,9 @@ directly from S3 with presigned URLs (the bucket's CORS allows the app origin an
   `application/octet-stream` (use `file.contentType` for the PUT).
 - The file name is sanitized for the key (`[A-Za-z0-9._-]`, ≤ 100 chars); the
   original name is kept in `file.name`.
-- The returned `file` is what goes into the record (`document.front`,
-  `reservation.files[]`, ...), saved via `/api/documents` (documents) or
-  `/api/batch` (everything else).
+- The returned `file` is what goes into a document's `files[]` (every file is
+  a document; reservation attachments are documents `attachedTo` the
+  reservation), saved via `/api/documents` or `/api/batch`.
 
 #### `POST /api/files/urls`
 

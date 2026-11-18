@@ -1,23 +1,23 @@
-"""The subject and document registry — the one place that says which subjects
-exist and which documents each can hold.
+"""The registry (registry.json) — which subjects exist, what they can hold,
+and every field definition. The one source of truth for the data model's
+extensible parts; the models only fix the shapes.
 
-``registry.json`` is the source of truth. ``frontend/src/lib/registry.json`` is
-a verbatim copy (the frontend contract test fails if they drift), and clients
-such as the MCP server read it from ``GET /api/registry``.
+- ``subjectTypes``: person, car, trip, ... Each defines its ``attributes``
+  (field definitions), the object kinds it ``allows`` (task, document,
+  assignment, reservation), its ``documentCategories``, its ``routineAreas``
+  and cross-field ``rules`` (e.g. dateOrder).
+- ``documentCategories``: identity, health, car, attachment, ... Each defines
+  its types, ``fields`` and per-type ``typeFields``, ``fileRoles``, whether
+  it's ``expiring`` (may carry an expiry), its routine ``area`` and the save
+  ``rules`` POST /api/documents applies.
+- ``reservationTypes`` + ``reservationFields``; ``routineAreas``.
 
-- ``subjectTypes``: person, car, ... Each names the state collection holding
-  its records, the field used as its display name, and the document
-  categories it can hold.
-- ``categories``: identity, health, car, ... Each lists its document types,
-  the Document fields it uses (``features``), per-type detail fields, its
-  routine area, the "pin" label and default, and which save rules apply:
-  ``replaceOnLink`` (a new document on a routine archives the older one of
-  the same type there), ``expiryDrivesRoutine`` (the linked routine follows
-  the document's expiry), ``onePerType`` (a second active document of the
-  same type must be an explicit choice) and ``renewal`` (reminder defaults).
+A new subject type, document category, field or reservation type is a
+registry edit: no model change and no migration. Never delete a field
+definition that stored records use; mark it ``"deprecated": true`` instead.
 
-Adding a subject type later means a new record kind for it plus an entry
-here; documents, routines, tasks and the document API need no changes.
+``frontend/src/lib/registry.json`` is a verbatim copy (a test fails if they
+drift); clients such as the MCP server read ``GET /api/registry``.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 _PATH = Path(__file__).with_name("registry.json")
 
@@ -40,55 +40,59 @@ def subject_types() -> dict[str, dict]:
 
 
 def categories() -> dict[str, dict]:
-    return registry()["categories"]
+    return registry()["documentCategories"]
 
 
-def areas() -> list[str]:
-    return list(dict.fromkeys(c["area"] for c in categories().values()))
+def routine_areas() -> dict[str, dict]:
+    return registry()["routineAreas"]
 
 
-def category(kind: str) -> dict:
-    return categories()[kind]
+def reservation_types() -> dict[str, dict]:
+    return registry()["reservationTypes"]
 
 
-def subject_type(kind: str) -> dict:
-    return subject_types()[kind]
+def subject_type(key: str) -> dict:
+    return subject_types()[key]
 
 
-def subject_name(subject_type_key: str, record: dict) -> str:
-    return str(record.get(subject_type(subject_type_key)["nameField"], ""))
+def category(key: str) -> dict:
+    return categories()[key]
 
 
-def remind_days_default(doc_kind: str, doc_type: str) -> int:
-    renewal = category(doc_kind).get("renewal") or {}
+def category_fields(key: str, doc_type: Optional[str]) -> list[dict]:
+    """A category's field definitions plus those of the given type (type wins on a clash)."""
+    c = category(key)
+    out = {f["key"]: f for f in c.get("fields", [])}
+    for f in c.get("typeFields", {}).get(doc_type or "", []):
+        out[f["key"]] = f
+    return list(out.values())
+
+
+def remind_days_default(cat_key: str, doc_type: str) -> int:
+    renewal = category(cat_key)["rules"].get("renewal") or {}
     return int(renewal.get("remindDays", {}).get(doc_type, renewal.get("defaultRemindDays", 90)))
 
 
-# ── validators (used by the pydantic models) ────────────────────────────────
+# ── shape-level validators used by the pydantic models ──────────────────────
+
+
+def _check(v: str, known: dict, what: str) -> str:
+    if v not in known:
+        raise ValueError(f"unknown {what} {v!r} (known: {', '.join(known)})")
+    return v
 
 
 def check_subject_type(v: str) -> str:
-    if v not in subject_types():
-        raise ValueError(f"unknown subject type {v!r} (known: {', '.join(subject_types())})")
-    return v
+    return _check(v, subject_types(), "subject type")
 
 
-def check_doc_kind(v: str) -> str:
-    if v not in categories():
-        raise ValueError(f"unknown document category {v!r} (known: {', '.join(categories())})")
-    return v
+def check_category(v: str) -> str:
+    return _check(v, categories(), "document category")
 
 
 def check_area(v: str) -> str:
-    if v not in areas():
-        raise ValueError(f"unknown area {v!r} (known: {', '.join(areas())})")
-    return v
+    return _check(v, routine_areas(), "routine area")
 
 
-def check_doc_for_subject(doc_kind: str, subject_type_key: str) -> None:
-    allowed = subject_type(subject_type_key)["categories"]
-    if doc_kind not in allowed:
-        label = subject_type(subject_type_key)["label"].lower()
-        raise ValueError(
-            f"a {label} can't hold {doc_kind!r} documents (allowed: {', '.join(allowed) or 'none'})"
-        )
+def check_reservation_type(v: str) -> str:
+    return _check(v, reservation_types(), "reservation type")
