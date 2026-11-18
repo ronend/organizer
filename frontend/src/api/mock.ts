@@ -32,7 +32,7 @@ const delay = () => new Promise((r) => setTimeout(r, 60));
 export async function mockState(): Promise<CooState> {
   await delay();
   const state: CooState = {
-    subjects: [], tasks: [], documents: [], reservations: [], routines: [], assignments: [], contacts: [],
+    subjects: [], tasks: [], documents: [], reservations: [], routines: [], assignments: [], contacts: [], subjectTypes: [],
   };
   for (const e of Object.values(load())) {
     (state[COLLECTION[e.kind]] as Entity[]).push(e);

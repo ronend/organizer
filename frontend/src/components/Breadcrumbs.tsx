@@ -16,7 +16,6 @@ const TOP: Record<string, string> = {
   documents: 'Documents',
   contacts: 'Contacts',
 };
-const SUBPAGE: Record<string, string> = { health: 'Health', identity: 'Identity', documents: 'Documents' };
 
 /** Home › Section › Item › Page, from the current route. */
 export function useCrumbs(): Crumb[] {
@@ -25,7 +24,7 @@ export function useCrumbs(): Crumb[] {
   const parts = pathname.split('/').filter(Boolean);
   if (parts.length === 0) return [];
   const crumbs: Crumb[] = [{ label: 'Home', to: '/' }];
-  const [first, id, page] = parts;
+  const [first, id] = parts;
 
   if (first in TOP) {
     crumbs.push({ label: TOP[first], to: `/${first}` });
@@ -36,7 +35,6 @@ export function useCrumbs(): Crumb[] {
     const sub = findSubject(s, id);
     if (sub) {
       crumbs.push({ label: sub.name, to: subjectPath(sub) });
-      if (page && SUBPAGE[page]) crumbs.push({ label: SUBPAGE[page], to: subjectPath(sub, page) });
     } else {
       crumbs.push({ label: 'Not found' });
     }

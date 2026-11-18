@@ -6,7 +6,7 @@ from tests.samples import TS, samples
 
 STATE_KEYS = {
     "subject": "subjects", "task": "tasks", "document": "documents", "reservation": "reservations",
-    "routine": "routines", "assignment": "assignments", "contact": "contacts",
+    "routine": "routines", "assignment": "assignments", "contact": "contacts", "subjectType": "subjectTypes",
 }
 EMPTY = {"schemaVersion": 2, **{k: [] for k in STATE_KEYS.values()}, "needsMigration": False}
 
@@ -123,7 +123,7 @@ def test_shape_errors_are_422(client, sub):
     bad = [
         {**r["person"], "nickname": "x"},                       # extra field
         {**r["person"], "kind": "pet"},                         # unknown kind
-        {**r["person"], "subjectType": "boat"},                 # unknown subject type
+        {**r["person"], "subjectType": "Boat!"},                # malformed subject type key
         {k: v for k, v in r["task"].items() if k != "order"},   # missing field
         {**r["task"], "date": "01/12/2026"},                    # bad ISODate
         {**r["task"], "source": {"kind": "assignment", "id": "a_1", "step": "magic"}},

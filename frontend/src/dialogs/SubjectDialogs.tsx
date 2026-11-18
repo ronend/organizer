@@ -10,7 +10,7 @@ import { FieldsEditor, fieldProblems } from '../components/FieldInputs';
 import { deleteSubject, makeSubject, putEntity } from '../lib/ops';
 import { subjectPath, subjectsOfType } from '../lib/model';
 import { SUBJECT_TYPES, compactFields } from '../lib/registry';
-import { SIDEBAR_TYPES } from '../components/Shell';
+import { sidebarTypes } from '../components/Shell';
 import { RoutineFormDialog } from './RoutineForm';
 
 const BLURB: Partial<Record<SubjectType, string>> = {
@@ -95,7 +95,7 @@ export function SubjectChooser() {
   return (
     <Dialog eyebrow="New" title="What would you like to add?">
       <div className="chooser">
-        {SIDEBAR_TYPES.map((t) => (
+        {sidebarTypes().map((t) => (
           <button key={t} type="button" className="tile chooser-tile" onClick={() => openDialog(<SubjectDialog subjectType={t} />)}>
             <Icon name={SUBJECT_TYPES[t].icon} size={22} />
             <span className="tile-title">{SUBJECT_TYPES[t].label}</span>

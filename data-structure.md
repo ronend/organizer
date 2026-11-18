@@ -30,6 +30,7 @@ Every record: `kind`, `id` (`[A-Za-z0-9_-]{1,64}`), `createdAt`, `updatedAt`
 | `routine` | `area` (registry), `template?`, `icon`, `title`, `description`, `dateLabel`, `plan[]`, `followUps[]` (StepPlan), `repeatMonths?`, `countFrom`, `extension?` (`{medication}`) |
 | `assignment` | `routineId`, `subjectId`, `date?`, `repeatMonths?`, `done`, `contactId?`, `supply?`, `history[]`, overrides `plan?`, `countFrom?` |
 | `contact` | `name`, `role`, `phone`, `email`, `notes`, `tags[]` (e.g. health, cars, other), `links[]` (`{subjectId, role}`) |
+| `subjectType` | A subject type the household defined; `id` = its key (e.g. `apartment`). Same shape as a registry `subjectTypes` entry: `label`, `plural`, `nameLabel`, `namePlaceholder`, `icon`, `attributes[]` (field definitions), `allows`, `documentCategories`, `routineAreas`, `rules` |
 
 ### Registry
 
@@ -48,7 +49,12 @@ filter), `subject` / `subjects` (`subjectType` filter). Unknown keys are
 refused; ad-hoc document metadata goes in `customFields`.
 
 A new subject type, category, field or reservation type is a registry edit —
-no model change, no migration. Never delete a field definition that stored
+no model change, no migration. Households can also define **their own subject
+types** at runtime (`subjectType` records, `POST /api/subject-types` or the MCP
+`define_subject_type` tool; there is no UI for it): the backend merges them into
+the registry for that household (`registry.using` / `registry.effective`), so
+every check treats them like built-in types, and the app shows them in the
+sidebar with a generic page. Never delete a field definition that stored
 records use; mark it `"deprecated": true`.
 
 ### Validation (server side)
@@ -103,7 +109,7 @@ come through CloudFront (`x-origin-verify`).
 ```jsonc
 { "schemaVersion": 2,
   "subjects": [], "tasks": [], "documents": [], "reservations": [],
-  "routines": [], "assignments": [], "contacts": [],
+  "routines": [], "assignments": [], "contacts": [], "subjectTypes": [],
   "needsMigration": false }   // true: only version 1 rows exist → POST /api/migrate
 ```
 
@@ -164,7 +170,33 @@ the app and the MCP server both use it. The server applies the document rules
 
 ### `GET /api/registry`
 
-The registry (`backend/src/registry.json`).
+The registry (`backend/src/registry.json`) with the caller's own subject types
+merged into `subjectTypes` (marked `"custom": true`).
+
+### `POST /api/subject-types` · `DELETE /api/subject-types/{key}`
+
+```jsonc
+// request — creates the type, or replaces an existing household type's definition
+{ "key": "apartment", "label": "Apartment", "plural": "Apartments", "nameLabel": "Address or nickname",
+  "icon": "home",
+  "attributes": [ { "key": "rooms", "label": "Rooms", "type": "number", "integer": true },
+                  { "key": "leaseStart", "label": "Lease start", "type": "date" },
+                  { "key": "leaseEnd", "label": "Lease end", "type": "date" } ],
+  "allows": ["task", "document"],            // default task + document
+  "documentCategories": ["attachment"],      // default when documents are allowed
+  "routineAreas": [],
+  "rules": [ { "rule": "dateOrder", "fields": ["leaseStart", "leaseEnd"] } ] }
+// response
+{ "subjectType": { "kind": "subjectType", "id": "apartment", … }, "created": true }
+```
+
+- Built-in keys (person, car, trip) are refused; keys are `[a-z][a-z0-9_]{0,31}`.
+- The definition must be consistent (unique attribute keys, select fields have
+  options, `dateOrder` names date attributes, document categories need
+  `document` in `allows`, routine areas need `assignment`), and every existing
+  subject of the type must still fit it → `400` otherwise. Retire an attribute
+  that holds values with `"deprecated": true`.
+- `DELETE` → `400` while subjects of the type exist, `404` for an unknown key.
 
 ### `POST /api/migrate`
 

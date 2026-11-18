@@ -63,9 +63,9 @@ export function subjectLabel(sub: Subject): string {
 
 const BASE_PATH: Partial<Record<SubjectType, string>> = { person: '/people', car: '/cars', trip: '/trips' };
 
-export function subjectPath(sub: Pick<Subject, 'subjectType' | 'id'>, page?: string) {
-  const base = `${BASE_PATH[sub.subjectType] ?? '/subjects'}/${sub.id}`;
-  return page && page !== 'overview' ? `${base}/${page}` : base;
+/** A subject's page (one per subject; trips at /trips/:id). */
+export function subjectPath(sub: Pick<Subject, 'subjectType' | 'id'>) {
+  return `${BASE_PATH[sub.subjectType] ?? '/subjects'}/${sub.id}`;
 }
 
 export function subjectsOfType(s: CooState, type: SubjectType): Subject[] {

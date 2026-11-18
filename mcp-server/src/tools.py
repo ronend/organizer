@@ -17,12 +17,12 @@ to the API (per-user pass-through).
 from __future__ import annotations
 
 import json
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import Field
 
-from . import client, documents, logic
+from . import client, documents, logic, subjects
 from .client import token_from_context
 
 
@@ -161,6 +161,99 @@ def register_tools(mcp: FastMCP) -> None:
         task = logic.rescheduled_task(logic.find_task(state, task_id), date)
         await client.batch(token, put=[task])
         return f"Moved {task['title']!r} to {task['date']}."
+
+    # ── SUBJECTS AND SUBJECT TYPES ──────────────────────────────────────────
+
+    @mcp.tool(
+        description=(
+            "Add a subject of any type: a person, a car, a trip, or one of the household's own types "
+            "(see list_document_types for the types and their attributes). `attributes` maps attribute "
+            "labels or keys to values, e.g. {\"Plate\": \"KDR 4821\"} for a car or "
+            "{\"Start\": \"2027-04-01\", \"End\": \"2027-04-08\", \"Travelers\": [\"Alex\", \"Maya\"]} for a trip; "
+            "people and contacts are given by name."
+        )
+    )
+    async def add_subject(
+        ctx: Context,
+        subject_type: Annotated[str, Field(description="Type key or label: person, car, trip, or a household type")],
+        name: Annotated[str, Field(description="The subject's name (a car's make and model, a trip's name, ...)")],
+        attributes: Annotated[Optional[dict[str, Any]], Field(description="Attribute values by label or key")] = None,
+        notes: Annotated[Optional[str], Field(description="Optional notes")] = None,
+    ) -> str:
+        token = token_from_context(ctx)
+        state = await client.get_state(token)
+        reg = await client.get_registry(token)
+        rec = subjects.new_subject(state, reg, subject_type, name, attributes, notes)
+        try:
+            await client.batch(token, put=[rec], expect=[{"kind": "subject", "id": rec["id"], "updatedAt": None}])
+        except client.ApiError as e:
+            if e.status in (400, 409, 422):
+                raise logic.ToolError(str(e.detail))
+            raise
+        return _dumps({"created": {"id": rec["id"], "type": rec["subjectType"], "name": rec["name"], "attributes": rec["attributes"]}})
+
+    @mcp.tool(
+        description=(
+            "Define a new kind of subject for this household (e.g. Apartment, Business, Project), or "
+            "replace an existing household kind's definition (built-in person / car / trip can't be "
+            "changed). Each attribute is {label, type?, key?, required?, options?, subjectType?} with "
+            "type one of text, secret (shown masked), longtext, url, number, date, boolean, select "
+            "(needs options), contact, subject, subjects (subjectType limits which kind, e.g. person). "
+            "`allows` is what its subjects can hold: task, document, assignment (routines), reservation "
+            "(default task + document). `document_categories` defaults to attachment (any file); "
+            "`routine_areas` (health, identity, car) needs assignment. `date_order` takes two date "
+            "attributes that must be in order (e.g. lease start, lease end). To drop an attribute that "
+            "subjects already use, keep it with deprecated=true. The app shows the new kind right away."
+        )
+    )
+    async def define_subject_type(
+        ctx: Context,
+        label: Annotated[str, Field(description="Singular name, e.g. Apartment")],
+        key: Annotated[Optional[str], Field(description="Type key (default from the label, e.g. apartment)")] = None,
+        plural: Annotated[Optional[str], Field(description="Plural name (default label + s)")] = None,
+        name_label: Annotated[Optional[str], Field(description="Label of the name input, e.g. Address or nickname")] = None,
+        icon: Annotated[Optional[str], Field(description="Icon name (default document)")] = None,
+        attributes: Annotated[Optional[list[dict[str, Any]]], Field(description="Attribute definitions")] = None,
+        allows: Annotated[Optional[list[str]], Field(description="task, document, assignment, reservation")] = None,
+        document_categories: Annotated[Optional[list[str]], Field(description="Document categories, e.g. [\"attachment\"]")] = None,
+        routine_areas: Annotated[Optional[list[str]], Field(description="Routine areas, e.g. [\"health\"]")] = None,
+        date_order: Annotated[Optional[list[str]], Field(description="Two date attributes (labels or keys) that must be in order")] = None,
+    ) -> str:
+        token = token_from_context(ctx)
+        reg = await client.get_registry(token)
+        body = subjects.subject_type_body(reg, label, key, plural, name_label, icon, attributes, allows,
+                                          document_categories, routine_areas, date_order)
+        try:
+            res = await client.save_subject_type(token, body)
+        except client.ApiError as e:
+            if e.status in (400, 404, 422):
+                raise logic.ToolError(str(e.detail))
+            raise
+        t = res["subjectType"]
+        return _dumps({
+            "saved": t["id"], "created": res["created"], "label": t["label"], "plural": t["plural"],
+            "attributes": [{"key": a["key"], "label": a["label"], "type": a["type"]} for a in t["attributes"]],
+            "allows": t["allows"], "documentCategories": t["documentCategories"], "routineAreas": t["routineAreas"],
+        })
+
+    @mcp.tool(
+        description=(
+            "Remove one of the household's own subject types. Refused while subjects of that type "
+            "exist — remove those in the app first."
+        )
+    )
+    async def delete_subject_type(
+        ctx: Context,
+        key: Annotated[str, Field(description="Type key, e.g. apartment")],
+    ) -> str:
+        token = token_from_context(ctx)
+        try:
+            await client.delete_subject_type(token, key)
+        except client.ApiError as e:
+            if e.status in (400, 404):
+                raise logic.ToolError(str(e.detail))
+            raise
+        return f"Removed the subject type {key!r}."
 
     # ── DOCUMENTS ───────────────────────────────────────────────────────────
 

@@ -32,7 +32,7 @@ from src import registry
 
 COLLECTIONS = {
     "subject": "subjects", "task": "tasks", "document": "documents", "reservation": "reservations",
-    "routine": "routines", "assignment": "assignments", "contact": "contacts",
+    "routine": "routines", "assignment": "assignments", "contact": "contacts", "subjectType": "subjectTypes",
 }
 
 _URL = re.compile(r"^https?://\S+$", re.I)
@@ -140,13 +140,19 @@ def _subject_for(rec: dict, ix: Index, allow: str, errs: list[str]) -> Optional[
     if not s:
         errs.append(f"{_label(rec)}: subject {rec.get('subjectId')!r} doesn't exist")
         return None
-    st = registry.subject_type(s["subjectType"])
+    st = registry.subject_types().get(s["subjectType"])
+    if st is None:
+        errs.append(f"{_label(rec)}: its subject {s['id']} has an unknown type {s['subjectType']!r}")
+        return None
     if allow not in st["allows"]:
         errs.append(f"{_label(rec)}: a {st['label'].lower()} can't hold {allow}s")
     return s
 
 
 def _check_subject(rec: dict, ix: Index) -> list[str]:
+    if rec["subjectType"] not in registry.subject_types():
+        known = ", ".join(registry.subject_types())
+        return [f"{_label(rec)}: unknown subject type {rec['subjectType']!r} (known: {known})"]
     st = registry.subject_type(rec["subjectType"])
     defs = st["attributes"]
     errs = check_fields(rec.get("attributes", {}), defs, _label(rec), ix)
@@ -268,10 +274,46 @@ def _check_contact(rec: dict, ix: Index) -> list[str]:
     return errs
 
 
+def _check_subject_type_record(rec: dict, ix: Index) -> list[str]:
+    """A household-defined subject type: consistent with itself and the registry;
+    every subject of the type still fits it."""
+    errs: list[str] = []
+    where = f"subject type {rec['id']}"
+    if rec["id"] in registry.base_subject_types():
+        return [f"{where}: {rec['id']!r} is a built-in subject type"]
+    keys = [a["key"] for a in rec.get("attributes", [])]
+    if len(keys) != len(set(keys)):
+        errs.append(f"{where}: attribute keys must be unique")
+    by_key = {a["key"]: a for a in rec.get("attributes", [])}
+    for a in rec.get("attributes", []):
+        if a["type"] in ("subject", "subjects") and a.get("subjectType") and a["subjectType"] not in registry.subject_types():
+            errs.append(f"{where}: attribute {a['key']} refers to unknown subject type {a['subjectType']!r}")
+    for rule in rec.get("rules", []):
+        for k in rule["fields"]:
+            if by_key.get(k, {}).get("type") != "date":
+                errs.append(f"{where}: rule {rule['rule']} needs date attributes, not {k!r}")
+    allows = set(rec.get("allows", []))
+    if rec.get("documentCategories") and "document" not in allows:
+        errs.append(f"{where}: document categories need 'document' in allows")
+    if "document" in allows and not rec.get("documentCategories"):
+        errs.append(f"{where}: allows documents but has no document categories")
+    if rec.get("routineAreas") and "assignment" not in allows:
+        errs.append(f"{where}: routine areas need 'assignment' in allows")
+    # Existing subjects (and what they hold) must still fit the changed type.
+    for sub in ix.all("subject"):
+        if sub["subjectType"] == rec["id"]:
+            errs += _check_subject(sub, ix)
+            for kind in ("task", "document", "reservation", "assignment"):
+                for other in ix.all(kind):
+                    if other.get("subjectId") == sub["id"]:
+                        errs += _CHECKS[kind](other, ix)
+    return errs
+
+
 _CHECKS = {
     "subject": _check_subject, "task": _check_task, "document": _check_document,
     "reservation": _check_reservation, "routine": _check_routine, "assignment": _check_assignment,
-    "contact": _check_contact,
+    "contact": _check_contact, "subjectType": _check_subject_type_record,
 }
 
 
@@ -305,7 +347,8 @@ def references(rec: dict) -> list[tuple[str, str]]:
     elif k == "contact":
         out += [("subject", link["subjectId"]) for link in rec.get("links", [])]
     elif k == "subject":
-        for d in registry.subject_type(rec["subjectType"])["attributes"]:
+        out.append(("subjectType", rec["subjectType"]))
+        for d in registry.subject_types().get(rec["subjectType"], {}).get("attributes", []):
             out += _field_refs(d, rec.get("attributes", {}).get(d["key"]))
     elif k == "reservation":
         for d in registry.registry()["reservationFields"]:
@@ -329,6 +372,12 @@ def _field_refs(d: dict, v: Any) -> list[tuple[str, str]]:
 
 
 def check(after: dict[str, list[dict]], changed: Iterable[dict], deleted: Iterable[dict]) -> list[str]:
+    # The household's own subject types count as registry types for these checks.
+    with registry.using(after):
+        return _check(after, changed, deleted)
+
+
+def _check(after: dict[str, list[dict]], changed: Iterable[dict], deleted: Iterable[dict]) -> list[str]:
     ix = Index(after)
     errs: list[str] = []
     for rec in changed:

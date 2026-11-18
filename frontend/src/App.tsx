@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { useAuth } from './auth/useAuth';
 import AuthCallback from './auth/AuthCallback';
@@ -13,7 +13,6 @@ import Agenda from './pages/Agenda';
 import Trips from './pages/Trips';
 import TripPage from './pages/TripPage';
 import Routines from './pages/Routines';
-import PersonPage from './pages/PersonPage';
 import SubjectPage from './pages/SubjectPage';
 import Contacts from './pages/Contacts';
 import Documents from './pages/Documents';
@@ -44,6 +43,12 @@ function ScrollToTop() {
   return null;
 }
 
+/** /people/:id/health → /people/:id, and so on (old bookmarks). */
+function SectionRedirect() {
+  const { base, id } = useParams();
+  return <Navigate to={base === 'trips' ? `/trips/${id}` : `/${base}/${id}`} replace />;
+}
+
 function Pages() {
   const { ready, loadError, reload } = useStore();
   if (!ready) return <p className="boot">Loading…</p>;
@@ -66,14 +71,12 @@ function Pages() {
         <Route path="/trips/:id" element={<TripPage />} />
         <Route path="/routines" element={<Routines />} />
         <Route path="/documents" element={<Documents />} />
-        <Route path="/people/:id" element={<PersonPage page="overview" />} />
-        <Route path="/people/:id/health" element={<PersonPage page="health" />} />
-        <Route path="/people/:id/identity" element={<PersonPage page="identity" />} />
-        <Route path="/cars/:id" element={<SubjectPage page="overview" />} />
-        <Route path="/cars/:id/documents" element={<SubjectPage page="documents" />} />
-        {/* Any other subject type from the registry. */}
-        <Route path="/subjects/:id" element={<SubjectPage page="overview" />} />
-        <Route path="/subjects/:id/documents" element={<SubjectPage page="documents" />} />
+        <Route path="/people/:id" element={<SubjectPage />} />
+        <Route path="/cars/:id" element={<SubjectPage />} />
+        {/* Any other subject type, including the household's own. */}
+        <Route path="/subjects/:id" element={<SubjectPage />} />
+        {/* Former per-section pages (health, identity, documents) now live on the subject's page. */}
+        <Route path="/:base/:id/:section" element={<SectionRedirect />} />
         <Route path="/contacts" element={<Contacts />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

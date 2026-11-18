@@ -43,6 +43,10 @@ def test_field_rules(client, recs, name, patch, msg):
     refused(client, msg, put=[{**recs[name], **patch}])
 
 
+def test_unknown_subject_type(client, recs):
+    refused(client, "unknown subject type 'boat'", put=[{**recs["person"], "id": "p_boat", "subjectType": "boat"}])
+
+
 def test_unique_plate(client, recs):
     twin = {**recs["car"], "id": "c_2", "name": "Mazda 3 (2)", "attributes": {"plate": "1234567"}}
     refused(client, "plate '1234567' is already used by Mazda 3", put=[twin])

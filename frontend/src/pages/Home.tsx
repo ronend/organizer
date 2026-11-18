@@ -7,7 +7,7 @@ import { CountCircle, PageHead, SectionHead } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { AddTaskDialog } from '../dialogs/TaskDialogs';
 import { SubjectDialog } from '../dialogs/SubjectDialogs';
-import { SIDEBAR_TYPES } from '../components/Shell';
+import { sidebarTypes } from '../components/Shell';
 import { SUBJECT_TYPES } from '../lib/registry';
 import { TripDialog } from '../dialogs/TripDialogs';
 import { fmtLongToday, greeting, plural, daysFromToday } from '../lib/dates';
@@ -170,7 +170,7 @@ export default function Home() {
 
       <section className="section">
         <div className="tile-grid add-grid">
-          {SIDEBAR_TYPES.map((t) => (
+          {sidebarTypes().map((t) => (
             <button key={t} type="button" className="tile dashed" onClick={() => openDialog(<SubjectDialog subjectType={t} />)}>
               <Icon name="plus" /> Add {SUBJECT_TYPES[t].label.toLowerCase()}
             </button>

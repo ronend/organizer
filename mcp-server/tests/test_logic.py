@@ -140,6 +140,7 @@ def test_tools_registered():
     assert names == {
         "get_agenda", "list_subjects", "list_routines", "list_trips", "get_trip",
         "add_task", "complete_task", "reschedule_task", "list_document_types", "add_document",
+        "add_subject", "define_subject_type", "delete_subject_type",
     }
 
 

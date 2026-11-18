@@ -63,8 +63,8 @@ FieldValue = Union[
 ]
 Fields = Annotated[dict[FieldKey, FieldValue], Field(max_length=100)]
 
-EntityKind = Literal["subject", "task", "document", "reservation", "routine", "assignment", "contact"]
-ENTITY_KINDS: tuple[str, ...] = ("subject", "task", "document", "reservation", "routine", "assignment", "contact")
+EntityKind = Literal["subject", "task", "document", "reservation", "routine", "assignment", "contact", "subjectType"]
+ENTITY_KINDS: tuple[str, ...] = ("subject", "task", "document", "reservation", "routine", "assignment", "contact", "subjectType")
 
 # kind → collection key in GET /api/state
 STATE_KEYS: dict[str, str] = {
@@ -75,6 +75,7 @@ STATE_KEYS: dict[str, str] = {
     "routine": "routines",
     "assignment": "assignments",
     "contact": "contacts",
+    "subjectType": "subjectTypes",
 }
 
 
@@ -294,8 +295,64 @@ class Contact(_Base):
     links: Annotated[list[ContactLink], Field(max_length=200)] = Field(default_factory=list)
 
 
+# ── Household-defined subject types ─────────────────────────────────────────
+
+FieldType = Literal[
+    "text", "secret", "longtext", "url", "number", "date", "boolean", "select", "contact", "subject", "subjects",
+]
+TypeKey = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
+
+
+class FieldDef(_Strict):
+    """A field definition, as in registry.json."""
+
+    key: FieldKey
+    label: Annotated[str, Field(min_length=1, max_length=100)]
+    type: FieldType
+    required: bool = False
+    unique: bool = False
+    integer: bool = False
+    options: Optional[Annotated[list[Annotated[str, Field(min_length=1, max_length=100)]], Field(max_length=100)]] = None
+    tags: Optional[Annotated[list[Tiny], Field(max_length=20)]] = None
+    subjectType: Optional[TypeKey] = None
+    normalize: Optional[Literal["plate"]] = None
+    suggest: bool = False
+    deprecated: bool = False
+
+    @model_validator(mode="after")
+    def _options_for_select(self) -> "FieldDef":
+        if self.type == "select" and not self.options:
+            raise ValueError(f"select field {self.key!r} needs options")
+        return self
+
+
+class DateOrderRule(_Strict):
+    rule: Literal["dateOrder"]
+    fields: Annotated[list[FieldKey], Field(min_length=2, max_length=2)]
+
+
+class SubjectTypeRecord(_Base):
+    """A subject type a household defined (its id is the type's key, e.g. "apartment").
+    Same shape as a registry.json subjectTypes entry."""
+
+    kind: Literal["subjectType"]
+    id: TypeKey
+    label: Annotated[str, Field(min_length=1, max_length=100)]
+    plural: Annotated[str, Field(min_length=1, max_length=100)]
+    nameLabel: Annotated[str, Field(min_length=1, max_length=100)] = "Name"
+    namePlaceholder: Short = ""
+    icon: Tiny = "document"
+    attributes: Annotated[list[FieldDef], Field(max_length=50)] = Field(default_factory=list)
+    allows: Annotated[list[Literal["task", "document", "assignment", "reservation"]], Field(max_length=4)] = Field(
+        default_factory=lambda: ["task", "document"]
+    )
+    documentCategories: Annotated[list[Category], Field(max_length=20)] = Field(default_factory=lambda: ["attachment"])
+    routineAreas: Annotated[list[Area], Field(max_length=20)] = Field(default_factory=list)
+    rules: Annotated[list[DateOrderRule], Field(max_length=20)] = Field(default_factory=list)
+
+
 Entity = Annotated[
-    Union[Subject, Task, Document, Reservation, Routine, Assignment, Contact],
+    Union[Subject, Task, Document, Reservation, Routine, Assignment, Contact, SubjectTypeRecord],
     Field(discriminator="kind"),
 ]
 

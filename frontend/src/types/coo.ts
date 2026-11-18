@@ -19,8 +19,11 @@ export type Timestamp = string;
 
 type Registry = typeof import('../lib/registry.json');
 
-/** person, car, trip, ... (registry subjectTypes). */
-export type SubjectType = keyof Registry['subjectTypes'];
+/**
+ * person, car, trip (built into the registry) or a type the household defined
+ * through the API / MCP (a `subjectType` record), e.g. "apartment".
+ */
+export type SubjectType = keyof Registry['subjectTypes'] | (string & {});
 /** identity, health, car, attachment, ... (registry documentCategories). */
 export type DocCategory = keyof Registry['documentCategories'];
 /** health, identity, car, ... (registry routineAreas). */
@@ -264,11 +267,29 @@ export interface Reservation extends Base {
 
 // ── Union + API shapes ──────────────────────────────────────────────────────
 
-export type Entity = Subject | Task | Document | Reservation | Routine | Assignment | Contact;
+/**
+ * A subject type the household defined (no UI; POST /api/subject-types or the
+ * MCP tool). Same shape as a registry subjectTypes entry; its id is the key.
+ */
+export interface SubjectTypeRecord extends Base {
+  kind: 'subjectType';
+  label: string;
+  plural: string;
+  nameLabel: string;
+  namePlaceholder: string;
+  icon: string;
+  attributes: import('../lib/registry').FieldDef[];
+  allows: ('task' | 'document' | 'assignment' | 'reservation')[];
+  documentCategories: DocCategory[];
+  routineAreas: RoutineArea[];
+  rules: { rule: 'dateOrder'; fields: [string, string] }[];
+}
+
+export type Entity = Subject | Task | Document | Reservation | Routine | Assignment | Contact | SubjectTypeRecord;
 
 export type EntityKind = Entity['kind'];
 
-export const ENTITY_KINDS: EntityKind[] = ['subject', 'task', 'document', 'reservation', 'routine', 'assignment', 'contact'];
+export const ENTITY_KINDS: EntityKind[] = ['subject', 'task', 'document', 'reservation', 'routine', 'assignment', 'contact', 'subjectType'];
 
 export interface EntityRef {
   kind: EntityKind;
@@ -290,6 +311,8 @@ export interface CooState {
   routines: Routine[];
   assignments: Assignment[];
   contacts: Contact[];
+  /** The household's own subject types. */
+  subjectTypes: SubjectTypeRecord[];
 }
 
 export const COLLECTION: Record<EntityKind, keyof CooState> = {
@@ -300,4 +323,5 @@ export const COLLECTION: Record<EntityKind, keyof CooState> = {
   routine: 'routines',
   assignment: 'assignments',
   contact: 'contacts',
+  subjectType: 'subjectTypes',
 };

@@ -1,13 +1,12 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { Assignment, CooState, Document, RoutineArea, Subject } from '../types/coo';
 import { useStore } from '../store/Store';
 import { useUI } from '../store/UI';
-import { Empty, IconButton, Segmented, SectionHead, StatusText, isImage } from './ui';
+import { Empty, IconButton, SectionHead, StatusText, isImage } from './ui';
 import { useFileUrl } from '../lib/files';
 import { Icon } from './Icon';
 import { TaskRow } from './TaskRow';
-import { SubjectSwitcher, pagesFor } from './Shell';
+import { SubjectSwitcher } from './Shell';
 import { RoutineDetailDialog } from '../dialogs/RoutineDetail';
 import { AssignExistingDialog, RoutineFormDialog } from '../dialogs/RoutineForm';
 import { DocFormFor, DocViewer, downloadDoc } from '../dialogs/DocDialogs';
@@ -25,25 +24,17 @@ import {
   routineOf,
   scheduleLine,
   subjectName,
-  subjectPath,
   tasksForSubject,
   validUntil,
 } from '../lib/model';
 import { CATEGORIES, categoryFields, fieldText } from '../lib/registry';
 import { addTask, setArchived } from '../lib/ops';
 
-/** Mobile switcher + segmented control for the subject's pages. */
-export function SubjectNav({ sub, page }: { sub: Subject; page: string }) {
-  const navigate = useNavigate();
+/** Mobile: the switcher between subjects (each subject is one page). */
+export function SubjectNav() {
   return (
     <div className="subject-nav mobile-only">
       <SubjectSwitcher />
-      <Segmented
-        label="Pages"
-        value={page}
-        onChange={(v) => navigate(subjectPath(sub, v))}
-        options={pagesFor(sub.subjectType)}
-      />
     </div>
   );
 }

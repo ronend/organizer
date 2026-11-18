@@ -24,7 +24,7 @@ POST /api/documents
     ``files: [{role, file}]``.
 
 GET /api/registry
-    → the registry (src/registry.json)
+    → the registry (src/registry.json) plus the caller's own subject types
 """
 
 from __future__ import annotations
@@ -93,8 +93,9 @@ class SaveDocumentRequest(_Strict):
 
 
 @router.get("/registry")
-def get_registry() -> dict:
-    return registry.registry()
+def get_registry(claims: dict = Depends(require_auth)) -> dict:
+    """The registry with the caller's own subject types merged in (marked ``custom``)."""
+    return registry.effective(dynamo.load_state(claims["sub"]))
 
 
 @router.post("/documents")

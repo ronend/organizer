@@ -6,42 +6,23 @@ import { useAuth } from '../auth/useAuth';
 import { MOCK } from '../api/client';
 import type { Subject, SubjectType } from '../types/coo';
 import { agendaBadge, allSubjects, findSubject, subjectIcon, subjectPath, subjectSub, subjectsOfType } from '../lib/model';
-import { SUBJECT_TYPES, SUBJECT_TYPE_KEYS, allows } from '../lib/registry';
+import { SUBJECT_TYPES, subjectTypeKeys } from '../lib/registry';
 import { Icon } from './Icon';
 import { Breadcrumbs } from './Breadcrumbs';
 import { SubjectChooser, SubjectDialog } from '../dialogs/SubjectDialogs';
 
-/** Parses /people/:id, /cars/:id and /subjects/:id (+ /page). Trips have their own pages. */
-export function useCurrentSubject(): { sub: Subject | null; page: string } {
+/** Parses /people/:id, /cars/:id and /subjects/:id. Trips have their own pages. */
+export function useCurrentSubject(): { sub: Subject | null } {
   const { s } = useStore();
   const { pathname } = useLocation();
-  const m = pathname.match(/^\/(people|cars|subjects)\/([^/]+)(?:\/([^/]+))?/);
-  if (!m) return { sub: null, page: '' };
-  return { sub: findSubject(s, m[2]), page: m[3] ?? 'overview' };
+  const m = pathname.match(/^\/(people|cars|subjects)\/([^/]+)/);
+  return { sub: m ? findSubject(s, m[2]) : null };
 }
 
-export interface SubjectPage {
-  value: string;
-  label: string;
-  icon: string;
+/** Subject types listed in the sidebar (trips have their own page); includes the household's own types. */
+export function sidebarTypes(): SubjectType[] {
+  return subjectTypeKeys().filter((t) => t !== 'trip');
 }
-
-/** The pages a subject has: person → Overview / Health / Identity; anything that holds documents → Overview / Documents. */
-export function pagesFor(t: SubjectType): SubjectPage[] {
-  if (t === 'person') {
-    return [
-      { value: 'overview', label: 'Overview', icon: 'person' },
-      { value: 'health', label: 'Health', icon: 'stethoscope' },
-      { value: 'identity', label: 'Identity', icon: 'idcard' },
-    ];
-  }
-  const pages: SubjectPage[] = [{ value: 'overview', label: 'Overview', icon: SUBJECT_TYPES[t].icon }];
-  if (allows(t, 'document')) pages.push({ value: 'documents', label: 'Documents', icon: 'document' });
-  return pages;
-}
-
-/** Subject types listed in the sidebar (trips have their own page). */
-export const SIDEBAR_TYPES = SUBJECT_TYPE_KEYS.filter((t) => t !== 'trip');
 
 function Sidebar() {
   const { s } = useStore();
@@ -49,7 +30,7 @@ function Sidebar() {
   const { logout } = useAuth();
   const { pathname } = useLocation();
   const badge = agendaBadge(s);
-  const { sub, page } = useCurrentSubject();
+  const { sub } = useCurrentSubject();
 
   const nav = (to: string, icon: string, label: string, extra?: ReactNode, activeAlso?: boolean) => (
     <NavLink
@@ -86,7 +67,7 @@ function Sidebar() {
         {nav('/documents', 'document', 'Documents')}
       </div>
 
-      {SIDEBAR_TYPES.map((t) => (
+      {sidebarTypes().map((t) => (
         <div className="side-group" key={t}>
           <div className="side-heading">{SUBJECT_TYPES[t].plural}</div>
           {subjectsOfType(s, t).map((x) => {
@@ -107,26 +88,6 @@ function Sidebar() {
           </button>
         </div>
       ))}
-
-      {sub && (
-        <div className="side-group">
-          <div className="side-heading">{sub.name}</div>
-          {pagesFor(sub.subjectType).map((pg) => {
-            const icon = pg.icon;
-            return (
-              <Link
-                key={pg.value}
-                to={subjectPath(sub, pg.value)}
-                className={`side-link ${page === pg.value ? 'active' : ''}`}
-                aria-current={page === pg.value ? 'page' : undefined}
-              >
-                <Icon name={icon} />
-                <span className="side-label">{pg.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      )}
 
       <div className="side-group">
         <div className="side-heading">Shared</div>
@@ -184,15 +145,10 @@ export function SubjectSwitcher() {
   const { s } = useStore();
   const { openDialog } = useUI();
   const navigate = useNavigate();
-  const { sub, page } = useCurrentSubject();
+  const { sub } = useCurrentSubject();
   if (!sub) return null;
 
-  const go = (target: Subject) => {
-    // Keep the same page when the target has it (Health → Health), else its closest.
-    const pages = pagesFor(target.subjectType).map((p) => p.value);
-    const next = pages.includes(page) ? page : page !== 'overview' && pages.includes('documents') ? 'documents' : 'overview';
-    navigate(subjectPath(target, next));
-  };
+  const go = (target: Subject) => navigate(subjectPath(target));
 
   return (
     <div className="switcher" role="group" aria-label="Subjects">

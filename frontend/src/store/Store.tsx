@@ -2,16 +2,17 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { fetchState, migrate, sendBatch, type StateResponse } from '../api/client';
 import type { ChangeSet, CooState } from '../types/coo';
 import { applyChanges, inverse } from '../lib/ops';
+import { applyCustomSubjectTypes } from '../lib/registry';
 import { useToast } from './Toast';
 
 const EMPTY: CooState = {
-  subjects: [], tasks: [], documents: [], reservations: [], routines: [], assignments: [], contacts: [],
+  subjects: [], tasks: [], documents: [], reservations: [], routines: [], assignments: [], contacts: [], subjectTypes: [],
 };
 
 /** Only the collections (drops schemaVersion / needsMigration). */
 function collections(r: StateResponse): CooState {
   const { subjects, tasks, documents, reservations, routines, assignments, contacts } = r;
-  return { subjects, tasks, documents, reservations, routines, assignments, contacts };
+  return { subjects, tasks, documents, reservations, routines, assignments, contacts, subjectTypes: r.subjectTypes ?? [] };
 }
 
 interface ApplyOpts {
@@ -60,6 +61,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         res = await fetchState();
       }
       const st = collections(res);
+      // The household's own subject types (defined over the API / MCP) join the registry.
+      applyCustomSubjectTypes(st.subjectTypes);
       ref.current = st;
       setS(st);
       setLoadError(null);

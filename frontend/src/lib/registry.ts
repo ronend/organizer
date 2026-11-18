@@ -5,7 +5,7 @@
  * here. See data-structure.md.
  */
 import data from './registry.json';
-import type { DocCategory, FieldValue, Fields, ReservationType, RoutineArea, Subject, SubjectType } from '../types/coo';
+import type { DocCategory, FieldValue, Fields, ReservationType, RoutineArea, Subject, SubjectType, SubjectTypeRecord } from '../types/coo';
 
 export type FieldType =
   | 'text' | 'secret' | 'longtext' | 'url' | 'number' | 'date' | 'boolean' | 'select'
@@ -43,6 +43,8 @@ export interface SubjectTypeInfo {
   documentCategories: DocCategory[];
   routineAreas: RoutineArea[];
   rules: { rule: 'dateOrder'; fields: [string, string] }[];
+  /** Defined by the household (not built in). */
+  custom?: boolean;
 }
 
 export interface CategoryRules {
@@ -78,8 +80,30 @@ export interface Category {
   rules: CategoryRules;
 }
 
-export const SUBJECT_TYPES = data.subjectTypes as unknown as Record<SubjectType, SubjectTypeInfo>;
-export const SUBJECT_TYPE_KEYS = Object.keys(SUBJECT_TYPES) as SubjectType[];
+const BUILT_IN = data.subjectTypes as unknown as Record<SubjectType, SubjectTypeInfo>;
+
+/**
+ * Built-in subject types plus the household's own (see applyCustomSubjectTypes).
+ * Mutated in place when the household's types load, so every lookup sees them.
+ */
+export const SUBJECT_TYPES: Record<SubjectType, SubjectTypeInfo> = { ...BUILT_IN };
+
+export function subjectTypeKeys(): SubjectType[] {
+  return Object.keys(SUBJECT_TYPES);
+}
+
+/** Makes the household's own subject types part of the registry (called when state loads). */
+export function applyCustomSubjectTypes(records: SubjectTypeRecord[]) {
+  for (const k of Object.keys(SUBJECT_TYPES)) if (!(k in BUILT_IN)) delete SUBJECT_TYPES[k];
+  for (const r of records) {
+    if (r.archived || r.id in BUILT_IN) continue;
+    SUBJECT_TYPES[r.id] = {
+      label: r.label, plural: r.plural, nameLabel: r.nameLabel || 'Name', namePlaceholder: r.namePlaceholder ?? '',
+      icon: r.icon || 'document', attributes: r.attributes ?? [], allows: r.allows ?? [],
+      documentCategories: r.documentCategories ?? [], routineAreas: r.routineAreas ?? [], rules: r.rules ?? [], custom: true,
+    };
+  }
+}
 export const CATEGORIES = data.documentCategories as unknown as Record<DocCategory, Category>;
 export const CATEGORY_KEYS = Object.keys(CATEGORIES) as DocCategory[];
 export const RESERVATION_TYPES = data.reservationTypes as Record<ReservationType, { label: string; icon: string }>;

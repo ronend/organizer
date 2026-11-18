@@ -26,6 +26,7 @@ import {
   subtasksOf,
   taskWhat,
   taskWho,
+  trips as tripsOf,
 } from '../lib/model';
 import { addTask, deleteTask, newId, saveSubtasks, updateTask } from '../lib/ops';
 import { DocFormFor } from './DocDialogs';
@@ -37,9 +38,9 @@ function ForSelect({ id, value, onChange }: { id: string; value: string; onChang
   return (
     <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="">General, no one in particular</option>
-      {allSubjects(s).map((x) => (
+      {[...allSubjects(s), ...tripsOf(s)].map((x) => (
         <option key={x.id} value={x.id}>
-          {subjectLabel(x)}
+          {x.subjectType === 'trip' ? `Trip: ${x.name}` : subjectLabel(x)}
         </option>
       ))}
     </select>

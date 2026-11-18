@@ -16,7 +16,7 @@ import {
 } from '../lib/templates';
 import { assignExisting, createRoutine, deleteRoutine, editRoutine } from '../lib/ops';
 import { assignmentsOf, contactsFor, findSubject, isMedication, subjectName, subjectSub, subjectsOfType } from '../lib/model';
-import { SUBJECT_TYPES, SUBJECT_TYPE_KEYS } from '../lib/registry';
+import { SUBJECT_TYPES, subjectTypeKeys } from '../lib/registry';
 
 /** The first routine area the subject's type can have (health for people, car for cars). */
 function defaultArea(s: CooState, subjectId?: string): RoutineArea {
@@ -29,7 +29,7 @@ import { StepPlanEditor, cleanPlan } from './StepPlanEditor';
 
 /** Subject types that can have routines of an area (registry routineAreas). */
 function eligibleTypes(area: RoutineArea): SubjectType[] {
-  return SUBJECT_TYPE_KEYS.filter((t) => SUBJECT_TYPES[t].routineAreas.includes(area));
+  return subjectTypeKeys().filter((t) => SUBJECT_TYPES[t].routineAreas.includes(area));
 }
 
 function eligibleSubjects(s: CooState, area: RoutineArea) {

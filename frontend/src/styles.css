@@ -2464,3 +2464,43 @@ input[type='file'] {
     margin-left: 68px;
   }
 }
+
+/* ── Subject page: section toggles and the Add menu ─────────────────────── */
+
+.section-toggles {
+  margin: 4px 0 8px;
+}
+
+.add-menu {
+  position: relative;
+}
+
+.add-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  min-width: 200px;
+  display: grid;
+  padding: 6px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-tile);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+}
+
+.add-menu-item {
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.add-menu-item:hover,
+.add-menu-item:focus-visible {
+  background: var(--tint);
+}
